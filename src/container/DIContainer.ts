@@ -21,8 +21,8 @@ class DIContainer {
     contract: Contract<T>,
     Implementation: new (...args: any[]) => T,
   ): void {
-    // Si habia un contrato registrado previamente, lo eliminamos para evitar conflictos y asegurar que la nueva implementación se pueda resolver correctamente
-    this.registry.delete(contract);
+    // Si habia una instancia registrada previamente, lo eliminamos para evitar conflictos y asegurar que la nueva implementación se pueda resolver correctamente
+    this.instances.delete(contract);
     this.registry.set(contract, Implementation);
   }
 
