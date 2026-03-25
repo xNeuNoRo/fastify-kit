@@ -4,7 +4,7 @@ const importPlugin = require("eslint-plugin-import");
 const unicornPlugin = require("eslint-plugin-unicorn");
 const securityPlugin = require("eslint-plugin-security");
 const prettierPlugin = require("eslint-plugin-prettier");
-const jestPlugin = require("eslint-plugin-jest");
+const vitestPlugin = require("eslint-plugin-vitest");
 
 module.exports = [
   // Ignorar el lint en los siguientes directorios / archivos
@@ -24,7 +24,7 @@ module.exports = [
     languageOptions: {
       parser: tsParser,
       parserOptions: {
-        project: "./tsconfig.json",
+        project: "./tsconfig.eslint.json",
         tsconfigRootDir: __dirname,
         sourceType: "module",
         ecmaVersion: "latest",
@@ -91,28 +91,22 @@ module.exports = [
   // Configuraciones para los tests
   {
     files: ["**/__tests__/**/*.[jt]s?(x)", "**/?(*.)+(spec|test).[jt]s?(x)"],
-    plugins: { jest: jestPlugin },
+    plugins: { vitest: vitestPlugin },
     languageOptions: {
       globals: {
-        describe: "readonly",
-        it: "readonly",
-        test: "readonly",
-        expect: "readonly",
-        jest: "readonly",
-        beforeAll: "readonly",
-        afterAll: "readonly",
-        beforeEach: "readonly",
-        afterEach: "readonly",
+        ...vitestPlugin.environments.env.globals,
       },
     },
     rules: {
-      ...jestPlugin.configs.recommended.rules,
+      ...vitestPlugin.configs.recommended.rules,
+
       // Esta regla tira warning si se accede a any, la deshabilite en tests para
       // no andar tipando tanta mrd para un simple test
       "@typescript-eslint/no-unsafe-member-access": "off", // solo en tests
-      "jest/no-disabled-tests": "warn",
-      "jest/no-focused-tests": "error",
-      "jest/valid-expect": "error",
+
+      "vitest/no-disabled-tests": "warn",
+      "vitest/no-focused-tests": "error",
+      "vitest/valid-expect": "error",
     },
   },
 ];
