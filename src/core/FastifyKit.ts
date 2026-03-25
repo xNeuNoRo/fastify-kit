@@ -1,0 +1,387 @@
+import { Cron } from "croner";
+import fastify, { FastifyInstance, FastifyServerOptions } from "fastify";
+import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
+import { fastifyKitRequestContext } from "../http/plugins/requestContext";
+import { fastifyKitErrorHandler } from "../http/plugins/errorHandler";
+import { registerControllers, Constructor } from "../http/routing/scanner";
+import { ApiResponse } from "../http/responses/ApiResponse";
+import {
+  discoverControllers,
+  discoverModules,
+} from "../http/routing/discovery";
+import { ModuleOptions, FastifyKitMetadata } from "../http/decorators/types";
+import { container } from "../container/DIContainer";
+import { requestContext } from "../http/context/requestContext";
+
+export interface FastifyKitOptions {
+  module: any;
+  globalPrefix?: string;
+  swagger?: {
+    title: string;
+    description: string;
+    version: string;
+  };
+  security?: {
+    enableCors?: boolean;
+    enableHelmet?: boolean;
+    rateLimit?: { max: number; timeWindow: string };
+  };
+  fastifyOptions?: FastifyServerOptions & {
+    http2?: boolean;
+    https?: any; // Mantenemos any aquí porque los tipos de TLS de Node son muy verbosos
+  };
+}
+
+export class FastifyKit {
+  /**
+   * @description Método estático para crear una instancia de Fastify configurada con FastifyKit. Este método se encarga de registrar los plugins necesarios para el manejo de contexto de solicitud, manejo de errores, seguridad (CORS, Helmet, rate limit) y documentación (Swagger/Scalar) según las opciones proporcionadas. También registra una ruta de health check y las rutas definidas en los controladores escaneados.
+   * @param options Las opciones de configuración para FastifyKit, incluyendo los controladores a registrar, prefijo global para las rutas, configuración de Swagger/Scalar y opciones de seguridad.
+   * @example
+   * FastifyKit.create({
+   * globalPrefix: "/api/v1",
+   * controllers: [BookController],
+   *
+   * // Configuración de alto nivel
+   * security: {
+   *  enableCors: true,
+   *   enableHelmet: true,
+   *   rateLimit: { max: 100, timeWindow: "1 minute" }
+   * },
+   * 
+   * swagger: {
+   *   title: "Books API",
+   *   description: "API de alto rendimiento con FastifyKit",
+   *   version: "1.0.0"
+   * },
+   *
+   * // Solo lo que es único de este servidor (Certs)
+   * fastifyOptions: {
+   *   http2: true,
+   *   https: {
+   *     key: fs.readFileSync("./localhost+2-key.pem"),
+   *     cert: fs.readFileSync("./localhost+2.pem"),
+   *   }
+   * }
+  });
+   * @returns Una instancia de Fastify configurada y lista para ser utilizada como servidor de la API.
+   */
+  static async create(
+    options: FastifyKitOptions,
+  ): Promise<FastifyInstance<any, any, any, any, TypeBoxTypeProvider>> {
+    const userAjv = options.fastifyOptions?.ajv;
+
+    const app = fastify({
+      ...options.fastifyOptions,
+      ajv: {
+        // Preservamos las opciones ajv del usuario (si existen)
+        ...userAjv,
+        customOptions: {
+          // Preservamos las customOptions del usuario (si existen)
+          ...userAjv?.customOptions,
+          strict: false, // Forzamos nuestro requerimiento crítico para TypeBox
+        },
+      } as FastifyServerOptions["ajv"],
+    }).withTypeProvider<TypeBoxTypeProvider>();
+
+    // Escaneamos todos los módulos y submódulos para obtener la lista completa de controladores a registrar en Fastify. Esto permite que el usuario solo tenga que especificar el módulo raíz en las opciones, y la Factory se encargará de descubrir todos los controladores en el árbol de módulos.
+    const { allControllers, allProviders } = await this.bootstrapModule(
+      options.module,
+    );
+
+    // Registramos los plugins personalizados para manejo de contexto de solicitud y manejo de errores
+    await app.register(fastifyKitRequestContext);
+    await app.register(fastifyKitErrorHandler);
+
+    // si el usuario activa CORS, registramos el plugin de CORS para permitir solicitudes desde cualquier origen (útil para desarrollo, cambiar en producción)
+    if (options.security?.enableCors) {
+      await app.register(import("@fastify/cors"), { origin: true });
+    }
+
+    // si el usuario activa Helmet, registramos el plugin de helmet para mejorar la seguridad de la app configurando
+    // una política de seguridad de contenido (CSP) que permita solo recursos de confianza
+    if (options.security?.enableHelmet) {
+      await app.register(import("@fastify/helmet"), {
+        contentSecurityPolicy: {
+          directives: {
+            defaultSrc: ["'self'"],
+            // Permitimos los estilos y fuentes que usa Scalar UI para que no se rompa la web
+            styleSrc: [
+              "'self'",
+              "'unsafe-inline'",
+              "https://fonts.googleapis.com",
+            ],
+            fontSrc: ["'self'", "https://fonts.gstatic.com"],
+            // Permitimos ejecución de scripts inline solo para la UI de Scalar
+            scriptSrc: [
+              "'self'",
+              "'unsafe-inline'",
+              "https://cdn.jsdelivr.net",
+            ],
+            imgSrc: ["'self'", "data:", "validator.swagger.io"],
+          },
+        },
+      });
+    }
+
+    // Si el usuario activa rate limit, registramos el plugin de rate limit para limitar la cantidad de peticiones por IP y evitar abusos
+    if (options.security?.rateLimit) {
+      await app.register(import("@fastify/rate-limit"), {
+        ...options.security.rateLimit,
+      });
+    }
+
+    // Si el usuario activa Swagger/Scalar, registramos el plugin de Scalar para generar una documentación interactiva y visualmente atractiva de la API en la ruta /docs
+    if (options.swagger) {
+      await app.register(import("@fastify/swagger"), {
+        openapi: {
+          openapi: "3.0.0",
+          info: options.swagger,
+        },
+      });
+      await app.register(import("@scalar/fastify-api-reference"), {
+        routePrefix: "/docs",
+        configuration: {
+          theme: "purple",
+          layout: "modern",
+          metaData: { title: options.swagger.title },
+        },
+      });
+    }
+
+    // Registramos una ruta de health check para verificar que la API está funcionando correctamente
+    app.get("/health", async () =>
+      ApiResponse.success({
+        status: "up",
+        timestamp: new Date().toISOString(),
+      }),
+    );
+
+    // Registramos los controladores escaneados con el prefijo global configurado (si se proporciona) para organizar mejor las rutas de la API
+    const prefix = options.globalPrefix || "";
+    await app.register(
+      async (instance) => {
+        registerControllers(instance, allControllers);
+      },
+      { prefix },
+    );
+
+    // Array para almacenar los trabajos programados y poder detenerlos cuando el servidor se detenga
+    const scheduledJobs: Cron[] = [];
+
+    for (const provider of allProviders) {
+      // Leemos la metadata directamente desde la implementación
+      const providerMeta = (provider.implementation as any)[
+        Symbol.metadata
+      ] as FastifyKitMetadata;
+
+      if (providerMeta?.scheduledTasks?.length) {
+        // Obligamos al contenedor a instanciar la clase AHORA (Eager Loading)
+        // usando el token para respetar el Singleton
+        const instance = container.resolve(provider.token);
+
+        for (const task of providerMeta.scheduledTasks) {
+          // Iniciamos el temporizador en segundo plano
+          const job = new Cron(task.cronExpression, async () => {
+            const store = new Map<string, any>();
+            store.set("requestId", `cron-${crypto.randomUUID()}`);
+
+            await requestContext.run(store, async () => {
+              try {
+                await (instance as any)[task.methodName]();
+              } catch (err) {
+                app.log.error(
+                  { err },
+                  // 🪄 Usamos implementation.name para que el log sea legible (ej: CacheService.limpiar)
+                  `[FastifyKit Cron] Error en tarea programada ${provider.implementation.name}.${String(task.methodName)}:`,
+                );
+              }
+            });
+          });
+
+          // Guardamos el trabajo programado para poder detenerlo cuando el servidor se detenga
+          scheduledJobs.push(job);
+
+          app.log.info(
+            // 🪄 Usamos implementation.name aquí también
+            `[FastifyKit Cron] Tarea programada registrada: ${provider.implementation.name}.${String(task.methodName)} (${task.cronExpression})`,
+          );
+        }
+      }
+    }
+
+    // Cuando el servidor se detenga, detenemos todos los trabajos programados
+    // para evitar que sigan ejecutándose en segundo plano después de que la API haya cerrado.
+    app.addHook("onClose", async () => {
+      for (const job of scheduledJobs) {
+        job.stop();
+      }
+    });
+
+    app.log.info("[FastifyKit] kit inicializado correctamente!");
+    return app as any;
+  }
+
+  /**
+   * @description Método privado recursivo para bootstrappear un módulo y sus submódulos, registrando sus controladores y proveedores en el contenedor de inyección de dependencias. Este método se encarga de evitar ciclos en el árbol de módulos utilizando un conjunto de módulos visitados, y fusiona los controladores explícitos definidos en cada módulo con los controladores descubiertos automáticamente si se ha configurado el auto-discover.
+   * @param moduleClass La clase del módulo a bootstrappear. Esta clase debe estar decorada con \@Module para que la Factory pueda extraer sus opciones y metadata.
+   * @param visited Un conjunto de módulos que ya han sido visitados en el proceso de bootstrap para evitar ciclos en el árbol de módulos. Se inicializa como un conjunto vacío en la llamada inicial.
+   * @returns Un objeto que contiene un array con todos los controladores encontrados en el módulo y sus submódulos, listo para ser registrado en Fastify.
+   */
+  private static async bootstrapModule(
+    moduleClass: any,
+    visited = new Set(),
+  ): Promise<{
+    allControllers: Constructor[];
+    allProviders: { token: any; implementation: Constructor }[];
+  }> {
+    // Evitamos ciclos en el árbol de módulos marcando el módulo actual como visitado.
+    // Si ya ha sido visitado, significa que hay un ciclo y
+    // simplemente retornamos arrays vacíos para no agregar controladores duplicados ni entrar en un bucle infinito.
+    if (visited.has(moduleClass))
+      return { allControllers: [], allProviders: [] };
+    visited.add(moduleClass);
+
+    const metadata = this.getModuleMetadata(moduleClass);
+    const currentProviders = this.registerModuleProviders(
+      metadata.providers,
+      moduleClass,
+    );
+    const [controllers, allModules] = await Promise.all([
+      this.collectModuleControllers(metadata),
+      this.collectModuleImports(metadata),
+    ]);
+
+    // Bootstrappeamos recursivamente cada submódulo para obtener sus controladores
+    // y agregarlos a la lista de controladores a registrar.
+    for (const subModule of allModules) {
+      const { allControllers: subControllers, allProviders: subProviders } =
+        await this.bootstrapModule(subModule, visited);
+      controllers.push(...subControllers);
+      currentProviders.push(...subProviders);
+    }
+
+    // Finalmente, retornamos todos los controladores y proveedores encontrados en
+    // este módulo y sus submódulos (evitando duplicados con Set) para que puedan ser registrados en Fastify.
+    return {
+      allControllers: Array.from(new Set(controllers)),
+      allProviders: this.deduplicateProviders(currentProviders),
+    };
+  }
+
+  /**
+   * @description Función auxiliar para extraer la metadata de un módulo a partir de su clase. Esta función verifica que la clase proporcionada tenga la metadata esperada (definida por el decorador \@Module) y la devuelve como un objeto de tipo ModuleOptions. Si la clase no tiene la metadata requerida, lanza un error indicando que la clase no es un módulo válido.
+   * @param moduleClass La clase del módulo de la cual se desea extraer la metadata. Esta clase debe estar decorada con \@Module para que la Factory pueda extraer sus opciones y metadata.
+   * @returns Un objeto de tipo ModuleOptions que contiene la metadata del módulo extraída de la clase proporcionada. Esta metadata incluye las opciones definidas en el decorador \@Module, como controladores, proveedores, módulos importados, y configuración de auto-discover.
+   */
+  private static getModuleMetadata(moduleClass: any): ModuleOptions {
+    const metadata = moduleClass[Symbol.metadata]
+      ?.moduleOptions as ModuleOptions;
+
+    if (!metadata)
+      throw new Error(`Clase ${moduleClass.name} no es un @Module válido.`);
+
+    return metadata;
+  }
+
+  /**
+   * @description Función auxiliar para registrar los proveedores de un módulo en el contenedor de inyección de dependencias. Esta función procesa la lista de proveedores definida en las opciones del módulo, registrando cada proveedor en el contenedor con su token e implementación correspondientes. La función soporta tanto proveedores definidos como clases normales (ej: BookService) como proveedores definidos con un contrato explícito (ej: { contract: IBookRepository, implementation: BookRepository }). Si un proveedor no cumple con ninguno de estos formatos, la función lanza un error indicando que el proveedor está mal configurado.
+   * @param providers El array de proveedores definido en las opciones del módulo. Cada proveedor puede ser una clase normal o un objeto con un contrato explícito y su implementación correspondiente.
+   * @param moduleClass La clase del módulo al que pertenecen los proveedores. Se utiliza para proporcionar información contextual en caso de que haya un error en la configuración de los proveedores.
+   * @returns Un array de objetos que contienen el token y la implementación de cada proveedor registrado. Este array se utiliza posteriormente para fusionar los proveedores de submódulos y evitar duplicados antes de registrarlos en Fastify.
+   */
+  private static registerModuleProviders(
+    providers: any[] | undefined,
+    moduleClass: any,
+  ): { token: any; implementation: Constructor }[] {
+    const currentProviders: { token: any; implementation: Constructor }[] = [];
+
+    if (!providers) return currentProviders;
+
+    // Registramos los proveedores de este módulo en el contenedor de inyección de dependencias
+    // para que puedan ser resueltos e inyectados en los controladores.
+    for (const provider of providers) {
+      if (typeof provider === "function") {
+        // Es una clase normal (ej: BookService)
+        container.registerClass(provider, provider);
+        currentProviders.push({ token: provider, implementation: provider });
+        continue;
+      }
+
+      if (provider?.contract && provider.implementation) {
+        // Es un contrato explícito (ej: { contract: IBookRepository, implementation: BookRepository })
+        container.registerClass(provider.contract, provider.implementation);
+        currentProviders.push({
+          token: provider.contract,
+          implementation: provider.implementation,
+        });
+        continue;
+      }
+
+      throw new Error(
+        `Proveedor mal configurado en el módulo ${moduleClass.name}. Usa una clase o { contract: X, implementation: Y }`,
+      );
+    }
+
+    return currentProviders;
+  }
+
+  /**
+   * @description Función auxiliar para recolectar los controladores de un módulo, combinando los controladores definidos explícitamente en las opciones del módulo con los controladores descubiertos automáticamente si se ha configurado el auto-discover. Esta función permite que el usuario tenga la flexibilidad de definir manualmente algunos controladores en el módulo, mientras que la Factory se encarga de descubrir automáticamente otros controladores en el directorio especificado sin que el usuario tenga que listarlos todos manualmente.
+   * @param metadata La metadata del módulo extraída de su clase, que incluye las opciones definidas en el decorador \@Module, como controladores explícitos y configuración de auto-discover.
+   * @returns Un array de constructores de los controladores que se han recolectado para este módulo, listo para ser registrado en Fastify. Este array incluye tanto los controladores definidos explícitamente en las opciones del módulo como los controladores descubiertos automáticamente si se ha configurado el auto-discover. Si no se han definido controladores explícitos ni se ha configurado el auto-discover, el array estará vacío.
+   */
+  private static async collectModuleControllers(
+    metadata: ModuleOptions,
+  ): Promise<Constructor[]> {
+    // Obtenemos los controladores definidos explícitamente en este módulo
+    // Y tambien descubrimos controladores automáticamente si se ha configurado el auto-discover para este módulo.
+    const explicitControllers = metadata.controllers || [];
+    const discoveredControllers = metadata.autoDiscoverControllers
+      ? await discoverControllers(metadata.autoDiscoverControllers)
+      : [];
+
+    // Fusionamos los controladores explícitos y los descubiertos
+    return [...explicitControllers, ...discoveredControllers];
+  }
+
+  /**
+   * @description Función auxiliar para recolectar los módulos importados por un módulo, combinando los módulos importados explícitamente en las opciones del módulo con los módulos descubiertos automáticamente si se ha configurado el auto-discover. Esta función permite que el usuario tenga la flexibilidad de definir manualmente algunos módulos importados en el módulo, mientras que la Factory se encarga de descubrir automáticamente otros módulos en el directorio especificado sin que el usuario tenga que listarlos todos manualmente.
+   * @param metadata La metadata del módulo extraída de su clase, que incluye las opciones definidas en el decorador \@Module, como módulos importados explícitos y configuración de auto-discover.
+   * @returns Un array de las clases de los módulos importados por este módulo, listo para ser bootstrappeado recursivamente. Este array incluye tanto los módulos importados explícitamente en las opciones del módulo como los módulos descubiertos automáticamente si se ha configurado el auto-discover. Si no se han definido módulos importados explícitos ni se ha configurado el auto-discover, el array estará vacío.
+   */
+  private static async collectModuleImports(
+    metadata: ModuleOptions,
+  ): Promise<any[]> {
+    // De manera similar, si el módulo tiene módulos importados (submódulos), los bootstrappeamos recursivamente para obtener sus controladores y agregarlos a la lista de controladores a registrar.
+    const manualImports = metadata.imports || [];
+    const discoveredModules = metadata.autoDiscoverModules
+      ? await discoverModules(metadata.autoDiscoverModules)
+      : [];
+
+    // Fusionamos los módulos importados explícitamente y los descubiertos
+    return [...manualImports, ...discoveredModules];
+  }
+
+  /**
+   * @description Función auxiliar para deduplicar los proveedores registrados en un módulo y sus submódulos, utilizando un Map basado en el token de cada proveedor para garantizar que no haya proveedores duplicados registrados en Fastify. Esto es importante para evitar conflictos y asegurar que cada token de proveedor corresponda a una única implementación en el contenedor de inyección de dependencias.
+   * @param providers El array de proveedores a deduplicar, que puede contener proveedores registrados en el módulo actual y en sus submódulos. Cada proveedor es un objeto que contiene un token y una implementación.
+   * @returns Un array de proveedores deduplicados, donde cada token de proveedor corresponde a una única implementación. Si había proveedores duplicados en el array original (es decir, proveedores con el mismo token), solo se mantendrá uno de ellos en el array resultante.
+   */
+  private static deduplicateProviders(
+    providers: { token: any; implementation: Constructor }[],
+  ): { token: any; implementation: Constructor }[] {
+    // Deduplicamos los proveedores usando un Map basado en el "token"
+    const uniqueProvidersMap = new Map<
+      any,
+      { token: any; implementation: Constructor }
+    >();
+
+    for (const provider of providers) {
+      if (!uniqueProvidersMap.has(provider.token)) {
+        uniqueProvidersMap.set(provider.token, provider);
+      }
+    }
+
+    return Array.from(uniqueProvidersMap.values());
+  }
+}
