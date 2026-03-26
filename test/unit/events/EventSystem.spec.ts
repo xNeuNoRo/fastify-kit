@@ -24,6 +24,7 @@ describe("Sistema de Eventos (EventBus & Decoradores)", () => {
 
   // Espiamos los logs (consola default) para verificar que se están llamando correctamente en caso de errores o warnings
   beforeEach(() => {
+    container.clearAll();
     loggerErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     loggerWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
   });
