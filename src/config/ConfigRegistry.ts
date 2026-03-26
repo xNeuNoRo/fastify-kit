@@ -119,7 +119,7 @@ export class ConfigRegistry {
    * console.log(myService.dbConfig); // Imprime undefined, ya que la configuración ha sido eliminada
    * ```
    */
-  public clear(): void {
+  static clear(): void {
     configStore.clear();
   }
 }
