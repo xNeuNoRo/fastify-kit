@@ -16,10 +16,6 @@ import {
 } from "../../../src/events/EventBus.js";
 import { OnEvent } from "../../../src/events/on-event.decorator.js";
 import { OnceEvent } from "../../../src/events/once-event.decorator.js";
-import {
-  DefaultConsoleLogger,
-  LOGGER_TOKEN,
-} from "../../../src/logger/LoggerContract.js";
 
 describe("Sistema de Eventos (EventBus & Decoradores)", () => {
   // Variables para espiar los logs de error y warning
@@ -29,7 +25,6 @@ describe("Sistema de Eventos (EventBus & Decoradores)", () => {
   // Espiamos los logs (consola default) para verificar que se están llamando correctamente en caso de errores o warnings
   beforeEach(() => {
     container.clearAll();
-    container.registerInstance(LOGGER_TOKEN, new DefaultConsoleLogger());
     loggerErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     loggerWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
   });
