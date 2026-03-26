@@ -171,6 +171,7 @@ describe("Sistema de Logs y Rendimiento (Logger & @Benchmark)", () => {
     let loggerWarnSpy: MockInstance;
 
     beforeEach(() => {
+      container.registerInstance(LOGGER_TOKEN, new DefaultConsoleLogger());
       service = new TestService();
       // Espiamos el logger real que devuelve getLogger para ver si @Benchmark lo llama
       const logger = getLogger();

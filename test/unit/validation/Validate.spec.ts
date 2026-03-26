@@ -9,8 +9,13 @@ import {
   type MockInstance,
 } from "vitest";
 
+import { container } from "../../../src/container/DIContainer.js";
 import { ValidationException } from "../../../src/http/exceptions/index.js";
 import { getLogger } from "../../../src/logger/logger.factory.js";
+import {
+  DefaultConsoleLogger,
+  LOGGER_TOKEN,
+} from "../../../src/logger/LoggerContract.js";
 import { Validate } from "../../../src/validation/validate.decorator.js";
 
 const UserSchema = Type.Object({
@@ -24,6 +29,7 @@ describe("Sistema de Validación (@Validate & TypeBox)", () => {
   let loggerErrorSpy: MockInstance;
 
   beforeEach(() => {
+    container.registerInstance(LOGGER_TOKEN, new DefaultConsoleLogger());
     // Mockeamos los métodos del logger para evitar salidas reales durante las pruebas
     const logger = getLogger();
     loggerWarnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
