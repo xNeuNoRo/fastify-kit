@@ -16,17 +16,15 @@ import {
   type ITransactionManager,
 } from "../../../src/database/transactions.js";
 import { requestContext } from "../../../src/http/context/requestContext.js";
-import { getLogger } from "../../../src/logger/logger.factory.js";
 
 describe("Sistema de Base de Datos (Proxy & Transacciones)", () => {
   // Variable para espiar los errores del logger y verificar que se loguean correctamente en caso de excepciones dentro de transacciones
   let loggerErrorSpy: MockInstance;
 
-  // Antes de cada test, secuestramos el método 'error' del logger
+  // Antes de cada test, secuestramos el método 'error' del logger (el warning es para evitar ruido del fallback de loggers)
   beforeEach(() => {
-    loggerErrorSpy = vi
-      .spyOn(getLogger(), "error")
-      .mockImplementation(() => {});
+    loggerErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   // Después de cada test, restauramos los mocks para evitar interferencias entre pruebas
