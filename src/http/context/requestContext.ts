@@ -1,4 +1,4 @@
-import { AlsStore } from "./AlsStore";
+import { AlsStore } from "./AlsStore.js";
 
 export interface RequestContext extends Record<string, any> {
   requestId: string;

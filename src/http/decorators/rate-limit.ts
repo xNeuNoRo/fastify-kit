@@ -1,4 +1,4 @@
-import { FastifyKitMetadata, RateLimitOptions } from "./types";
+import type { FastifyKitMetadata, RateLimitOptions } from "./types.js";
 
 /**
  * @description Decorador para aplicar rate limiting a un método de controlador específico. Permite configurar el número máximo de solicitudes permitidas dentro de una ventana de tiempo, cuánto tiempo debe durar esa ventana, cuántas veces puede excederse el límite antes de ser bloqueado totalmente, si debe seguir contando incluso tras el bloqueo, y una lista de IPs o identificadores que están exentos del rate limit.

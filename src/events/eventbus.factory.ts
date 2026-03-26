@@ -1,6 +1,10 @@
-import { container, Contract } from "../container/DIContainer";
-import { getLogger } from "../logger/logger.factory";
-import { DefaultEventBus, EVENT_BUS_TOKEN, EventBusContract } from "./EventBus";
+import { container, type Contract } from "../container/DIContainer.js";
+import { getLogger } from "../logger/logger.factory.js";
+import {
+  DefaultEventBus,
+  EVENT_BUS_TOKEN,
+  type EventBusContract,
+} from "./EventBus.js";
 
 let fallbackEventBus: EventBusContract | null = null;
 

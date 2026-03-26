@@ -1,4 +1,4 @@
-import { FastifyKitMetadata } from "./types";
+import type { FastifyKitMetadata } from "./types.js";
 
 /**
  * @description Define la versión de la API para un controlador completo o un método específico.

@@ -1,9 +1,9 @@
-import { container, type Contract } from "../container/DIContainer";
+import { container, type Contract } from "../container/DIContainer.js";
 import {
   DefaultConsoleLogger,
   LOGGER_TOKEN,
-  LoggerContract,
-} from "./LoggerContract";
+  type LoggerContract,
+} from "./LoggerContract.js";
 
 let fallbackLogger: LoggerContract | null = null;
 

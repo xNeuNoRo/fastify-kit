@@ -1,4 +1,4 @@
-import { CacheManager } from "../cache/CacheManager";
+import { CacheManager } from "../cache/CacheManager.js";
 
 /**
  * @description Decorador para cachear el resultado de un método de clase.

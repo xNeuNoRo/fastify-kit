@@ -1,4 +1,4 @@
-import { container, Contract } from "../container/DIContainer";
+import { container, type Contract } from "../container/DIContainer.js";
 
 /**
  * @description El decorador @Inject se utiliza para marcar un campo de clase como una dependencia que debe ser inyectada por el contenedor de inyección de dependencias.

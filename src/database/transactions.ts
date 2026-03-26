@@ -1,6 +1,6 @@
-import { container } from "../container/DIContainer";
-import { requestContext } from "../http/context/requestContext";
-import { getLogger } from "../logger/logger.factory";
+import { container } from "../container/DIContainer.js";
+import { requestContext } from "../http/context/requestContext.js";
+import { getLogger } from "../logger/logger.factory.js";
 
 /**
  * @description Este módulo proporciona herramientas para manejar transacciones en la base de datos de manera transparente y eficiente. Incluye un decorador @Transactional para ejecutar métodos dentro de una transacción, un token simbólico para registrar el TransactionManager en el contenedor de dependencias, y una función para crear un Proxy que intercepta las llamadas a la base de datos y redirige

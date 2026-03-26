@@ -1,7 +1,7 @@
-import { randomUUID } from "node:crypto";
 import fp from "fastify-plugin";
-import { FastifyPluginAsync } from "fastify";
-import { requestContext } from "../context/requestContext";
+import { randomUUID } from "node:crypto";
+import type { FastifyPluginAsync } from "fastify";
+import { requestContext } from "../context/requestContext.js";
 
 const requestContextPlugin: FastifyPluginAsync = async (app) => {
   // onRequest es la primera fase del ciclo de vida de Fastify. Aquí es donde vamos a inicializar el contexto de la solicitud

@@ -9,19 +9,19 @@ if ((Symbol as any).metadata === undefined) {
 // ----------------------------------------------
 // Core & Bootstrap
 // ----------------------------------------------
-export { FastifyKit, type FastifyKitOptions } from "./core/FastifyKit";
-export { Module } from "./core/module.decorator";
-export { discoverControllers, discoverModules } from "./http/routing/discovery";
-export type { ModuleOptions } from "./http/decorators/types";
-export type { AutoDiscoverOptions } from "./http/routing/discovery";
-export type { Constructor } from "./http/routing/scanner";
+export { FastifyKit, type FastifyKitOptions } from "./core/FastifyKit.js";
+export { Module } from "./core/module.decorator.js";
+export { discoverControllers, discoverModules } from "./http/routing/discovery.js";
+export type { ModuleOptions } from "./http/decorators/types.js";
+export type { AutoDiscoverOptions } from "./http/routing/discovery.js";
+export type { Constructor } from "./http/routing/scanner.js";
 
 // ----------------------------------------------
 // HTTP Routing & Controllers
 // ----------------------------------------------
-export { Controller } from "./http/decorators/controller";
-export { Get, Post, Put, Patch, Delete } from "./http/decorators/methods";
-export { Version } from "./http/decorators/version"; // Decorador para definir versiones de API a nivel de clase o método
+export { Controller } from "./http/decorators/controller.js";
+export { Get, Post, Put, Patch, Delete } from "./http/decorators/methods.js";
+export { Version } from "./http/decorators/version.js"; // Decorador para definir versiones de API a nivel de clase o método
 export {
   UseParams, // Decorador para definir qué parámetros queremos inyectar en cada método de nuestros controladores
   Body,
@@ -31,50 +31,50 @@ export {
   Req,
   Res,
   Ip,
-} from "./http/decorators/parameters";
+} from "./http/decorators/parameters.js";
 
 // ----------------------------------------------
 // HTTP Security & Guards
 // ----------------------------------------------
-export { UseGuards } from "./http/decorators/guards";
-export { RateLimit } from "./http/decorators/rate-limit";
-export type { CanActivate } from "./http/guards/CanActivate";
-export type { RateLimitOptions } from "./http/decorators/types";
+export { UseGuards } from "./http/decorators/guards.js";
+export { RateLimit } from "./http/decorators/rate-limit.js";
+export type { CanActivate } from "./http/guards/CanActivate.js";
+export type { RateLimitOptions } from "./http/decorators/types.js";
 
 // ----------------------------------------------
 // HTTP Responses & Exceptions
 // ----------------------------------------------
-export { createApiResponseSchema } from "./http/responses/api-response.schema";
-export { ApiResponse } from "./http/responses/ApiResponse";
-export { ApiError } from "./http/responses/ApiError";
-export * from "./http/exceptions"; // Exporta todos los ErrorCodes y Excepciones (NotFound, Validation, etc.)
+export { createApiResponseSchema } from "./http/responses/api-response.schema.js";
+export { ApiResponse } from "./http/responses/ApiResponse.js";
+export { ApiError } from "./http/responses/ApiError.js";
+export * from "./http/exceptions/index.js"; // Exporta todos los ErrorCodes y Excepciones (NotFound, Validation, etc.)
 
 // ----------------------------------------------
 // Execution Context (AsyncLocalStorage)
 // ----------------------------------------------
-export { AlsStore } from "./http/context/AlsStore";
+export { AlsStore } from "./http/context/AlsStore.js";
 // Exportamos la instancia global por si el usuario necesita acceder al requestId manualmente
-export { requestContext } from "./http/context/requestContext";
+export { requestContext } from "./http/context/requestContext.js";
 
 // ----------------------------------------------
 // Dependency Injection (IoC)
 // ----------------------------------------------
-export { container, type Contract } from "./container/DIContainer";
-export { Injectable } from "./container/injectable.decorator";
-export { Inject } from "./container/inject.decorator";
+export { container, type Contract } from "./container/DIContainer.js";
+export { Injectable } from "./container/injectable.decorator.js";
+export { Inject } from "./container/inject.decorator.js";
 
 // ----------------------------------------------
 // Data & Mapping
 // ----------------------------------------------
-export { MapTo } from "./utils/map-to.decorator";
-export { Mapper } from "./utils/Mapper";
-export type { PipeTransform } from "./http/pipes/PipeTransform"; // El contrato de transformación
+export { MapTo } from "./utils/map-to.decorator.js";
+export { Mapper } from "./utils/Mapper.js";
+export type { PipeTransform } from "./http/pipes/PipeTransform.js"; // El contrato de transformación
 
 // ----------------------------------------------
 // Caching (AOP)
 // ----------------------------------------------
-export { Cache, ClearCache } from "./cache/cache.decorator";
-export { CacheManager } from "./cache/CacheManager";
+export { Cache, ClearCache } from "./cache/cache.decorator.js";
+export { CacheManager } from "./cache/CacheManager.js";
 
 // ----------------------------------------------
 // Database & Transactions (Agnostic)
@@ -82,52 +82,52 @@ export { CacheManager } from "./cache/CacheManager";
 export {
   Transactional,
   TRANSACTION_MANAGER_TOKEN,
-} from "./database/transactions";
-export { createTransactionProxy } from "./database/proxy";
-export type { ITransactionManager } from "./database/transactions";
+} from "./database/transactions.js";
+export { createTransactionProxy } from "./database/proxy.js";
+export type { ITransactionManager } from "./database/transactions.js";
 
 // ----------------------------------------------
 // Observability & Logging
 // ----------------------------------------------
-export { Benchmark } from "./logger/benchmark.decorator";
+export { Benchmark } from "./logger/benchmark.decorator.js";
 export {
   LOGGER_TOKEN,
   type LoggerContract,
   DefaultConsoleLogger,
-} from "./logger/LoggerContract";
-export { getLogger } from "./logger/logger.factory";
+} from "./logger/LoggerContract.js";
+export { getLogger } from "./logger/logger.factory.js";
 
 // ----------------------------------------------
 // Resilience & Fault Tolerance
 // ----------------------------------------------
-export { Retry } from "./resilience/retry.decorator";
-export { Timeout } from "./resilience/timeout.decorator";
-export { CircuitBreaker } from "./resilience/circuit-breaker.decorator";
+export { Retry } from "./resilience/retry.decorator.js";
+export { Timeout } from "./resilience/timeout.decorator.js";
+export { CircuitBreaker } from "./resilience/circuit-breaker.decorator.js";
 
 // ----------------------------------------------
 // Event Bus (Pub / Sub)
 // ----------------------------------------------
-export { OnEvent } from "./events/on-event.decorator";
-export { OnceEvent } from "./events/once-event.decorator";
+export { OnEvent } from "./events/on-event.decorator.js";
+export { OnceEvent } from "./events/once-event.decorator.js";
 export {
   EVENT_BUS_TOKEN,
   type EventBusContract,
   DefaultEventBus,
-} from "./events/EventBus";
-export { getEventBus } from "./events/eventbus.factory";
+} from "./events/EventBus.js";
+export { getEventBus } from "./events/eventbus.factory.js";
 
 // ----------------------------------------------
 // Scheduling & Background Tasks
 // ----------------------------------------------
-export { Scheduled, CronExpression } from "./scheduling/scheduled.decorator";
+export { Scheduled, CronExpression } from "./scheduling/scheduled.decorator.js";
 
 // ----------------------------------------------
 // Configuration Management
 // ----------------------------------------------
-export { ConfigRegistry } from "./config/ConfigRegistry";
-export { InjectConfig } from "./config/inject-config.decorator";
+export { ConfigRegistry } from "./config/ConfigRegistry.js";
+export { InjectConfig } from "./config/inject-config.decorator.js";
 
 // ----------------------------------------------
 // Validation (TypeBox)
 // ----------------------------------------------
-export { Validate } from "./validation/validate.decorator";
+export { Validate } from "./validation/validate.decorator.js";

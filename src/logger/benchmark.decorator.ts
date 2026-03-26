@@ -1,4 +1,4 @@
-import { getLogger } from "../logger/logger.factory";
+import { getLogger } from "../logger/logger.factory.js";
 
 /**
  * @description Decorador para medir el tiempo de ejecución de un método. Si el tiempo excede el umbral especificado, se registra una advertencia en el logger.

@@ -1,4 +1,4 @@
-import { ConfigRegistry } from "../config/ConfigRegistry";
+import { ConfigRegistry } from "../config/ConfigRegistry.js";
 
 /**
  * @description Decorador de campo para inyectar configuraciones registradas en el ConfigRegistry.

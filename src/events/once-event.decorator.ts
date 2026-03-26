@@ -1,5 +1,5 @@
-import { getEventBus } from "../events/eventbus.factory";
-import { getLogger } from "../logger/logger.factory";
+import { getEventBus } from "../events/eventbus.factory.js";
+import { getLogger } from "../logger/logger.factory.js";
 
 /**
  * @description Decorador de método para suscribirse a un evento emitido en el EventBus, pero solo para la primera vez que se emite dicho evento. Después de que el evento se haya manejado una vez, el método decorado dejará de ser un listener para ese evento.

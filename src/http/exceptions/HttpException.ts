@@ -1,6 +1,6 @@
-import { MapTo } from "../../utils/map-to.decorator";
-import { ApiError } from "../responses/ApiError";
-import { ErrorCode } from "./ErrorCodes";
+import { MapTo } from "../../utils/map-to.decorator.js";
+import { ApiError } from "../responses/ApiError.js";
+import { ErrorCode } from "./ErrorCodes.js";
 
 export abstract class HttpException<T = unknown> extends Error {
   constructor(

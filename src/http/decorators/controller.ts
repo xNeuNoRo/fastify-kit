@@ -1,5 +1,5 @@
-import { container } from "../../container/DIContainer";
-import { FastifyKitMetadata } from "./types";
+import { container } from "../../container/DIContainer.js";
+import type { FastifyKitMetadata } from "./types.js";
 
 /**
  * @description Decorador de clase para marcar una clase como un controlador en el contexto de una aplicación web. Este decorador permite definir un prefijo de ruta para todas las rutas definidas dentro de la clase, lo que facilita la organización y estructuración de los endpoints de la API. Además, al aplicar este decorador, la clase se registra automáticamente en el contenedor de inyección de dependencias de FastifyKit, lo que permite que sus instancias sean resueltas y utilizadas en otras partes de la aplicación, como en los servicios o en otros controladores.

@@ -1,5 +1,5 @@
-import { getEventBus } from "../events/eventbus.factory";
-import { getLogger } from "../logger/logger.factory";
+import { getEventBus } from "../events/eventbus.factory.js";
+import { getLogger } from "../logger/logger.factory.js";
 
 /**
  * @description Decorador de método para suscribirse a eventos emitidos en el EventBus.

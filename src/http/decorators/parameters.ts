@@ -1,6 +1,6 @@
-import { PipeTransform } from "../pipes/PipeTransform";
-import { Constructor } from "../routing/scanner";
-import { ParameterType, FastifyKitMetadata } from "./types";
+import type { PipeTransform } from "../pipes/PipeTransform.js";
+import type { Constructor } from "../routing/scanner.js";
+import type { ParameterType, FastifyKitMetadata } from "./types.js";
 
 /**
  * @description Decorador para obtener los datos del body de la solicitud

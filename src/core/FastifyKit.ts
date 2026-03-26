@@ -1,17 +1,26 @@
 import { Cron } from "croner";
-import fastify, { FastifyInstance, FastifyServerOptions } from "fastify";
-import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
-import { fastifyKitRequestContext } from "../http/plugins/requestContext";
-import { fastifyKitErrorHandler } from "../http/plugins/errorHandler";
-import { registerControllers, Constructor } from "../http/routing/scanner";
-import { ApiResponse } from "../http/responses/ApiResponse";
+import fastify, {
+  type FastifyInstance,
+  type FastifyServerOptions,
+} from "fastify";
+import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
+import { fastifyKitRequestContext } from "../http/plugins/requestContext.js";
+import { fastifyKitErrorHandler } from "../http/plugins/errorHandler.js";
+import {
+  registerControllers,
+  type Constructor,
+} from "../http/routing/scanner.js";
+import { ApiResponse } from "../http/responses/ApiResponse.js";
 import {
   discoverControllers,
   discoverModules,
-} from "../http/routing/discovery";
-import { ModuleOptions, FastifyKitMetadata } from "../http/decorators/types";
-import { container } from "../container/DIContainer";
-import { requestContext } from "../http/context/requestContext";
+} from "../http/routing/discovery.js";
+import type {
+  ModuleOptions,
+  FastifyKitMetadata,
+} from "../http/decorators/types.js";
+import { container } from "../container/DIContainer.js";
+import { requestContext } from "../http/context/requestContext.js";
 
 export interface FastifyKitOptions {
   module: any;
@@ -33,6 +42,14 @@ export interface FastifyKitOptions {
 }
 
 export class FastifyKit {
+  // Usamos un símbolo para almacenar la metadata de los módulos y
+  // evitar conflictos con otras propiedades de la clase.
+  // Este símbolo es único y no colisionará con ninguna otra propiedad,
+  // lo que garantiza que la metadata se almacene de manera segura y aislada en cada clase de módulo.
+  private static readonly METADATA_SYMBOL: symbol =
+    (Symbol as SymbolConstructor & { metadata?: symbol }).metadata ??
+    Symbol.for("Symbol.metadata");
+
   /**
    * @description Método estático para crear una instancia de Fastify configurada con FastifyKit. Este método se encarga de registrar los plugins necesarios para el manejo de contexto de solicitud, manejo de errores, seguridad (CORS, Helmet, rate limit) y documentación (Swagger/Scalar) según las opciones proporcionadas. También registra una ruta de health check y las rutas definidas en los controladores escaneados.
    * @param options Las opciones de configuración para FastifyKit, incluyendo los controladores a registrar, prefijo global para las rutas, configuración de Swagger/Scalar y opciones de seguridad.
@@ -171,7 +188,7 @@ export class FastifyKit {
     for (const provider of allProviders) {
       // Leemos la metadata directamente desde la implementación
       const providerMeta = (provider.implementation as any)[
-        Symbol.metadata
+        this.METADATA_SYMBOL
       ] as FastifyKitMetadata;
 
       if (providerMeta?.scheduledTasks?.length) {
@@ -274,7 +291,7 @@ export class FastifyKit {
    * @returns Un objeto de tipo ModuleOptions que contiene la metadata del módulo extraída de la clase proporcionada. Esta metadata incluye las opciones definidas en el decorador \@Module, como controladores, proveedores, módulos importados, y configuración de auto-discover.
    */
   private static getModuleMetadata(moduleClass: any): ModuleOptions {
-    const metadata = moduleClass[Symbol.metadata]
+    const metadata = moduleClass[this.METADATA_SYMBOL]
       ?.moduleOptions as ModuleOptions;
 
     if (!metadata)

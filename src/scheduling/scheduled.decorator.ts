@@ -1,4 +1,4 @@
-import { FastifyKitMetadata } from "../http/decorators/types";
+import type { FastifyKitMetadata } from "../http/decorators/types.js";
 
 /**
  * @description Constantes de expresiones Cron predefinidas para facilitar la programación de tareas comunes. Estas expresiones pueden ser utilizadas al decorar métodos con \@Scheduled para definir cuándo deben ejecutarse automáticamente. Por ejemplo, si queremos que un método se ejecute cada hora, podemos usar CronExpression.EVERY_HOUR en el decorador @Scheduled.

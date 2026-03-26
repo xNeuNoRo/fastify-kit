@@ -1,5 +1,5 @@
-import { Constructor } from "../http/routing/scanner";
-import { ModuleOptions, FastifyKitMetadata } from "../http/decorators/types";
+import type { Constructor } from "../http/routing/scanner.js";
+import type { ModuleOptions, FastifyKitMetadata } from "../http/decorators/types.js";
 
 /**
  * @description Decorador para definir un módulo en FastifyKit.

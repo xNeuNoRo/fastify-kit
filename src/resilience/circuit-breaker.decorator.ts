@@ -1,4 +1,4 @@
-import { getLogger } from "../logger/logger.factory";
+import { getLogger } from "../logger/logger.factory.js";
 
 // Los estados son:
 // - CLOSED: Quiere decir que esta funciionando correctamente,

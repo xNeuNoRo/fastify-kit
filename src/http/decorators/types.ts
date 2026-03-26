@@ -1,8 +1,8 @@
-import { CanActivate } from "../guards/CanActivate";
-import { PipeTransform } from "../pipes/PipeTransform";
-import { AutoDiscoverOptions } from "../routing/discovery";
-import { Constructor } from "../routing/scanner";
-import { RouteDefinition } from "../routing/types";
+import type { CanActivate } from "../guards/CanActivate.js";
+import type { PipeTransform } from "../pipes/PipeTransform.js";
+import type { AutoDiscoverOptions } from "../routing/discovery.js";
+import type { Constructor } from "../routing/scanner.js";
+import type { RouteDefinition } from "../routing/types.js";
 
 /**
  * @description Tipos y interfaces para la metadata de los decoradores en FastifyKit.
@@ -71,7 +71,7 @@ export interface RateLimitOptions {
 /**
  * @description Interfaz que define la metadata compartida por todos los decoradores en FastifyKit. Esta metadata incluye información sobre los guardias a nivel de clase y de ruta, así como cualquier otra información común que pueda ser utilizada por diferentes tipos de decoradores (controladores, módulos, etc.). Esta interfaz se extiende en FastifyKitMetadata para incluir información específica de controladores, rutas, módulos, etc.
  */
-export interface FastifyKitMetadata extends DecoratorMetadata {
+export type FastifyKitMetadata = DecoratorMetadata & {
   parameters?: Record<string | symbol, ParameterMetadata[]>; // Metadata de parámetros, mapeada por el nombre del método
   routes?: RouteDefinition[]; // Para almacenar información de rutas a nivel de método (método HTTP, path, etc.)
   prefix?: string; // Para controladores, el prefijo de ruta (Ej: "books" para rutas como "/books", "/books/:id", etc.)
@@ -81,4 +81,4 @@ export interface FastifyKitMetadata extends DecoratorMetadata {
   methodVersions?: Record<string | symbol, string>; // Versiones a nivel de método
   scheduledTasks?: ScheduledTaskMetadata[]; // Metadata para tareas programadas
   rateLimits?: Record<string | symbol, RateLimitOptions>; // Metadata para rate limiting a nivel de método
-}
+};

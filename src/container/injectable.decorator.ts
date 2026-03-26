@@ -1,4 +1,4 @@
-import { container, Contract } from "../container/DIContainer";
+import { container, type Contract } from "../container/DIContainer.js";
 
 /**
  * @description Decorador para marcar una clase como inyectable en el contenedor de dependencias.

@@ -1,5 +1,5 @@
-import { HttpException } from "./HttpException";
-import { ErrorCode } from "./ErrorCodes";
+import { HttpException } from "./HttpException.js";
+import { ErrorCode } from "./ErrorCodes.js";
 
 export class NotFoundException extends HttpException {
   constructor(resource: string, identifier?: string | number) {

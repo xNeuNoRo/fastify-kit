@@ -1,4 +1,4 @@
-import { requestContext } from "../http/context/requestContext";
+import { requestContext } from "../http/context/requestContext.js";
 
 /**
  * @description Este modulo crea un Proxy que intercepta todas las llamadas a la base de datos.

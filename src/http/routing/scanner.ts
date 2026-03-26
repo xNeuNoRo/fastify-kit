@@ -1,12 +1,17 @@
-import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { container } from "../../container/DIContainer";
-import { ForbiddenException } from "../exceptions";
-import { FastifyKitMetadata } from "../decorators/types";
-import { ApiResponse } from "../responses/ApiResponse";
-import { PipeTransform } from "../pipes/PipeTransform";
-import { getLogger } from "../../logger/logger.factory";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { container } from "../../container/DIContainer.js";
+import { ForbiddenException } from "../exceptions/index.js";
+import type { FastifyKitMetadata } from "../decorators/types.js";
+import { ApiResponse } from "../responses/ApiResponse.js";
+import type { PipeTransform } from "../pipes/PipeTransform.js";
+import { getLogger } from "../../logger/logger.factory.js";
 
 export type Constructor<T = any> = new (...args: any[]) => T;
+
+// Usamos un símbolo único para almacenar la metadata de los decoradores en las clases
+// y métodos de los controladores, evitando así conflictos con otras propiedades o símbolos que puedan existir en el futuro.
+const metadataSymbol: symbol =
+  (Symbol as any).metadata ?? Symbol.for("Symbol.metadata");
 
 /**
  * @description Construye y normaliza la ruta final a registrar en Fastify.
@@ -69,7 +74,7 @@ function resolveParamValue(
   request: FastifyRequest,
   reply: FastifyReply,
 ): any {
-  // Dependiendo del tipo de parámetro definido en la metadata del decorador, 
+  // Dependiendo del tipo de parámetro definido en la metadata del decorador,
   // extraemos su valor correspondiente del request o reply de Fastify.
   // Si el decorador de este parámetro tiene una clave definida (param.key),
   // extraemos solo esa clave específica del objeto correspondiente (por ejemplo, request.body[param.key]
@@ -166,7 +171,7 @@ export function registerControllers(
   // Iteramos sobre cada controlador registrado
   for (const ControllerClass of controllers) {
     const metadata = (ControllerClass as any)[
-      Symbol.metadata
+      metadataSymbol
     ] as FastifyKitMetadata;
 
     // Si no se encuentran rutas en el contexto de este controlador

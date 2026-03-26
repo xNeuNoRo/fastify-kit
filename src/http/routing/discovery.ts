@@ -1,10 +1,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { Constructor } from "./scanner";
+import type { Constructor } from "./scanner.js";
 import { pathToFileURL } from "node:url";
-import { FastifyKitMetadata } from "../decorators/types";
+import type { FastifyKitMetadata } from "../decorators/types.js";
 import { Dirent } from "node:fs";
-import { getLogger } from "../../logger/logger.factory";
+import { getLogger } from "../../logger/logger.factory.js";
+
+const decoratorMetadataSymbol = (
+  Symbol as SymbolConstructor & { metadata?: symbol }
+).metadata;
 
 export interface AutoDiscoverOptions {
   /**
@@ -35,10 +39,12 @@ function iterateModuleExports(
     // Verificamos si lo exportado es una función (posible clase)
     // y si tiene metadata (decoradores)
     const exportedItem = module[key];
-    if (typeof exportedItem === "function" && exportedItem[Symbol.metadata]) {
-      const metadata = exportedItem[Symbol.metadata] as FastifyKitMetadata;
+    if (typeof exportedItem === "function" && decoratorMetadataSymbol) {
+      const metadata = (exportedItem as Record<PropertyKey, unknown>)[
+        decoratorMetadataSymbol
+      ] as FastifyKitMetadata | undefined;
       // Si la metadata cumple con los criterios definidos, agregamos la clase al array de descubiertas
-      if (criteria(metadata)) {
+      if (metadata && criteria(metadata)) {
         discovered.push(exportedItem as Constructor);
       }
     }

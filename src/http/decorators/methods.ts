@@ -1,6 +1,6 @@
-import { FastifySchema } from "fastify";
-import { HttpMethod } from "../routing/types";
-import { FastifyKitMetadata } from "./types";
+import type { FastifySchema } from "fastify";
+import type { HttpMethod } from "../routing/types.js";
+import type { FastifyKitMetadata } from "./types.js";
 
 function createRouteDecorator(method: HttpMethod) {
   return function (path: string = "", schema?: FastifySchema) {
@@ -101,7 +101,7 @@ export const Get = createRouteDecorator("get");
  *   createUser() {
  *     // Lógica para manejar la solicitud POST /users con validación del cuerpo de la solicitud
  *   }
- * 
+ *
  * // Tambien se puede combinar con un esquema de validación de TypeBox, de hecho viene integrado con TypeBox para facilitar la validación de las solicitudes, por lo que puedes usar los esquemas de TypeBox directamente en el decorador:
  * \@Post("/create", {
  *     body: Type.Object({
@@ -114,7 +114,6 @@ export const Get = createRouteDecorator("get");
  * @see createRouteDecorator para más detalles sobre cómo se implementan estos decoradores de ruta.
  */
 export const Post = createRouteDecorator("post");
-
 
 /**
  * @description Decorador del metodo HTTP PUT para definir rutas en los controladores de FastifyKit. Este decorador permite especificar la ruta y un esquema de validación opcional para las solicitudes PUT, registrando esta información en la metadata del método para su uso posterior durante la configuración de las rutas en el servidor.
@@ -137,7 +136,7 @@ export const Post = createRouteDecorator("post");
  *   updateUser() {
  *     // Lógica para manejar la solicitud PUT /users/:id con validación del cuerpo de la solicitud
  *   }
- * 
+ *
  * // Tambien se puede combinar con un esquema de validación de TypeBox, de hecho viene integrado con TypeBox para facilitar la validación de las solicitudes, por lo que puedes usar los esquemas de TypeBox directamente en el decorador:
  * \@Put("/update/:id", {
  *     body: Type.Object({
@@ -150,7 +149,6 @@ export const Post = createRouteDecorator("post");
  * @see createRouteDecorator para más detalles sobre cómo se implementan estos decoradores de ruta.
  */
 export const Put = createRouteDecorator("put");
-
 
 /**
  * @description Decorador del metodo HTTP PATCH para definir rutas en los controladores de FastifyKit. Este decorador permite especificar la ruta y un esquema de validación opcional para las solicitudes PATCH, registrando esta información en la metadata del método para su uso posterior durante la configuración de las rutas en el servidor.
@@ -173,7 +171,7 @@ export const Put = createRouteDecorator("put");
  *   partiallyUpdateUser() {
  *     // Lógica para manejar la solicitud PATCH /users/:id con validación del cuerpo de la solicitud
  *   }
- * 
+ *
  * // Tambien se puede combinar con un esquema de validación de TypeBox, de hecho viene integrado con TypeBox para facilitar la validación de las solicitudes, por lo que puedes usar los esquemas de TypeBox directamente en el decorador:
  * \@Patch("/update/:id", {
  *     body: Type.Object({
@@ -207,7 +205,7 @@ export const Patch = createRouteDecorator("patch");
  *   deleteUser() {
  *     // Lógica para manejar la solicitud DELETE /users/:id con validación de querystring
  *   }
- * 
+ *
  * // Tambien se puede combinar con un esquema de validación de TypeBox, de hecho viene integrado con TypeBox para facilitar la validación de las solicitudes, por lo que puedes usar los esquemas de TypeBox directamente en el decorador:
  * \@Delete("/delete/:id", {
  *    querystring: Type.Object({

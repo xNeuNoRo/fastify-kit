@@ -1,7 +1,7 @@
 import { TSchema } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
-import { getLogger } from "../logger/logger.factory";
-import { ValidationException } from "../http/exceptions";
+import { getLogger } from "../logger/logger.factory.js";
+import { ValidationException } from "../http/exceptions/index.js";
 
 /**
  * @description Decorador de método para validar los argumentos de una función utilizando un esquema de TypeBox. Este decorador intercepta la llamada al método, valida el argumento especificado contra el esquema proporcionado y lanza una excepción si la validación falla. Es especialmente útil para validar datos de entrada en controladores o servicios.

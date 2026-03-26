@@ -1,8 +1,8 @@
 import fp from "fastify-plugin";
-import { FastifyInstance, FastifyPluginAsync } from "fastify";
-import { container } from "../../container/DIContainer";
+import type { FastifyInstance, FastifyPluginAsync } from "fastify";
+import { container } from "../../container/DIContainer.js";
 
-import { ApiResponse } from "../responses/ApiResponse";
+import { ApiResponse } from "../responses/ApiResponse.js";
 import {
   HttpException,
   NotFoundException,
@@ -11,8 +11,8 @@ import {
   InternalServerException,
   TooManyRequestsException,
   ForbiddenException,
-} from "../exceptions";
-import { LOGGER_TOKEN, LoggerContract } from "../../logger/LoggerContract";
+} from "../exceptions/index.js";
+import { LOGGER_TOKEN, type LoggerContract } from "../../logger/LoggerContract.js";
 
 const errorHandlerPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
   // Handler para rutas no encontradas (404)
