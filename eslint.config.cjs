@@ -100,9 +100,15 @@ module.exports = [
     rules: {
       ...vitestPlugin.configs.recommended.rules,
 
-      // Esta regla tira warning si se accede a any, la deshabilite en tests para
+      // Estas reglas tira warning si se accede a any, la deshabilite en tests para
       // no andar tipando tanta mrd para un simple test
-      "@typescript-eslint/no-unsafe-member-access": "off", // solo en tests
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-call": "off",
+      "@typescript-eslint/no-unsafe-member-access": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
+      "@typescript-eslint/ban-ts-comment": "off",
 
       "vitest/no-disabled-tests": "warn",
       "vitest/no-focused-tests": "error",
