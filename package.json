@@ -17,9 +17,9 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --check \"src/**/*.{ts,js,json,md}\"",
     "format:fix": "prettier --write \"src/**/*.{ts,js,json,md}\"",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:coverage": "bun test --coverage",
     "prepare": "husky install"
   },
   "lint-staged": {
