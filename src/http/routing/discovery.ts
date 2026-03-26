@@ -6,9 +6,8 @@ import type { FastifyKitMetadata } from "../decorators/types.js";
 import { Dirent } from "node:fs";
 import { getLogger } from "../../logger/logger.factory.js";
 
-const decoratorMetadataSymbol = (
-  Symbol as SymbolConstructor & { metadata?: symbol }
-).metadata;
+const decoratorMetadataSymbol: symbol =
+  (Symbol as any).metadata ?? Symbol.for("Symbol.metadata");
 
 export interface AutoDiscoverOptions {
   /**
