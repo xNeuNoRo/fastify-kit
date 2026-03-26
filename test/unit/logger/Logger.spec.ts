@@ -20,15 +20,12 @@ import {
 describe("Sistema de Logs y Rendimiento (Logger & @Benchmark)", () => {
   // Variable para controlar el tiempo simulado en los tests de @Benchmark
   let currentTime = 0;
-  let perfSpy: MockInstance;
   let consoleSpies: Record<string, MockInstance>;
 
   beforeEach(() => {
     // Mockeamos performance.now para controlar el tiempo en los tests de @Benchmark
     currentTime = 0;
-    perfSpy = vi
-      .spyOn(performance, "now")
-      .mockImplementation(() => currentTime);
+    vi.spyOn(performance, "now").mockImplementation(() => currentTime);
 
     // Mockeamos los métodos de console para espiar las llamadas sin imprimir realmente en la consola durante los tests
     consoleSpies = {
