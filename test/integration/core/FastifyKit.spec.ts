@@ -56,7 +56,7 @@ describe("FastifyKit (Orquestador Core)", () => {
   class AppModule {}
 
   beforeEach(() => {
-    (container as any).instances?.clear();
+    container.clearAll(); // Limpiamos el contenedor antes de cada test para evitar contaminación entre pruebas
   });
 
   afterEach(() => {

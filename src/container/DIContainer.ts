@@ -65,6 +65,15 @@ class DIContainer {
     // Devolvemos la instancia creada
     return instance as T;
   }
+
+  /**
+   * @description Elimina todas las implementaciones e instancias registradas en el contenedor de inyección de dependencias,
+   * dejando el contenedor vacío y listo para nuevas registraciones. Util para entornos de testing.
+   */
+  clearAll(): void {
+    this.registry.clear();
+    this.instances.clear();
+  }
 }
 
 // Exportamos un singleton del contenedor de inyección de dependencias

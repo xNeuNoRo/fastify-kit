@@ -213,7 +213,7 @@ describe("Sistema de Base de Datos (Proxy & Transacciones)", () => {
   describe("Protección y Casos Extremos", () => {
     it("Debería lanzar un error si se usa @Transactional pero no hay un ITransactionManager registrado", async () => {
       // Limpiamos el contenedor para este test
-      (container as any).instances.clear();
+      container.clearAll();
 
       class BadService {
         @Transactional()
