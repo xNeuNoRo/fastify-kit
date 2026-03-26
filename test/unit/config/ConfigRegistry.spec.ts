@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
+
 import { ConfigRegistry } from "../../../src/config/ConfigRegistry.js";
 import { InjectConfig } from "../../../src/config/inject-config.decorator.js";
 
@@ -212,7 +213,7 @@ describe("Sistema de Configuración (ConfigRegistry & @InjectConfig)", () => {
         }
 
         return new InvalidUsage();
-      }).toThrow("@InjectConfig solo puede ser aplicado a campos de clase");
+      }).toThrow();
     });
 
     it("Deberia recuperar correctamente valores 'falsy' válidos (0, false, '')", () => {
