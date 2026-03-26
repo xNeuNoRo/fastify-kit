@@ -45,7 +45,7 @@ export function Validate(schema: TSchema, argIndex: number = 0) {
 
       // Si el argumento a validar no está presente, lanzamos un error específico para facilitar la depuración
       if (dataToValidate === undefined) {
-        const errorMsg = `[Validate]: Falta el argumento en la posición ${argIndex} para el método '${String(context.name)}'`;
+        const errorMsg = `[FastifyKit Validate]: Falta el argumento en la posición ${argIndex} para el método '${String(context.name)}'`;
         logger.error(`🔴 ${errorMsg}`);
         throw new Error(errorMsg);
       }
@@ -62,7 +62,7 @@ export function Validate(schema: TSchema, argIndex: number = 0) {
         }));
 
         logger.warn(
-          `🔴 [Validate] Los datos rechazados en '${String(context.name)}'`,
+          `🔴 [FastifyKit Validate] Los datos rechazados en '${String(context.name)}'`,
           { errors },
         );
 
