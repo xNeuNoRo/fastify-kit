@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { Mapper } from "../../../src/utils/Mapper.js";
+
 import { MapTo } from "../../../src/utils/map-to.decorator.js";
+import { Mapper } from "../../../src/utils/Mapper.js";
 
 // Clases Dummys para pruebas
 class UserEntity {
