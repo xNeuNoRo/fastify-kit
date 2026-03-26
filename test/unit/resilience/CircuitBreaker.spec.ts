@@ -28,11 +28,10 @@ describe("Sistema de Resiliencia (@CircuitBreaker)", () => {
     // lo que nos permitirá avanzar el tiempo a voluntad durante las pruebas.
     vi.spyOn(Date, "now").mockImplementation(() => currentTime);
 
-    // Espiamos los métodos de log para verificar que se emiten los mensajes correctos en cada estado del circuito breaker.
-    const logger = getLogger();
-    loggerInfoSpy = vi.spyOn(logger, "info").mockImplementation(() => {}); // Dejamos la impl. vacia para evitar logs reales
-    loggerWarnSpy = vi.spyOn(logger, "warn").mockImplementation(() => {});
-    loggerErrorSpy = vi.spyOn(logger, "error").mockImplementation(() => {});
+    // Espiamos los métodos de consola (log default) para verificar que se emiten los mensajes correctos en cada estado del circuito breaker.
+    loggerInfoSpy = vi.spyOn(console, "info").mockImplementation(() => {}); // Dejamos la impl. vacia para evitar logs reales
+    loggerWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    loggerErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   // Luego de cada prueba, restauramos los mocks para evitar interferencias
