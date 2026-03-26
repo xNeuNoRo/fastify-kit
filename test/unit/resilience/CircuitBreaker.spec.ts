@@ -8,7 +8,6 @@ import {
   type MockInstance,
 } from "vitest";
 
-import { getLogger } from "../../../src/logger/logger.factory.js";
 import { CircuitBreaker } from "../../../src/resilience/circuit-breaker.decorator.js";
 
 describe("Sistema de Resiliencia (@CircuitBreaker)", () => {

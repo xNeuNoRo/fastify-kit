@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { CacheManager } from "../../../src/cache/CacheManager.js";
+
 import { Cache, ClearCache } from "../../../src/cache/cache.decorator.js";
+import { CacheManager } from "../../../src/cache/CacheManager.js";
 
 describe("Sistema de Caché (CacheManager, @Cache & @ClearCache)", () => {
   // Esto se ejecuta antes de cada "it" para asegurarnos de que el CacheManager esté limpio antes de cada prueba
