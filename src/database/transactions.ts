@@ -70,11 +70,14 @@ async function executeInIsolatedTransaction<T>(
  * @see createTransactionProxy para más detalles sobre cómo funciona el Proxy de la base de datos en conjunto con este decorador.
  */
 export function Transactional() {
-  return function <T extends Function>(
-    target: T,
-    _context: ClassMethodDecoratorContext,
+  return function <This, Args extends any[], Return>(
+    target: (this: This, ...args: Args) => Promise<Return>,
+    _context: ClassMethodDecoratorContext<
+      This,
+      (this: This, ...args: Args) => Promise<Return>
+    >,
   ) {
-    return async function (this: any, ...args: any[]) {
+    return async function (this: This, ...args: Args): Promise<Return> {
       // Resolvemos el TransactionManager del contenedor de dependencias para poder usarlo en este decorador.
       const txManager = container.resolve<ITransactionManager>(
         TRANSACTION_MANAGER_TOKEN,
@@ -90,7 +93,7 @@ export function Transactional() {
 
       // Obtenemos el store del contexto de ejecución actual para verificar si ya hay una transacción activa en este hilo.
       const store = requestContext.getStore();
-      const action = target.bind(this, ...args) as () => Promise<unknown>;
+      const action = () => target.apply(this, args);
 
       // Si ya hay una transacción activa en este contexto,
       // simplemente ejecutamos el método sin crear una nueva transacción.
