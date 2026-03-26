@@ -34,8 +34,8 @@ function buildRoutePath(
   // el path de la ruta y la versión (si se definió).
   // Normalizamos la ruta para evitar problemas con múltiples slashes o slashes al final.
   let fullPath = `/${versionPrefix}/${prefix}/${routePath}`
-    .replaceAll(/\/+/g, "/")
-    .replaceAll(/\/$/, "");
+    .replace(/\/+/g, "/")
+    .replace(/\/$/, "");
 
   return fullPath === "" ? "/" : fullPath;
 }
