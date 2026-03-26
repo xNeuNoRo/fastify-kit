@@ -169,7 +169,6 @@ export class FastifyKit {
     app.get("/health", async () =>
       ApiResponse.success({
         status: "up",
-        timestamp: new Date().toISOString(),
       }),
     );
 
