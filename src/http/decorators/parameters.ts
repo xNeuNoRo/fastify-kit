@@ -78,10 +78,10 @@ export const Ip = () => ({ type: "ip" as ParameterType });
  * @param options Un objeto de opciones para configurar el manejo de archivos, incluyendo maxSize (tamaño máximo en bytes), mimetypes (tipos MIME permitidos) y mode (modo de entrega: 'buffer' o 'stream').
  * @returns Un objeto que define el tipo de parámetro (file), la clave opcional y las opciones de configuración para el manejo de archivos. Este objeto se utiliza internamente por el decorador \@UseParams para procesar la metadata de los parámetros relacionados con archivos en los métodos de controlador.
  */
-export const File = (key: string, options?: FileOptions) => ({
+export const File = (key: string, fileOptions?: FileOptions) => ({
   type: "file" as ParameterType,
   key,
-  options,
+  fileOptions,
 });
 
 /**
