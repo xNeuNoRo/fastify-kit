@@ -362,6 +362,159 @@ describe("Motor de Enrutamiento (Scanner)", () => {
     });
   });
 
+  describe("Extracción de Archivos Multipart (@File)", () => {
+    it("Debería lanzar BadRequestException si la petición no es multipart", async () => {
+      const metadataSymbol = Symbol.metadata;
+      class FileController {
+        async upload(file: any) {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          return file;
+        }
+      }
+
+      // Simulamos metadata de @UseParams(File("avatar"))
+      (FileController as any)[metadataSymbol] = {
+        routes: [{ method: "post", path: "/upload", handlerName: "upload" }],
+        parameters: { upload: [{ index: 0, type: "file", key: "avatar" }] },
+      };
+
+      registerControllers(mockApp, [FileController]);
+      const handler = mockApp.post.mock.calls[0][2];
+
+      // Simulamos un Request normal (sin isMultipart o que devuelve false)
+      const mockReq = { isMultipart: () => false } as any;
+      const mockReply = { sent: false } as any;
+
+      await expect(handler(mockReq, mockReply)).rejects.toThrow();
+    });
+
+    it("Debería lanzar UnsupportedMediaTypeException si el archivo no coincide con los mimetypes permitidos", async () => {
+      const metadataSymbol = Symbol.metadata;
+      class MimeController {
+        async upload(file: any) {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          return file;
+        }
+      }
+
+      // Metadata con restricción de mimetype a solo PNG
+      (MimeController as any)[metadataSymbol] = {
+        routes: [{ method: "post", path: "/mime", handlerName: "upload" }],
+        parameters: {
+          upload: [
+            {
+              index: 0,
+              type: "file",
+              key: "documento",
+              fileOptions: { mimetypes: ["image/png"] },
+            },
+          ],
+        },
+      };
+
+      registerControllers(mockApp, [MimeController]);
+      const handler = mockApp.post.mock.calls[0][2];
+
+      // Simulamos que el usuario manda un PDF en lugar de un PNG
+      const mockReq = {
+        isMultipart: () => true,
+        file: vi.fn().mockResolvedValue({
+          fieldname: "documento",
+          mimetype: "application/pdf",
+        }),
+      } as any;
+
+      await expect(handler(mockReq, { sent: false })).rejects.toThrow();
+    });
+
+    it("Debería procesar correctamente el archivo en modo Buffer", async () => {
+      const metadataSymbol = Symbol.metadata;
+      class BufferController {
+        upload = vi.fn().mockResolvedValue("buffer ok");
+      }
+
+      (BufferController as any)[metadataSymbol] = {
+        routes: [{ method: "post", path: "/buffer", handlerName: "upload" }],
+        parameters: {
+          upload: [
+            {
+              index: 0,
+              type: "file",
+              key: "avatar",
+              fileOptions: { mode: "buffer" },
+            },
+          ],
+        },
+      };
+
+      registerControllers(mockApp, [BufferController]);
+      const handler = mockApp.post.mock.calls[0][2];
+
+      // Mock de archivo válido en modo buffer
+      const fakeBuffer = Buffer.from("contenido falso");
+      const mockReq = {
+        isMultipart: () => true,
+        file: vi.fn().mockResolvedValue({
+          fieldname: "avatar",
+          mimetype: "image/png",
+          filename: "test.png",
+          encoding: "7bit",
+          toBuffer: vi.fn().mockResolvedValue(fakeBuffer),
+          file: { truncated: false }, // Para simular que el archivo no excedió el límite de tamaño
+        }),
+      } as any;
+
+      await handler(mockReq, { sent: false });
+
+      // Verificamos que se inyectó correctamente el objeto MultipartFile
+      const instanceMock = container.resolve(BufferController);
+      expect(instanceMock.upload).toHaveBeenCalledWith({
+        filename: "test.png",
+        mimetype: "image/png",
+        encoding: "7bit",
+        buffer: fakeBuffer,
+      });
+    });
+
+    it("Debería atrapar el límite de Fastify y lanzar FileTooLargeException", async () => {
+      const metadataSymbol = Symbol.metadata;
+      class SizeController {
+        async upload(file: any) {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          return file;
+        }
+      }
+
+      (SizeController as any)[metadataSymbol] = {
+        routes: [{ method: "post", path: "/size", handlerName: "upload" }],
+        parameters: {
+          upload: [
+            {
+              index: 0,
+              type: "file",
+              key: "avatar",
+              fileOptions: { maxSize: 1024 },
+            },
+          ],
+        },
+      };
+
+      registerControllers(mockApp, [SizeController]);
+      const handler = mockApp.post.mock.calls[0][2];
+
+      // Fastify lanza este error específico cuando el stream excede el tamaño en caliente
+      const fastifyError = new Error("Limit reached");
+      (fastifyError as any).code = "FST_REQ_FILE_TOO_LARGE";
+
+      const mockReq = {
+        isMultipart: () => true,
+        file: vi.fn().mockRejectedValue(fastifyError), // Simulamos el crash de Fastify
+      } as any;
+
+      await expect(handler(mockReq, { sent: false })).rejects.toThrow();
+    });
+  });
+
   describe("Formateo de Respuesta (formatResponse)", () => {
     it("No debería hacer nada si la respuesta ya fue enviada (reply.sent)", async () => {
       const metadataSymbol = Symbol.metadata;

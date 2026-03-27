@@ -5,7 +5,9 @@ import { container } from "../../../src/container/DIContainer.js";
 import { FastifyKit } from "../../../src/core/FastifyKit.js";
 import { Module } from "../../../src/core/module.decorator.js";
 import { Controller } from "../../../src/http/decorators/controller.js";
-import { Get } from "../../../src/http/decorators/methods.js";
+import { Get, Post } from "../../../src/http/decorators/methods.js";
+import { UseParams, File } from "../../../src/http/decorators/parameters.js";
+import type { MultipartFile } from "../../../src/http/decorators/types.js";
 import { Scheduled } from "../../../src/scheduling/scheduled.decorator.js";
 
 // Aseguramos que el símbolo para metadata esté definido para poder usarlo en los tests
@@ -90,6 +92,63 @@ describe("FastifyKit (Orquestador Core)", () => {
       });
       expect(pingRes.statusCode).toBe(200);
       expect(JSON.parse(pingRes.payload).data.msg).toBe("Hola desde DI!");
+
+      await app.close();
+    });
+
+    it("Debería procesar la subida de un archivo real de extremo a extremo", async () => {
+      // Definimos un controlador y módulo de prueba para manejar la subida de archivos usando el decorador @UseParams con File
+      @Controller("/archivos")
+      class UploadController {
+        @Post("/subir")
+        @UseParams(File("documento", { mode: "buffer" }))
+        subirArchivo(doc: MultipartFile) {
+          return {
+            nombre: doc.filename,
+            formato: doc.mimetype,
+            bytes: doc.buffer?.length,
+            contenido: doc.buffer?.toString("utf-8"),
+          };
+        }
+      }
+
+      @Module({ controllers: [UploadController] })
+      class UploadModule {}
+
+      // Creamos una instancia de FastifyKit con el módulo de subida de archivos y habilitamos multipart
+      const app = await FastifyKit.create({
+        module: UploadModule,
+        multipart: true,
+      });
+
+      // Creamos un payload multipart real simulando la subida de un archivo de texto. Usamos una boundary personalizada para construir el cuerpo de la solicitud correctamente.
+      const boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW";
+      const payloadHTTP =
+        `--${boundary}\r\n` +
+        `Content-Disposition: form-data; name="documento"; filename="prueba.txt"\r\n` +
+        `Content-Type: text/plain\r\n\r\n` +
+        `Hola desde un test de integración\r\n` +
+        `--${boundary}--\r\n`;
+
+      // Inyectamos la solicitud POST al endpoint de subida de archivos con el payload multipart y el header Content-Type correcto
+      const res = await app.inject({
+        method: "POST",
+        url: "/archivos/subir",
+        headers: {
+          "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        },
+        payload: payloadHTTP,
+      });
+
+      // Validamos que la respuesta haya sido exitosa
+      expect(res.statusCode).toBe(200);
+
+      // Validamos que el archivo haya sido procesado correctamente y que la información devuelta sea correcta
+      const json = JSON.parse(res.payload);
+      expect(json.data.nombre).toBe("prueba.txt");
+      expect(json.data.formato).toBe("text/plain");
+      expect(json.data.contenido).toBe("Hola desde un test de integración");
+      expect(json.data.bytes).toBeGreaterThan(0);
 
       await app.close();
     });
