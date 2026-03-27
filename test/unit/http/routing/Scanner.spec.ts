@@ -418,10 +418,16 @@ describe("Motor de Enrutamiento (Scanner)", () => {
       // Simulamos que el usuario manda un PDF en lugar de un PNG
       const mockReq = {
         isMultipart: () => true,
-        file: vi.fn().mockResolvedValue({
-          fieldname: "documento",
-          mimetype: "application/pdf",
-        }),
+        parts: async function* () {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          yield {
+            type: "file",
+            fieldname: "documento",
+            mimetype: "application/pdf",
+            toBuffer: vi.fn().mockResolvedValue(Buffer.from("pdf")),
+            file: { truncated: false },
+          };
+        },
       } as any;
 
       await expect(handler(mockReq, { sent: false })).rejects.toThrow();
@@ -453,15 +459,20 @@ describe("Motor de Enrutamiento (Scanner)", () => {
       // Mock de archivo válido en modo buffer
       const fakeBuffer = Buffer.from("contenido falso");
       const mockReq = {
+        body: {},
         isMultipart: () => true,
-        file: vi.fn().mockResolvedValue({
-          fieldname: "avatar",
-          mimetype: "image/png",
-          filename: "test.png",
-          encoding: "7bit",
-          toBuffer: vi.fn().mockResolvedValue(fakeBuffer),
-          file: { truncated: false }, // Para simular que el archivo no excedió el límite de tamaño
-        }),
+        parts: async function* () {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          yield {
+            type: "file",
+            fieldname: "avatar",
+            mimetype: "image/png",
+            filename: "test.png",
+            encoding: "7bit",
+            toBuffer: vi.fn().mockResolvedValue(fakeBuffer),
+            file: { truncated: false },
+          };
+        },
       } as any;
 
       await handler(mockReq, { sent: false });
@@ -508,7 +519,12 @@ describe("Motor de Enrutamiento (Scanner)", () => {
 
       const mockReq = {
         isMultipart: () => true,
-        file: vi.fn().mockRejectedValue(fastifyError), // Simulamos el crash de Fastify
+        parts: async function* () {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          const fastifyError = new Error("Limit reached");
+          (fastifyError as any).code = "FST_REQ_FILE_TOO_LARGE";
+          throw fastifyError;
+        },
       } as any;
 
       await expect(handler(mockReq, { sent: false })).rejects.toThrow();
