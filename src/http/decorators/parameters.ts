@@ -1,6 +1,10 @@
 import type { PipeTransform } from "../pipes/PipeTransform.js";
 import type { Constructor } from "../routing/scanner.js";
-import type { ParameterType, FastifyKitMetadata } from "./types.js";
+import type {
+  ParameterType,
+  FastifyKitMetadata,
+  FileOptions,
+} from "./types.js";
 
 /**
  * @description Decorador para obtener los datos del body de la solicitud
@@ -69,6 +73,18 @@ export const Res = () => ({ type: "reply" as ParameterType });
 export const Ip = () => ({ type: "ip" as ParameterType });
 
 /**
+ * @description Decorador para manejar la carga de archivos en los métodos de controlador. Este decorador se utiliza por el decorador \@UseParams para procesar la metadata de los parámetros relacionados con archivos, incluyendo opciones como el tamaño máximo permitido, los tipos MIME aceptados y el modo de entrega (buffer o stream).
+ * @param key Un dato en especifico, ejemplo: "avatar" para obtener solo el campo "avatar" del body multipart. Si se omite, se inyectará el body multipart.
+ * @param options Un objeto de opciones para configurar el manejo de archivos, incluyendo maxSize (tamaño máximo en bytes), mimetypes (tipos MIME permitidos) y mode (modo de entrega: 'buffer' o 'stream').
+ * @returns Un objeto que define el tipo de parámetro (file), la clave opcional y las opciones de configuración para el manejo de archivos. Este objeto se utiliza internamente por el decorador \@UseParams para procesar la metadata de los parámetros relacionados con archivos en los métodos de controlador.
+ */
+export const File = (key?: string, fileOptions?: FileOptions) => ({
+  type: "file" as ParameterType,
+  key,
+  fileOptions,
+});
+
+/**
  * @description Decorador para definir los parámetros que se deben inyectar en un método de controlador. Este decorador procesa un array de definiciones de parámetros, cada una con su tipo (body, query, param, etc.), una clave opcional para identificar qué parte de los datos se debe inyectar, y una referencia opcional a un PipeTransform para transformar o validar el valor antes de inyectarlo. La metadata resultante se almacena en la metadata del método decorado, mapeada por el nombre del método.
  * @param params Un array de objetos que definen los parámetros a inyectar, cada uno con su tipo, clave opcional y pipe opcional. Por ejemplo: [{ type: "body", key: "name" }, { type: "query", key: "age", pipe: ParseIntPipe }]
  * @returns Un decorador de método que procesa la metadata de los parámetros y la almacena para su uso posterior en el proceso de resolución de dependencias y manejo de solicitudes.
@@ -91,13 +107,13 @@ export function UseParams(
     type: ParameterType;
     key?: string;
     pipe?: Constructor<PipeTransform>;
+    fileOptions?: FileOptions;
   }[]
 ) {
   return function (_target: any, context: ClassMethodDecoratorContext) {
     // ! OJO: Si en el futuro TS implementa para usar decoradores como parametros de funciones,
     // ! lo ideal seria que este decorador ni exista, ya que seria mucho mas intuitivo usar los decoradores
     // ! de parámetros directamente en los argumentos del método, sin necesidad de un decorador adicional para procesarlos.
-
 
     // Validamos que el decorador se aplique solo a métodos de clase
     if (context.kind !== "method") {
@@ -117,6 +133,7 @@ export function UseParams(
       type: param.type,
       key: param.key,
       pipe: param.pipe,
+      fileOptions: param.fileOptions,
     }));
   };
 }

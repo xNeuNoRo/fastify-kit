@@ -18,7 +18,35 @@ export type ParameterType =
   | "headers"
   | "request"
   | "reply"
-  | "ip";
+  | "ip"
+  | "file";
+
+/**
+ * @description Interfaz que define las opciones de configuración para el manejo de archivos en los métodos decorados con @File.
+ */
+export interface FileOptions {
+  /** Tamaño máximo en bytes. Ej: 5 * 1024 * 1024 (5MB) */
+  maxSize?: number;
+  /** Tipos MIME permitidos. Ej: ['image/jpeg', 'application/pdf'] */
+  mimetypes?: string[];
+  /** Modo de entrega:
+   * 'buffer' => Carga el archivo entero en RAM (ideal para imágenes pequeñas).
+   * 'stream' => Entrega un flujo de lectura (ideal para archivos pesados).
+   * @default 'buffer'
+   */
+  mode?: "buffer" | "stream";
+}
+
+/**
+ * @description Interfaz que representa un archivo cargado a través de un decorador como @File. Dependiendo de las opciones configuradas, el archivo puede estar disponible como un buffer en memoria o como un stream de lectura.
+ */
+export interface MultipartFile {
+  filename: string;
+  mimetype: string;
+  encoding: string;
+  buffer?: Buffer;
+  stream?: NodeJS.ReadableStream;
+}
 
 /**
  * @description Interfaz que define la metadata de un parámetro decorado en un controlador. Esta metadata incluye el índice del parámetro en la lista de argumentos del método, el tipo de parámetro (body, query, param, etc.), una clave opcional para identificar qué parte de los datos se debe inyectar (por ejemplo, el nombre del campo en el cuerpo o en la query), y una referencia opcional a un PipeTransform que se puede usar para transformar o validar el valor antes de inyectarlo.
@@ -28,6 +56,7 @@ export interface ParameterMetadata {
   type: ParameterType;
   key?: string;
   pipe?: Constructor<PipeTransform>;
+  fileOptions?: FileOptions;
 }
 
 /**

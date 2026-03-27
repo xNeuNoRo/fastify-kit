@@ -11,7 +11,10 @@ if ((Symbol as any).metadata === undefined) {
 // ----------------------------------------------
 export { FastifyKit, type FastifyKitOptions } from "./core/FastifyKit.js";
 export { Module } from "./core/module.decorator.js";
-export { discoverControllers, discoverModules } from "./http/routing/discovery.js";
+export {
+  discoverControllers,
+  discoverModules,
+} from "./http/routing/discovery.js";
 export type { ModuleOptions } from "./http/decorators/types.js";
 export type { AutoDiscoverOptions } from "./http/routing/discovery.js";
 export type { Constructor } from "./http/routing/scanner.js";
@@ -31,7 +34,9 @@ export {
   Req,
   Res,
   Ip,
+  File,
 } from "./http/decorators/parameters.js";
+export type { MultipartFile, FileOptions } from "./http/decorators/types.js";
 
 // ----------------------------------------------
 // HTTP Security & Guards
