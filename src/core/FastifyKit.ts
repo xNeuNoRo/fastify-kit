@@ -52,6 +52,7 @@ export interface FastifyKitOptions {
           /** Maxima cantidad de headers (Default: 2000) */
           headerPairs?: number;
         };
+        attachFieldsToBody?: boolean;
       };
   fastifyOptions?: FastifyServerOptions & {
     http2?: boolean;
@@ -130,7 +131,7 @@ export class FastifyKit {
 
       await app.register(import("@fastify/multipart"), {
         ...multipartConfig,
-        attachFieldsToBody: false, // Evitamos que Fastify adjunte los campos al body automáticamente
+        attachFieldsToBody: multipartConfig.attachFieldsToBody ?? false, // Por defecto, no adjuntamos los campos al body para evitar conflictos con los decoradores de parámetros
       });
     }
 
