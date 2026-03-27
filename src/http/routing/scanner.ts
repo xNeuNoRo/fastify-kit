@@ -1,6 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { container } from "../../container/DIContainer.js";
-import { ForbiddenException } from "../exceptions/index.js";
+import {
+  ForbiddenException,
+  BadRequestException,
+  UnsupportedMediaTypeException,
+  FileTooLargeException,
+} from "../exceptions/index.js";
 import type { FastifyKitMetadata } from "../decorators/types.js";
 import { ApiResponse } from "../responses/ApiResponse.js";
 import type { PipeTransform } from "../pipes/PipeTransform.js";
@@ -69,11 +74,11 @@ function buildGuardHandler(guards: Constructor[]) {
  * @param reply Objeto FastifyReply de la ruta, que se utiliza para enviar la respuesta al cliente.
  * @returns El valor resuelto del parámetro decorado según su tipo, que puede ser el body, query, param, headers, request, reply o ip extraído del objeto request o reply de Fastify.
  */
-function resolveParamValue(
+async function resolveParamValue(
   param: any,
   request: FastifyRequest,
   reply: FastifyReply,
-): any {
+): Promise<any> {
   // Dependiendo del tipo de parámetro definido en la metadata del decorador,
   // extraemos su valor correspondiente del request o reply de Fastify.
   // Si el decorador de este parámetro tiene una clave definida (param.key),
@@ -97,6 +102,83 @@ function resolveParamValue(
       return reply;
     case "ip":
       return request.ip;
+    case "file": {
+      // Si la peticion no es multipart, lanzamos un error indicando que se esperaba una petición multipart/form-data para procesar archivos.
+      if (typeof request.isMultipart !== "function" || !request.isMultipart()) {
+        throw new BadRequestException(
+          "La petición debe ser 'multipart/form-data' para procesar archivos.",
+        );
+      }
+
+      // Extraemos las opciones específicas para el manejo de archivos desde la metadata del decorador
+      const options = param.fileOptions || {};
+      const maxSize = options.maxSize;
+      const mimetypes = options.mimetypes;
+      const mode = options.mode || "buffer";
+
+      try {
+        // Usamos el método request.file() de Fastify para extraer el archivo del campo especificado en param.
+        const data = await request.file({
+          limits: {
+            fileSize: maxSize,
+          },
+        });
+
+        // Si no se encuentra un archivo o no se encuentra en el campo especificado, lanzamos un error
+        if (!data || data.fieldname !== param.key) {
+          throw new BadRequestException(
+            `Falta el archivo requerido en el campo '${param.key}'.`,
+          );
+        }
+
+        // Validamos los mimes permitidos por el dev
+        if (
+          mimetypes &&
+          mimetypes.length > 0 &&
+          !mimetypes.includes(data.mimetype)
+        ) {
+          throw new UnsupportedMediaTypeException(data.mimetype);
+        }
+
+        // Si el modo seleccionado es buffer
+        if (mode === "buffer") {
+          // Convertimos el stream del archivo a un buffer
+          const buffer: Buffer = await data.toBuffer();
+
+          // Si el archivo fue truncado por exceder el tamaño máximo permitido, lanzamos un error indicando que el archivo es demasiado grande.
+          if (data.file.truncated) {
+            throw new FileTooLargeException(
+              maxSize ? `${(maxSize / 1024 / 1024).toFixed(2)}MB` : "permitido",
+            );
+          }
+
+          // Retornamos un objeto con la información del archivo, incluyendo su nombre original, tipo MIME, codificación y el buffer con su contenido.
+          return {
+            filename: data.filename,
+            mimetype: data.mimetype,
+            encoding: data.encoding,
+            buffer,
+          };
+        } else {
+          // De lo contrario retornamos el stream del archivo directamente sin convertirlo a buffer
+          return {
+            filename: data.filename,
+            mimetype: data.mimetype,
+            encoding: data.encoding,
+            stream: data.file,
+          };
+        }
+      } catch (err: any) {
+        // Si Fastify lanza un error con el código "FST_REQ_FILE_TOO_LARGE", significa que el archivo excedió el tamaño máximo permitido.
+        if (err.code === "FST_REQ_FILE_TOO_LARGE") {
+          throw new FileTooLargeException(
+            maxSize ? `${(maxSize / 1024 / 1024).toFixed(2)}MB` : "permitido",
+          );
+        }
+        // Propagamos cualquier otro error
+        throw err;
+      }
+    }
     default:
       // Opcional: Lanza un error o devuelve undefined si el tipo no es soportado
       return undefined;
@@ -121,7 +203,7 @@ async function extractArguments(
 
   // Iteramos sobre cada parámetro decorado y extraemos su valor del request o reply según el tipo de parámetro definido en la metadata del decorador
   for (const param of methodParamsMeta) {
-    let value = resolveParamValue(param, request, reply);
+    let value = await resolveParamValue(param, request, reply);
 
     // Si el decorador de este parámetro tiene un pipe definido,
     // resolvemos su instancia desde el contenedor de inyección de dependencias

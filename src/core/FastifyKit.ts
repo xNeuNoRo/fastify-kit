@@ -35,6 +35,24 @@ export interface FastifyKitOptions {
     enableHelmet?: boolean;
     rateLimit?: { max: number; timeWindow: string };
   };
+  multipart?:
+    | boolean
+    | {
+        limits?: {
+          /** Maximo tamaño del nombre del campo (Default: 100 bytes) */
+          fieldNameSize?: number;
+          /** Maximo tamaño del valor del campo (Default: 1MB) */
+          fieldSize?: number;
+          /** Maxima cantidad de campos no-archivo (Default: 32659) */
+          fields?: number;
+          /** Tamaño máximo de archivo global en bytes (Default: Infinity) */
+          fileSize?: number;
+          /** Maxima cantidad de archivos por petición (Default: Infinity) */
+          files?: number;
+          /** Maxima cantidad de headers (Default: 2000) */
+          headerPairs?: number;
+        };
+      };
   fastifyOptions?: FastifyServerOptions & {
     http2?: boolean;
     https?: any; // Mantenemos any aquí porque los tipos de TLS de Node son muy verbosos
@@ -104,6 +122,17 @@ export class FastifyKit {
     const { allControllers, allProviders } = await this.bootstrapModule(
       options.module,
     );
+
+    // Si el usuario activa multipart, registramos el plugin de multipart para manejar la carga de archivos en los controladores.
+    if (options.multipart) {
+      const multipartConfig =
+        typeof options.multipart === "object" ? options.multipart : {};
+
+      await app.register(import("@fastify/multipart"), {
+        ...multipartConfig,
+        attachFieldsToBody: false, // Evitamos que Fastify adjunte los campos al body automáticamente
+      });
+    }
 
     // Registramos los plugins personalizados para manejo de contexto de solicitud y manejo de errores
     await app.register(fastifyKitRequestContext);
