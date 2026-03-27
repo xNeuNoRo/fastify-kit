@@ -116,16 +116,11 @@ async function resolveParamValue(
       const mimetypes = options.mimetypes;
       const mode = options.mode || "buffer";
 
-      try {
-        // Usamos el método request.file() de Fastify para extraer el archivo del campo especificado en param.
-        const data = await request.file({
-          limits: {
-            fileSize: maxSize,
-          },
-        });
+      if (mode === "buffer") {
+        const fileData = (request as any)._filesMap?.get(param.key);
 
         // Si no se encuentra un archivo o no se encuentra en el campo especificado, lanzamos un error
-        if (!data || data.fieldname !== param.key) {
+        if (!fileData) {
           throw new BadRequestException(
             `Falta el archivo requerido en el campo '${param.key}'.`,
           );
@@ -135,49 +130,62 @@ async function resolveParamValue(
         if (
           mimetypes &&
           mimetypes.length > 0 &&
-          !mimetypes.includes(data.mimetype)
+          !mimetypes.includes(fileData.mimetype)
         ) {
-          throw new UnsupportedMediaTypeException(data.mimetype);
+          throw new UnsupportedMediaTypeException(fileData.mimetype);
         }
 
-        // Si el modo seleccionado es buffer
-        if (mode === "buffer") {
-          // Convertimos el stream del archivo a un buffer
-          const buffer: Buffer = await data.toBuffer();
+        // Retornamos un objeto con la información del archivo, incluyendo su nombre original, tipo MIME, codificación y el buffer del archivo para que el controlador pueda procesarlo.
+        return fileData;
+      }
 
-          // Si el archivo fue truncado por exceder el tamaño máximo permitido, lanzamos un error indicando que el archivo es demasiado grande.
-          if (data.file.truncated) {
+      if (mode === "stream") {
+        try {
+          for await (const part of request.parts({
+            limits: { fileSize: options.maxSize },
+          })) {
+            if (part.type === "file" && part.fieldname === param.key) {
+              // Validamos los mimes permitidos por el dev
+              if (
+                mimetypes &&
+                mimetypes.length > 0 &&
+                !mimetypes.includes(part.mimetype)
+              ) {
+                throw new UnsupportedMediaTypeException(part.mimetype);
+              }
+
+              // Retornamos un objeto con la información del archivo, incluyendo su nombre original, tipo MIME, codificación y el stream del archivo para que el controlador pueda procesarlo sin cargarlo completamente en memoria.
+              return {
+                filename: part.filename,
+                mimetype: part.mimetype,
+                encoding: part.encoding,
+                stream: part.file, // Entregamos el stream intacto
+              };
+            } else if (part.type === "file") {
+              // Descartamos/drenamos los archivos que no coinciden para evitar colapso de RAM
+              part.file.resume();
+            }
+          }
+
+          // Si llegamos hasta aquí, significa que no se encontró un archivo en el campo especificado, por lo que lanzamos un error indicando que falta el archivo requerido.
+          throw new BadRequestException(
+            `Falta el archivo requerido en el campo '${param.key}'.`,
+          );
+        } catch (error: any) {
+          // Si Fastify lanza un error con el código "FST_REQ_FILE_TOO_LARGE", significa que el archivo excedió el tamaño máximo permitido.
+          if (error.code === "FST_REQ_FILE_TOO_LARGE") {
             throw new FileTooLargeException(
-              maxSize ? `${(maxSize / 1024 / 1024).toFixed(2)}MB` : "permitido",
+              options.maxSize
+                ? `${(options.maxSize / 1024 / 1024).toFixed(2)}MB`
+                : "permitido",
             );
           }
 
-          // Retornamos un objeto con la información del archivo, incluyendo su nombre original, tipo MIME, codificación y el buffer con su contenido.
-          return {
-            filename: data.filename,
-            mimetype: data.mimetype,
-            encoding: data.encoding,
-            buffer,
-          };
-        } else {
-          // De lo contrario retornamos el stream del archivo directamente sin convertirlo a buffer
-          return {
-            filename: data.filename,
-            mimetype: data.mimetype,
-            encoding: data.encoding,
-            stream: data.file,
-          };
+          // Propagamos cualquier otro error
+          throw error;
         }
-      } catch (err: any) {
-        // Si Fastify lanza un error con el código "FST_REQ_FILE_TOO_LARGE", significa que el archivo excedió el tamaño máximo permitido.
-        if (err.code === "FST_REQ_FILE_TOO_LARGE") {
-          throw new FileTooLargeException(
-            maxSize ? `${(maxSize / 1024 / 1024).toFixed(2)}MB` : "permitido",
-          );
-        }
-        // Propagamos cualquier otro error
-        throw err;
       }
+      break;
     }
     default:
       // Opcional: Lanza un error o devuelve undefined si el tipo no es soportado
