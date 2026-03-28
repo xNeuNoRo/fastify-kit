@@ -5,6 +5,7 @@ import {
   BadRequestException,
   UnsupportedMediaTypeException,
   FileTooLargeException,
+  InternalServerException,
 } from "../exceptions/index.js";
 import type { FastifyKitMetadata } from "../decorators/types.js";
 import { ApiResponse } from "../responses/ApiResponse.js";
@@ -372,7 +373,7 @@ async function resolveParamValue(
     case "cookie":
       // Si el plugin no se registró, request.cookies no existirá. Le avisamos al dev.
       if (!request.cookies) {
-        throw new Error(
+        throw new InternalServerException(
           "[FastifyKit] Intentaste usar @Cookie pero el módulo de cookies no está activado. Habilítalo en FastifyKit.create({ cookies: true }).",
         );
       }
