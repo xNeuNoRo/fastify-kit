@@ -3,7 +3,6 @@ import fastify, {
   type FastifyInstance,
   type FastifyServerOptions,
 } from "fastify";
-import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { fastifyKitRequestContext } from "../http/plugins/requestContext.js";
 import { fastifyKitErrorHandler } from "../http/plugins/errorHandler.js";
 import {
@@ -15,56 +14,39 @@ import {
   discoverControllers,
   discoverModules,
 } from "../http/routing/discovery.js";
+import { container } from "../container/DIContainer.js";
+import { requestContext } from "../http/context/requestContext.js";
 import type {
   ModuleOptions,
   FastifyKitMetadata,
 } from "../http/decorators/types.js";
-import { container } from "../container/DIContainer.js";
-import { requestContext } from "../http/context/requestContext.js";
+import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
+import type { FastifyCookieOptions } from "@fastify/cookie";
+import type { FastifyMultipartOptions } from "@fastify/multipart";
+import type { CreateRateLimitOptions } from "@fastify/rate-limit";
+import type { FastifyCorsOptions } from "@fastify/cors";
+import type { FastifyHelmetOptions } from "@fastify/helmet";
+import type { ServerOptions as HttpsServerOptions } from "node:https";
 
 export interface FastifyKitOptions {
-  module: any;
+  module: Constructor;
   globalPrefix?: string;
   swagger?: {
     title: string;
     description: string;
     version: string;
+    [key: string]: any;
   };
   security?: {
-    enableCors?: boolean;
-    enableHelmet?: boolean;
-    rateLimit?: { max: number; timeWindow: string };
+    enableCors?: boolean | FastifyCorsOptions;
+    enableHelmet?: boolean | FastifyHelmetOptions;
+    rateLimit?: CreateRateLimitOptions;
   };
-  multipart?:
-    | boolean
-    | {
-        limits?: {
-          /** Maximo tamaño del nombre del campo (Default: 100 bytes) */
-          fieldNameSize?: number;
-          /** Maximo tamaño del valor del campo (Default: 1MB) */
-          fieldSize?: number;
-          /** Maxima cantidad de campos no-archivo (Default: 32659) */
-          fields?: number;
-          /** Tamaño máximo de archivo global en bytes (Default: Infinity) */
-          fileSize?: number;
-          /** Maxima cantidad de archivos por petición (Default: Infinity) */
-          files?: number;
-          /** Maxima cantidad de headers (Default: 2000) */
-          headerPairs?: number;
-        };
-        attachFieldsToBody?: boolean;
-      };
-  cookies?:
-    | boolean
-    | {
-        secret?: string | string[]; // Clave secreta para firmar/verificar cookies de forma segura
-        hook?: "onRequest" | "preParsing" | "preValidation" | "preHandler"; // Default de Fastify: 'onRequest'
-        algorithm?: string; // Algoritmo de firma para cookies firmadas (ej: 'sha256', 'sha512', etc.)
-        parseOptions?: any; // Opciones adicionales de parseo
-      };
+  multipart?: boolean | FastifyMultipartOptions;
+  cookies?: boolean | FastifyCookieOptions;
   fastifyOptions?: FastifyServerOptions & {
     http2?: boolean;
-    https?: any; // Mantenemos any aquí porque los tipos de TLS de Node son muy verbosos
+    https?: HttpsServerOptions | null;
   };
 }
 
@@ -156,26 +138,31 @@ export class FastifyKit {
     await app.register(fastifyKitRequestContext);
     await app.register(fastifyKitErrorHandler);
 
-    // si el usuario activa CORS, registramos el plugin de CORS para permitir solicitudes desde cualquier origen (útil para desarrollo, cambiar en producción)
+    // Si el usuario activa CORS, registramos el plugin de CORS
+    // para permitir solicitudes desde otros orígenes según la configuración proporcionada.
     if (options.security?.enableCors) {
-      await app.register(import("@fastify/cors"), { origin: true });
+      // Si el usuario pasó un objeto de configuración para CORS, lo usamos.
+      // Si solo pasó "true", usamos una configuración básica que permite cualquier origen (origin: true).
+      const corsConfig =
+        typeof options.security.enableCors === "object"
+          ? options.security.enableCors
+          : { origin: true };
+      await app.register(import("@fastify/cors"), corsConfig);
     }
 
-    // si el usuario activa Helmet, registramos el plugin de helmet para mejorar la seguridad de la app configurando
-    // una política de seguridad de contenido (CSP) que permita solo recursos de confianza
+    //
     if (options.security?.enableHelmet) {
-      await app.register(import("@fastify/helmet"), {
+      // Configs default para Helmet, para permitir la UI de Scalar.
+      const defaultHelmetConfig: FastifyHelmetOptions = {
         contentSecurityPolicy: {
           directives: {
             defaultSrc: ["'self'"],
-            // Permitimos los estilos y fuentes que usa Scalar UI para que no se rompa la web
             styleSrc: [
               "'self'",
               "'unsafe-inline'",
               "https://fonts.googleapis.com",
             ],
             fontSrc: ["'self'", "https://fonts.gstatic.com"],
-            // Permitimos ejecución de scripts inline solo para la UI de Scalar
             scriptSrc: [
               "'self'",
               "'unsafe-inline'",
@@ -184,7 +171,15 @@ export class FastifyKit {
             imgSrc: ["'self'", "data:", "validator.swagger.io"],
           },
         },
-      });
+      };
+
+      // Si el usuario pasó un objeto de configuración para Helmet, lo usamos.
+      const helmetConfig =
+        typeof options.security.enableHelmet === "object"
+          ? options.security.enableHelmet
+          : defaultHelmetConfig;
+
+      await app.register(import("@fastify/helmet"), helmetConfig);
     }
 
     // Si el usuario activa rate limit, registramos el plugin de rate limit para limitar la cantidad de peticiones por IP y evitar abusos
@@ -228,9 +223,9 @@ export class FastifyKit {
       { prefix },
     );
 
-    // Finalmente, configuramos las tareas programadas (cron jobs) 
-    // definidas en los proveedores de los módulos. Esto se hace al final 
-    // para asegurarnos de que todos los proveedores estén registrados e 
+    // Finalmente, configuramos las tareas programadas (cron jobs)
+    // definidas en los proveedores de los módulos. Esto se hace al final
+    // para asegurarnos de que todos los proveedores estén registrados e
     // instanciados correctamente antes de iniciar las tareas programadas.
     this.setupScheduledTasks(app, allProviders);
 
