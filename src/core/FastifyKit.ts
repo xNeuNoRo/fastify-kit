@@ -228,6 +228,25 @@ export class FastifyKit {
       { prefix },
     );
 
+    // Finalmente, configuramos las tareas programadas (cron jobs) 
+    // definidas en los proveedores de los módulos. Esto se hace al final 
+    // para asegurarnos de que todos los proveedores estén registrados e 
+    // instanciados correctamente antes de iniciar las tareas programadas.
+    this.setupScheduledTasks(app, allProviders);
+
+    app.log.info("[FastifyKit] kit inicializado correctamente!");
+    return app as any;
+  }
+
+  /**
+   * @description Método privado para configurar las tareas programadas (cron jobs) definidas en los proveedores de los módulos. Este método recorre todos los proveedores registrados, verifica si tienen tareas programadas definidas en su metadata, y si es así, instancia el proveedor (respetando el patrón Singleton) y configura un trabajo programado utilizando la expresión cron proporcionada. Además, se asegura de que cada tarea programada se ejecute dentro del contexto de solicitud adecuado para que puedan acceder a la información de la solicitud incluso cuando se ejecutan en segundo plano. Finalmente, se registra un hook para detener todos los trabajos programados cuando el servidor se detenga, evitando que sigan ejecutándose en segundo plano después de que la API haya cerrado.
+   * @param app La instancia de Fastify en la que se configurarán las tareas programadas. Se utiliza para registrar los trabajos programados y el hook de cierre.
+   * @param allProviders El array de proveedores registrados en los módulos, que se revisará para encontrar aquellos que tengan tareas programadas definidas en su metadata. Cada proveedor es un objeto que contiene un token y una implementación.
+   */
+  private static setupScheduledTasks(
+    app: FastifyInstance<any, any, any, any, TypeBoxTypeProvider>,
+    allProviders: { token: any; implementation: Constructor }[],
+  ): void {
     // Array para almacenar los trabajos programados y poder detenerlos cuando el servidor se detenga
     const scheduledJobs: Cron[] = [];
 
