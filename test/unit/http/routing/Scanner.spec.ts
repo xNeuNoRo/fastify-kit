@@ -531,6 +531,66 @@ describe("Motor de Enrutamiento (Scanner)", () => {
     });
   });
 
+  describe("Extracción de Cookies (@Cookie)", () => {
+    it("Debería lanzar error si se usa @Cookie pero el plugin no está activado", async () => {
+      const metadataSymbol = Symbol.metadata;
+      class BadCookieController {
+        async get(cookie: string) {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          return cookie;
+        }
+      }
+
+      (BadCookieController as any)[metadataSymbol] = {
+        routes: [{ method: "get", path: "/nocookie", handlerName: "get" }],
+        parameters: { get: [{ index: 0, type: "cookie", key: "token" }] },
+      };
+
+      registerControllers(mockApp, [BadCookieController]);
+      const handler = mockApp.get.mock.calls[0][2];
+
+      // Simulamos un Request SIN el plugin registrado (request.cookies es undefined)
+      const mockReq = {} as any;
+      const mockReply = { sent: false } as any;
+
+      // Debe lanzar un error indicando que el plugin de cookies no está activado
+      await expect(handler(mockReq, mockReply)).rejects.toThrow();
+    });
+
+    it("Debería extraer una cookie específica y también el objeto completo de cookies", async () => {
+      const metadataSymbol = Symbol.metadata;
+      class GoodCookieController {
+        test = vi.fn().mockResolvedValue("cookie ok");
+      }
+
+      (GoodCookieController as any)[metadataSymbol] = {
+        routes: [{ method: "get", path: "/cookie", handlerName: "test" }],
+        parameters: {
+          test: [
+            { index: 0, type: "cookie", key: "token" },
+            { index: 1, type: "cookie" },
+          ],
+        },
+      };
+
+      registerControllers(mockApp, [GoodCookieController]);
+      const handler = mockApp.get.mock.calls[0][2];
+
+      // Simulamos un Request CON el plugin de Fastify activo
+      const fakeCookies = { token: "abc-123", theme: "dark" };
+      const mockReq = { cookies: fakeCookies } as any;
+
+      await handler(mockReq, { sent: false });
+
+      const instanceMock = container.resolve(GoodCookieController);
+
+      // Verificamos que se inyectó "abc-123" en el primer parámetro, y el objeto entero en el segundo
+      expect(instanceMock.test).toBeDefined();
+      expect(instanceMock.test).toHaveBeenCalledTimes(1);
+      expect(instanceMock.test).toHaveBeenCalledWith("abc-123", fakeCookies);
+    });
+  });
+
   describe("Formateo de Respuesta (formatResponse)", () => {
     it("No debería hacer nada si la respuesta ya fue enviada (reply.sent)", async () => {
       const metadataSymbol = Symbol.metadata;

@@ -363,6 +363,15 @@ async function resolveParamValue(
       return request.ip;
     case "file":
       return resolveMultipartFile(param, request);
+    case "cookie":
+      // Si el plugin no se registró, request.cookies no existirá. Le avisamos al dev.
+      if (!request.cookies) {
+        throw new Error(
+          "[FastifyKit] Intentaste usar @Cookie pero el módulo de cookies no está activado. Habilítalo en FastifyKit.create({ cookies: true }).",
+        );
+      }
+      // Si pidió una key (ej: Cookie('token')), le damos esa. Si no, le damos todas.
+      return param.key ? request.cookies[param.key] : request.cookies;
     default:
       // Opcional: Lanza un error o devuelve undefined si el tipo no es soportado
       return undefined;

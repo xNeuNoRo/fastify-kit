@@ -6,7 +6,11 @@ import { FastifyKit } from "../../../src/core/FastifyKit.js";
 import { Module } from "../../../src/core/module.decorator.js";
 import { Controller } from "../../../src/http/decorators/controller.js";
 import { Get, Post } from "../../../src/http/decorators/methods.js";
-import { UseParams, File } from "../../../src/http/decorators/parameters.js";
+import {
+  UseParams,
+  File,
+  Cookie,
+} from "../../../src/http/decorators/parameters.js";
 import type { MultipartFile } from "../../../src/http/decorators/types.js";
 import { Scheduled } from "../../../src/scheduling/scheduled.decorator.js";
 
@@ -159,6 +163,45 @@ describe("FastifyKit (Orquestador Core)", () => {
       }
 
       await expect(FastifyKit.create({ module: BadModule })).rejects.toThrow();
+    });
+
+    it("Debería procesar la lectura de cookies de extremo a extremo", async () => {
+      // Controlador efímero para pruebas de cookies
+      @Controller("/auth")
+      class AuthController {
+        @Get("/perfil")
+        @UseParams(Cookie("session_id"))
+        obtenerPerfil(sessionId: string) {
+          // Si el decorador inyectó la cookie correcta, devolvemos true
+          return { autenticado: sessionId === "xyz-789" };
+        }
+      }
+
+      @Module({ controllers: [AuthController] })
+      class AuthModule {}
+
+      // Creamos la app con el módulo de autenticación y habilitamos cookies
+      const app = await FastifyKit.create({
+        module: AuthModule,
+        cookies: true,
+      });
+
+      // Inyectamos una solicitud GET al endpoint de perfil con una cookie de sesión simulada en el header
+      const res = await app.inject({
+        method: "GET",
+        url: "/auth/perfil",
+        headers: {
+          // Header como lo enviaría el navegador
+          cookie: "theme=dark; session_id=xyz-789; lang=es",
+        },
+      });
+
+      // Validamos que el Scanner hizo su magia
+      expect(res.statusCode).toBe(200);
+      const json = JSON.parse(res.payload);
+      expect(json.data.autenticado).toBe(true);
+
+      await app.close();
     });
 
     it("Debería lanzar error si un proveedor está mal configurado", async () => {

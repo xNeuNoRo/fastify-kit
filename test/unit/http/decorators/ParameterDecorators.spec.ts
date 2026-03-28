@@ -10,6 +10,7 @@ import {
   Res,
   Ip,
   File,
+  Cookie,
 } from "../../../../src/http/decorators/parameters.js";
 import type { FastifyKitMetadata } from "../../../../src/http/decorators/types.js";
 
@@ -198,6 +199,45 @@ describe("Decoradores de Parámetros HTTP (@UseParams)", () => {
       key: "basico",
       pipe: undefined,
       fileOptions: undefined, // Garantizamos que no se inyecta basura
+    });
+  });
+
+  it("Debería registrar correctamente la metadata del decorador @Cookie", () => {
+    class CookieController {
+      @UseParams(
+        Cookie("session_id"), // Caso 1: Cookie específica
+        Cookie(), // Caso 2: Objeto completo de cookies
+      )
+      async test() {
+        /* dummy method */
+      }
+    }
+
+    // Obtenemos la metadata del controlador
+    const metadata = (CookieController as any)[
+      (Symbol as any).metadata
+    ] as FastifyKitMetadata;
+
+    // Validamos que se creó la sección de parámetros para el método 'test' y que tiene los 2 casos de @Cookie
+    const params = metadata.parameters?.["test"];
+
+    expect(params).toBeDefined();
+    expect(params).toHaveLength(2);
+
+    // Verificamos el primer caso de @Cookie con key "session_id"
+    expect(params![0]).toEqual({
+      index: 0,
+      type: "cookie",
+      key: "session_id",
+      pipe: undefined,
+    });
+
+    // Verificamos el segundo caso de @Cookie sin key (objeto completo)
+    expect(params![1]).toEqual({
+      index: 1,
+      type: "cookie",
+      key: undefined,
+      pipe: undefined,
     });
   });
 
