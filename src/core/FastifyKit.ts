@@ -54,6 +54,14 @@ export interface FastifyKitOptions {
         };
         attachFieldsToBody?: boolean;
       };
+  cookies?:
+    | boolean
+    | {
+        secret?: string | string[]; // Clave secreta para firmar/verificar cookies de forma segura
+        hook?: "onRequest" | "preParsing" | "preValidation" | "preHandler"; // Default de Fastify: 'onRequest'
+        algorithm?: string; // Algoritmo de firma para cookies firmadas (ej: 'sha256', 'sha512', etc.)
+        parseOptions?: any; // Opciones adicionales de parseo
+      };
   fastifyOptions?: FastifyServerOptions & {
     http2?: boolean;
     https?: any; // Mantenemos any aquí porque los tipos de TLS de Node son muy verbosos
@@ -132,6 +140,15 @@ export class FastifyKit {
       await app.register(import("@fastify/multipart"), {
         ...multipartConfig,
         attachFieldsToBody: multipartConfig.attachFieldsToBody ?? false, // Por defecto, no adjuntamos los campos al body para evitar conflictos con los decoradores de parámetros
+      });
+    }
+
+    // Si el usuario activa cookies, registramos el plugin de cookies para manejar las cookies en los controladores.
+    if (options.cookies) {
+      const cookieConfig =
+        typeof options.cookies === "object" ? options.cookies : {};
+      await app.register(import("@fastify/cookie"), {
+        ...cookieConfig,
       });
     }
 
@@ -237,7 +254,7 @@ export class FastifyKit {
               } catch (err) {
                 app.log.error(
                   { err },
-                  // 🪄 Usamos implementation.name para que el log sea legible (ej: CacheService.limpiar)
+                  // Usamos implementation.name para que el log sea legible (ej: CacheService.limpiar)
                   `[FastifyKit Cron] Error en tarea programada ${provider.implementation.name}.${String(task.methodName)}:`,
                 );
               }
@@ -248,7 +265,7 @@ export class FastifyKit {
           scheduledJobs.push(job);
 
           app.log.info(
-            // 🪄 Usamos implementation.name aquí también
+            // Usamos implementation.name aquí también
             `[FastifyKit Cron] Tarea programada registrada: ${provider.implementation.name}.${String(task.methodName)} (${task.cronExpression})`,
           );
         }

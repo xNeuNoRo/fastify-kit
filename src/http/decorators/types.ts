@@ -19,7 +19,8 @@ export type ParameterType =
   | "request"
   | "reply"
   | "ip"
-  | "file";
+  | "file"
+  | "cookie";
 
 /**
  * @description Interfaz que define las opciones de configuración para el manejo de archivos en los métodos decorados con @File.

@@ -35,6 +35,7 @@ export {
   Res,
   Ip,
   File,
+  Cookie,
 } from "./http/decorators/parameters.js";
 export type { MultipartFile, FileOptions } from "./http/decorators/types.js";
 

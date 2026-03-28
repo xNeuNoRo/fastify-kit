@@ -85,6 +85,18 @@ export const File = (key?: string, fileOptions?: FileOptions) => ({
 });
 
 /**
+ * @description Decorador para obtener los datos de las cookies de la solicitud
+ * @param key Una cookie en especifico, ejemplo: "sessionId" para obtener solo la cookie "sessionId". Si se omite, se inyectarán todas las cookies.
+ * @param pipe Una clase que implemente PipeTransform para transformar o validar el valor antes de inyectarlo. Ejemplo: ParseIntPipe para convertir un valor a número entero. Si se omite, no se aplicará ninguna transformación o validación adicional.
+ * @returns Un objeto que define el tipo de parámetro (cookie), la clave opcional y el pipe opcional. Este objeto se utiliza internamente por el decorador \@UseParams para procesar la metadata de los parámetros de los métodos de controlador relacionados con cookies.
+ */
+export const Cookie = (key?: string, pipe?: Constructor<PipeTransform>) => ({
+  type: "cookie" as ParameterType,
+  key,
+  pipe,
+});
+
+/**
  * @description Decorador para definir los parámetros que se deben inyectar en un método de controlador. Este decorador procesa un array de definiciones de parámetros, cada una con su tipo (body, query, param, etc.), una clave opcional para identificar qué parte de los datos se debe inyectar, y una referencia opcional a un PipeTransform para transformar o validar el valor antes de inyectarlo. La metadata resultante se almacena en la metadata del método decorado, mapeada por el nombre del método.
  * @param params Un array de objetos que definen los parámetros a inyectar, cada uno con su tipo, clave opcional y pipe opcional. Por ejemplo: [{ type: "body", key: "name" }, { type: "query", key: "age", pipe: ParseIntPipe }]
  * @returns Un decorador de método que procesa la metadata de los parámetros y la almacena para su uso posterior en el proceso de resolución de dependencias y manejo de solicitudes.
