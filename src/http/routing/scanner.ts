@@ -346,15 +346,21 @@ async function resolveParamValue(
   // el objeto correspondiente (por ejemplo, request.body o request.query).
   switch (param.type) {
     case "body":
-      return param.key ? (request.body as any)?.[param.key] : request.body;
+      return param.key === undefined
+        ? request.body
+        : (request.body as any)?.[param.key];
     case "query":
-      return param.key ? (request.query as any)?.[param.key] : request.query;
+      return param.key === undefined
+        ? request.query
+        : (request.query as any)?.[param.key];
     case "param":
-      return param.key ? (request.params as any)?.[param.key] : request.params;
+      return param.key === undefined
+        ? request.params
+        : (request.params as any)?.[param.key];
     case "headers":
-      return param.key
-        ? request.headers[param.key.toLowerCase()]
-        : request.headers;
+      return param.key === undefined
+        ? request.headers
+        : request.headers[param.key.toLowerCase()];
     case "request":
       return request;
     case "reply":
@@ -371,7 +377,9 @@ async function resolveParamValue(
         );
       }
       // Si pidió una key (ej: Cookie('token')), le damos esa. Si no, le damos todas.
-      return param.key ? request.cookies[param.key] : request.cookies;
+      return param.key === undefined
+        ? request.cookies
+        : request.cookies[param.key];
     default:
       // Opcional: Lanza un error o devuelve undefined si el tipo no es soportado
       return undefined;
