@@ -20,7 +20,9 @@ export type ParameterType =
   | "reply"
   | "ip"
   | "file"
-  | "cookie";
+  | "cookie"
+  | "socket"
+  | "wsPayload";
 
 /**
  * @description Interfaz que define las opciones de configuración para el manejo de archivos en los métodos decorados con @File.

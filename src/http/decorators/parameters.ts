@@ -97,6 +97,22 @@ export const Cookie = (key?: string, pipe?: Constructor<PipeTransform>) => ({
 });
 
 /**
+ * @description Decorador para obtener el socket de una conexión WebSocket. Este decorador se utiliza por el decorador \@UseParams para inyectar el socket directamente en un método de un Gateway que maneja eventos de WebSocket.
+ * @returns Un objeto que define el tipo de parámetro (socket). Este objeto se utiliza internamente por el decorador \@UseParams para procesar la metadata de los parámetros relacionados con sockets en los métodos de Gateway que manejan eventos de WebSocket.
+ */
+export const Socket = () => ({
+  type: "socket" as ParameterType,
+});
+
+/**
+ * @description Decorador para obtener el payload de un mensaje recibido a través de WebSockets. Este decorador se utiliza por el decorador \@UseParams para inyectar el payload directamente en un método de un Gateway que maneja eventos de WebSocket.
+ * @returns Un objeto que define el tipo de parámetro (wsPayload). Este objeto se utiliza internamente por el decorador \@UseParams para procesar la metadata de los parámetros relacionados con el payload de WebSocket en los métodos de Gateway que manejan eventos de WebSocket.
+ */
+export const WsPayload = () => ({
+  type: "wsPayload" as ParameterType,
+});
+
+/**
  * @description Decorador para definir los parámetros que se deben inyectar en un método de controlador. Este decorador procesa un array de definiciones de parámetros, cada una con su tipo (body, query, param, etc.), una clave opcional para identificar qué parte de los datos se debe inyectar, y una referencia opcional a un PipeTransform para transformar o validar el valor antes de inyectarlo. La metadata resultante se almacena en la metadata del método decorado, mapeada por el nombre del método.
  * @param params Un array de objetos que definen los parámetros a inyectar, cada uno con su tipo, clave opcional y pipe opcional. Por ejemplo: [{ type: "body", key: "name" }, { type: "query", key: "age", pipe: ParseIntPipe }]
  * @returns Un decorador de método que procesa la metadata de los parámetros y la almacena para su uso posterior en el proceso de resolución de dependencias y manejo de solicitudes.
