@@ -37,9 +37,17 @@ export function registerGateways(
     }
   }, 30000);
 
+  // Desvinculamos el intervalo para que no impida que el proceso se cierre naturalmente si no hay otras tareas pendientes
+  pingInterval.unref();
+
   // Apagamos el intervalo de limpieza de conexiones muertas cuando el servidor se cierra para evitar memory leaks
-  app.addHook("onClose", (_instance, done) => {
+  app.addHook("onClose", (instance, done) => {
     clearInterval(pingInterval);
+    if (instance.websocketServer) {
+      for (const client of instance.websocketServer.clients) {
+        client.terminate();
+      }
+    }
     done();
   });
 
@@ -83,111 +91,129 @@ export function registerGateways(
     app.get(
       options.path,
       { websocket: true },
-      async (connection: WebSocket, request: FastifyRequest) => {
-        // Marcamos la conexion como viva al conectarse al websocket
-        (connection as any).isAlive = true;
+      (connection: WebSocket, request: FastifyRequest) => {
+        connection.on("message", (rawMessage: Buffer) => {
+          (async () => {
+            try {
+              const packet = adapter.decode(rawMessage);
+              let handlerName: string | null = null;
 
-        // Al responder a un mensaje pong, marcamos la conexión como viva para que no sea terminada por el handler de ping
+              // Primero intentamos encontrar un handler específico para el patrón del mensaje entrante.
+              // Si no lo encontramos, verificamos si hay un handler de firehose (sin patrón) definido para manejar mensajes sin patrón específico.
+              if (packet.pattern && eventRouter.has(packet.pattern)) {
+                handlerName = eventRouter.get(packet.pattern)!;
+              } else if (firehoseMethod) {
+                handlerName = firehoseMethod;
+              }
+
+              // Si encontramos un handler para el mensaje entrante
+              if (handlerName) {
+                // Extraemos los argumentos necesarios para ejecutar el handler
+                const paramsMeta = metadata.parameters?.[handlerName] || [];
+                const args = await extractArguments(
+                  request,
+                  null as any,
+                  paramsMeta,
+                  { socket: connection, payload: packet.payload },
+                );
+
+                // Ejecutamos el handler con los argumentos extraídos y obtenemos el resultado
+                const result = await instance[handlerName](...args);
+
+                // Si el handler retorna algo distinto de undefined
+                if (result !== undefined) {
+                  // Si hay un patrón definido para el mensaje entrante
+                  if (packet.pattern) {
+                    // Codificamos la respuesta usando el adaptador definido para mantener la consistencia en el formato de los mensajes enviados al cliente
+                    const encodedResponse = adapter.encode(
+                      packet.pattern,
+                      result,
+                    );
+                    // Enviamos la respuesta codificada al cliente
+                    connection.send(encodedResponse);
+                  } else {
+                    // Si no hay un patrón definido (handler de firehose), enviamos la respuesta tal cual, codificándola a string si es un objeto, para que el cliente la reciba sin formato específico
+                    const rawResponse =
+                      typeof result === "object"
+                        ? JSON.stringify(result)
+                        : String(result);
+                    connection.send(rawResponse);
+                  }
+                }
+              } else {
+                connection.send(
+                  "ERROR:HANDLER_NOT_FOUND_FOR_PATTERN:" + packet.pattern,
+                );
+              }
+            } catch (err: any) {
+              connection.send("ERROR:INVALID_MESSAGE_FORMAT");
+              console.log(err);
+              getLogger().error(
+                `[FastifyKit WS] Error procesando mensaje en ${GatewayClass.name}:`,
+                err,
+              );
+            }
+          })();
+        });
+
+        // Evento de desconexión del cliente
+        connection.on("close", () => {
+          // Si existe un metodo manejador para el evento de desconexión
+          if (onDisconnectMethod) {
+            (async () => {
+              try {
+                // Extramos los argumentos necesario y lo ejecutamos
+                const paramsMeta =
+                  metadata.parameters?.[onDisconnectMethod] || [];
+                const args = await extractArguments(
+                  request,
+                  null as any,
+                  paramsMeta,
+                  { socket: connection, payload: null },
+                );
+                await instance[onDisconnectMethod](...args);
+              } catch (err: any) {
+                // En caso de error, lo logueamos pero no hacemos nada más
+                getLogger().error(
+                  `[FastifyKit WS] Error en @OnDisconnect de ${GatewayClass.name}:`,
+                  err,
+                );
+              }
+            })();
+          }
+        });
+
+        // Evento de ping recibido del cliente para mantener viva la conexión.
         connection.on("pong", () => {
           (connection as any).isAlive = true;
         });
 
-        // Si hay un método manejador del evento de conexión
+        // Marcamos la conexión como viva inicialmente
+        (connection as any).isAlive = true;
+
+        // Si hay un metodo manejador para el evento de conexión
         if (onConnectMethod) {
-          try {
-            // Extraemos los metadatos de los parametros del metodo handler
-            const paramsMeta = metadata.parameters?.[onConnectMethod] || [];
-
-            // Generamos los argumentos en base a la metadata de los parametros del metodo handler
-            const args = await extractArguments(
-              request,
-              null as any,
-              paramsMeta,
-              { socket: connection, payload: null },
-            );
-            // Llamamos al método handler del evento de conexión con los argumentos extraídos
-            await instance[onConnectMethod](...args);
-          } catch (err: any) {
-            getLogger().error(
-              `[FastifyKit WS] Error en @OnConnect de ${GatewayClass.name}:`,
-              err,
-            );
-            connection.close(1011, "Internal Server Error");
-            return;
-          }
-        }
-
-        // Registramos el handler de mensajes entrantes para este WebSocket
-        connection.on("message", async (rawMessage: Buffer) => {
-          try {
-            // Decodificamos el mensaje entrante usando el adaptador configurado para este gateway
-            const packet = adapter.decode(rawMessage);
-            let handlerName: string | null = null;
-
-            // Si el mensaje tiene un patrón definido y hay un método manejador registrado para ese patrón, lo usamos. Si no, pero hay un método firehose sin patrón, lo usamos para manejar el mensaje.
-            if (packet.pattern && eventRouter.has(packet.pattern)) {
-              handlerName = eventRouter.get(packet.pattern)!;
-            } else if (firehoseMethod) {
-              handlerName = firehoseMethod;
-            }
-
-            // Si encontramos un método manejador para este mensaje, lo ejecutamos con los argumentos correspondientes
-            if (handlerName) {
-              const paramsMeta = metadata.parameters?.[handlerName] || [];
-              const args = await extractArguments(
-                request,
-                null as any,
-                paramsMeta,
-                { socket: connection, payload: packet.payload },
-              );
-
-              // Guardamos el resultado retornado
-              const result = await instance[handlerName](...args);
-
-              // Si se retorna un mensaje
-              if (result !== undefined && packet.pattern) {
-                // Lo codificamos para enviarlo de vuelta al cliente usando el adaptador configurado para este gateway
-                const encodedResponse = adapter.encode(packet.pattern, result);
-                connection.send(encodedResponse);
-              }
-            }
-          } catch (err: any) {
-            getLogger().error(
-              `[FastifyKit WS] Error procesando mensaje en ${GatewayClass.name}:`,
-              err,
-            );
-          }
-        });
-
-        connection.on("close", async () => {
-          // Si hay un método manejador del evento de desconexión, lo llamamos al cerrar la conexión
-          if (onDisconnectMethod) {
+          (async () => {
             try {
-              // Extraemos los metadatos de los parametros del metodo handler
-              const paramsMeta =
-                metadata.parameters?.[onDisconnectMethod] || [];
-              // Generamos los argumentos en base a la metadata de los parametros del metodo handler
+              // Extraemos los argumentos necesario y lo ejecutamos
+              const paramsMeta = metadata.parameters?.[onConnectMethod] || [];
               const args = await extractArguments(
                 request,
                 null as any,
                 paramsMeta,
                 { socket: connection, payload: null },
               );
-              // Llamamos al método handler del evento de desconexión con los argumentos extraídos
-              await instance[onDisconnectMethod](...args);
+              await instance[onConnectMethod](...args);
             } catch (err: any) {
               getLogger().error(
-                `[FastifyKit WS] Error en @OnDisconnect de ${GatewayClass.name}:`,
+                `[FastifyKit WS] Error en @OnConnect de ${GatewayClass.name}:`,
                 err,
               );
+              connection.close(1011, "Internal Server Error");
             }
-          }
-        });
+          })();
+        }
       },
-    );
-
-    getLogger().info(
-      `[FastifyKit WS] Gateway mapeado: ${options.path} => ${GatewayClass.name}`,
     );
   }
 }
