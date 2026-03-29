@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 
 import { JsonWsAdapter } from "../../../../src/websockets/adapters/JsonWsAdapter.js";
 
@@ -8,6 +8,11 @@ describe("Adaptador JSON para WebSockets (JsonWsAdapter)", () => {
   beforeEach(() => {
     // Mockeamos console.warn para evitar logs de advertencia durante las pruebas de decodificación fallida
     vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    // Restauramos el mock de console.warn después de cada prueba
+    vi.restoreAllMocks();
   });
 
   describe("Decodificación de mensajes (decode)", () => {
