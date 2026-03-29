@@ -1,5 +1,7 @@
 import { Cron } from "croner";
+import type { AddressInfo } from "node:net";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import WebSocketClient from "ws";
 
 import { container } from "../../../src/container/DIContainer.js";
 import { FastifyKit } from "../../../src/core/FastifyKit.js";
@@ -10,9 +12,16 @@ import {
   UseParams,
   File,
   Cookie,
+  WsPayload,
+  Socket,
 } from "../../../src/http/decorators/parameters.js";
 import type { MultipartFile } from "../../../src/http/decorators/types.js";
 import { Scheduled } from "../../../src/scheduling/scheduled.decorator.js";
+import {
+  SubscribeMessage,
+  OnMessage,
+} from "../../../src/websockets/decorators/events.js";
+import { WebSocketGateway } from "../../../src/websockets/decorators/gateway.js";
 
 // Aseguramos que el símbolo para metadata esté definido para poder usarlo en los tests
 if (!(Symbol as any).metadata) {
@@ -280,6 +289,143 @@ describe("FastifyKit (Orquestador Core)", () => {
       await app.close();
 
       expect(cronStopSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe("Motor de WebSockets (Gateways)", () => {
+    it("Debería registrar un Gateway, procesar mensajes JSON y permitir Manguera Cruda", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      // Simulamos un servicio de mensajes para inyectar en el Gateway
+      abstract class IWsMessageService {
+        abstract getPrefix(): string;
+      }
+      class WsMessageService implements IWsMessageService {
+        getPrefix() {
+          return "Hola, desde el contenedor de dependencias para websockets!";
+        }
+      }
+
+      // Definimos un Gateway de prueba con un evento suscrito y un manejador de mensajes crudos (firehose)
+      @WebSocketGateway("/ws/integracion")
+      class IntegrationGateway {
+        private get msgService(): IWsMessageService {
+          return container.resolve(IWsMessageService);
+        }
+
+        // Al subscribirnos al evento "SALUDO", ya esperamos un payload decodificado por el adapter configurado
+        @SubscribeMessage("SALUDO")
+        @UseParams(WsPayload(), Socket())
+        async saludar(nombre: string, _socket: any) {
+          await Promise.resolve(); // Simulamos una operación asincrónica
+          const prefix = this.msgService.getPrefix();
+          return `${prefix} Encantado, ${nombre}`;
+        }
+
+        // Al subscribirnos sin patrón específico, recibimos el mensaje crudo tal cual llega.
+        // Esto simula un "firehose" o socket crudo donde el usuario puede manejar el mensaje a su manera.
+        @OnMessage()
+        @UseParams(WsPayload())
+        manejarCrudo(mensaje: any) {
+          const texto = Buffer.isBuffer(mensaje)
+            ? mensaje.toString("utf-8")
+            : String(mensaje);
+          return `CRUDO:${texto}`;
+        }
+      }
+
+      // Registramos un modulo de pruebas que provee el servicio de mensajes
+      // y el Gateway, y luego levantamos la app con soporte de websockets
+      @Module({
+        providers: [
+          { contract: IWsMessageService, implementation: WsMessageService },
+          IntegrationGateway,
+        ],
+      })
+      class WsTestModule {}
+
+      const app = await FastifyKit.create({
+        module: WsTestModule,
+        websockets: true, // Habilitamos el soporte de WebSockets para que el Gateway funcione correctamente
+      });
+
+      await app.listen({ port: 0, host: "127.0.0.1" });
+      // Obtenemos el puerto asignado dinámicamente para conectar el cliente de WebSockets
+      const { port } = app.server.address() as AddressInfo;
+
+      let client: WebSocketClient | undefined;
+
+      try {
+        // Creamos un cliente de WebSockets y nos conectamos al endpoint del Gateway
+        client = new WebSocketClient(`ws://127.0.0.1:${port}/ws/integracion`);
+
+        // Esperamos a que la conexión se establezca antes de enviar mensajes
+        await new Promise<void>((resolve, reject) => {
+          client!.once("open", resolve);
+          client!.once("error", reject);
+        });
+
+        // Probamos el envío de un mensaje JSON que debería
+        // ser decodificado por el adapter y manejado por el método saludar del Gateway
+        const jsonResponsePromise = new Promise((resolve) =>
+          client!.once("message", resolve),
+        );
+
+        // Enviamos un mensaje JSON con el evento "SALUDO" y un payload de nombre.
+        // El adapter debería decodificarlo y el Gateway debería responder con un saludo personalizado usando el servicio inyectado.
+        client.send(JSON.stringify({ event: "SALUDO", data: "Angel" }));
+
+        // Esperamos la respuesta del Gateway, que debería ser un mensaje JSON con el saludo personalizado.
+        const jsonResponse = await jsonResponsePromise;
+
+        // Validamos que la respuesta sea correcta y que el mensaje haya sido procesado por el Gateway usando el servicio inyectado.
+        const parsedResponse = JSON.parse(jsonResponse as string);
+        expect(parsedResponse).toBeDefined();
+        expect(parsedResponse.event).toBe("SALUDO");
+        expect(parsedResponse.data).toBe(
+          "Hola, desde el contenedor de dependencias para websockets! Encantado, Angel",
+        );
+
+        // Probamos el envío de un mensaje no JSON que debería ser manejado
+        // por el método manejarCrudo del Gateway, demostrando que el usuario puede optar por recibir el mensaje crudo si lo desea.
+        const rawResponsePromise = new Promise((resolve) =>
+          client!.once("message", (msg) => {
+            let str: string;
+            if (Buffer.isBuffer(msg)) {
+              str = msg.toString("utf-8");
+            } else if (typeof msg === "string") {
+              str = msg;
+            } else {
+              str = JSON.stringify(msg);
+            }
+            resolve(str);
+          }),
+        );
+        // Enviamos un mensaje que no es un JSON válido. El adapter no podrá decodificarlo, por lo que el método manejarCrudo del Gateway debería recibir el mensaje tal cual llegó y responder con el prefijo "CRUDO:".
+        client.send("TEXTO_INVALIDO");
+        const rawResponse = await rawResponsePromise;
+
+        // Validamos que el mensaje crudo haya sido recibido correctamente
+        // por el método manejarCrudo del Gateway,
+        // demostrando que el usuario tiene la flexibilidad de manejar mensajes no JSON si lo desea.
+        expect(rawResponse).toBeDefined();
+        expect(rawResponse).toBe("CRUDO:TEXTO_INVALIDO");
+      } finally {
+        if (client) {
+          client.terminate(); // Matamos al cliente del WebSocket
+        }
+
+        if (
+          app.server &&
+          typeof app.server.closeAllConnections === "function"
+        ) {
+          app.server.closeAllConnections();
+        }
+
+        // Cerramos la app para limpiar el servidor y liberar el puerto
+        await app.close();
+        warnSpy.mockRestore();
+      }
     });
   });
 
