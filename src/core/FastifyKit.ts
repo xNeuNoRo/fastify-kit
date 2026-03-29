@@ -13,6 +13,7 @@ import { ApiResponse } from "../http/responses/ApiResponse.js";
 import {
   discoverControllers,
   discoverModules,
+  registerGateways,
 } from "../http/routing/discovery.js";
 import { container } from "../container/DIContainer.js";
 import { requestContext } from "../http/context/requestContext.js";
@@ -48,6 +49,12 @@ export interface FastifyKitOptions {
     http2?: boolean;
     https?: HttpsServerOptions | null;
   };
+  // Activar o desactivar el manejo de websockets del framework
+  websockets?:
+    | boolean
+    | {
+        maxPayload?: number; // Tamaño máximo de payload en bytes para mensajes de WebSocket (opcional, por defecto 10MB)
+      };
 }
 
 export class FastifyKit {
@@ -58,6 +65,18 @@ export class FastifyKit {
   private static readonly METADATA_SYMBOL: symbol =
     (Symbol as SymbolConstructor & { metadata?: symbol }).metadata ??
     Symbol.for("Symbol.metadata");
+
+  private static readonly defaultHelmetConfig: FastifyHelmetOptions = {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+        imgSrc: ["'self'", "data:", "validator.swagger.io"],
+      },
+    },
+  };
 
   /**
    * @description Método estático para crear una instancia de Fastify configurada con FastifyKit. Este método se encarga de registrar los plugins necesarios para el manejo de contexto de solicitud, manejo de errores, seguridad (CORS, Helmet, rate limit) y documentación (Swagger/Scalar) según las opciones proporcionadas. También registra una ruta de health check y las rutas definidas en los controladores escaneados.
@@ -134,6 +153,19 @@ export class FastifyKit {
       });
     }
 
+    // Si el usuario activa websockets, registramos el plugin de websockets para manejar los gateways
+    // de WebSocket definidos en los controladores y proveedores de los módulos.
+    if (options.websockets) {
+      const wsConfig =
+        typeof options.websockets === "object" ? options.websockets : {};
+
+      await app.register(import("@fastify/websocket"), {
+        options: {
+          maxPayload: wsConfig.maxPayload ?? 10 * 1024 * 1024, // Por defecto, 10MB
+        },
+      });
+    }
+
     // Registramos los plugins personalizados para manejo de contexto de solicitud y manejo de errores
     await app.register(fastifyKitRequestContext);
     await app.register(fastifyKitErrorHandler);
@@ -150,34 +182,13 @@ export class FastifyKit {
       await app.register(import("@fastify/cors"), corsConfig);
     }
 
-    //
+    // Si el usuario activa Helmet, registramos el plugin de Helmet para agregar headers de seguridad a las respuestas
     if (options.security?.enableHelmet) {
-      // Configs default para Helmet, para permitir la UI de Scalar.
-      const defaultHelmetConfig: FastifyHelmetOptions = {
-        contentSecurityPolicy: {
-          directives: {
-            defaultSrc: ["'self'"],
-            styleSrc: [
-              "'self'",
-              "'unsafe-inline'",
-              "https://fonts.googleapis.com",
-            ],
-            fontSrc: ["'self'", "https://fonts.gstatic.com"],
-            scriptSrc: [
-              "'self'",
-              "'unsafe-inline'",
-              "https://cdn.jsdelivr.net",
-            ],
-            imgSrc: ["'self'", "data:", "validator.swagger.io"],
-          },
-        },
-      };
-
       // Si el usuario pasó un objeto de configuración para Helmet, lo usamos.
       const helmetConfig =
         typeof options.security.enableHelmet === "object"
           ? options.security.enableHelmet
-          : defaultHelmetConfig;
+          : FastifyKit.defaultHelmetConfig;
 
       await app.register(import("@fastify/helmet"), helmetConfig);
     }
@@ -223,6 +234,12 @@ export class FastifyKit {
       { prefix },
     );
 
+    // Si el usuario ha activado el soporte para WebSockets, buscamos en todos los controladores
+    // y proveedores registrados aquellos que tengan el decorador @WebSocketGateway y los registramos utilizando la función registerGateways.
+    if (options.websockets) {
+      this.registerWebSocketGateways(app, allControllers, allProviders);
+    }
+
     // Finalmente, configuramos las tareas programadas (cron jobs)
     // definidas en los proveedores de los módulos. Esto se hace al final
     // para asegurarnos de que todos los proveedores estén registrados e
@@ -231,6 +248,41 @@ export class FastifyKit {
 
     app.log.info("[FastifyKit] kit inicializado correctamente!");
     return app as any;
+  }
+
+  /**
+   * @description Método privado para registrar los gateways de WebSocket definidos en los controladores y proveedores de los módulos. Este método recorre todos los controladores y proveedores registrados, verifica si tienen el decorador \@WebSocketGateway definido en su metadata, y si es así, los registra utilizando la función registerGateways. Esto permite que el usuario pueda definir gateways de WebSocket en cualquier controlador o proveedor de sus módulos, y la Factory se encargará de descubrirlos y registrarlos automáticamente si ha activado el soporte para WebSockets en las opciones.
+   * @param app La instancia de Fastify en la que se registrarán los gateways de WebSocket. Se utiliza para llamar a la función registerGateways con los gateways encontrados en los controladores y proveedores.
+   * @param allControllers El array de controladores registrados en los módulos, que se revisará para encontrar aquellos que tengan el decorador \@WebSocketGateway definido en su metadata. Cada controlador es una clase que puede tener métodos decorados como handlers de WebSocket.
+   * @param allProviders El array de proveedores registrados en los módulos, que se revisará para encontrar aquellos que tengan el decorador \@WebSocketGateway definido en su metadata. Cada proveedor es un objeto que contiene un token y una implementación, y la implementación es la clase que se revisará para encontrar el decorador de WebSocket.
+   */
+  private static registerWebSocketGateways(
+    app: FastifyInstance<any, any, any, any, TypeBoxTypeProvider>,
+    allControllers: Constructor[],
+    allProviders: { token: any; implementation: Constructor }[],
+  ) {
+    // Unimos controladores y proveedores porque un Gateway puede ser registrado como cualquiera de los dos en el decorador @Module
+    const allClasses = [
+      ...allControllers,
+      ...allProviders.map((p) => p.implementation),
+    ];
+
+    // Filtramos las clases que tienen el decorador @WebSocketGateway
+    const gateways = allClasses.filter((Clase) => {
+      const metadata = (Clase as any)[
+        this.METADATA_SYMBOL
+      ] as FastifyKitMetadata;
+      return !!metadata?.wsGateway;
+    });
+
+    // Si encontramos gateways, los registramos.
+    if (gateways.length > 0) {
+      registerGateways(app, gateways);
+    } else {
+      app.log.warn(
+        "[FastifyKit WS] WebSockets activados en opciones, pero no se encontró ningún @WebSocketGateway en los módulos.",
+      );
+    }
   }
 
   /**

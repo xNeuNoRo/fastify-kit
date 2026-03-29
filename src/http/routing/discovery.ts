@@ -1,13 +1,195 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Constructor } from "./scanner.js";
+import "@fastify/websocket";
+import { FastifyInstance, FastifyRequest } from "fastify";
+import type { WebSocket } from "ws";
+import { extractArguments, type Constructor } from "./scanner.js";
 import { pathToFileURL } from "node:url";
 import type { FastifyKitMetadata } from "../decorators/types.js";
 import { Dirent } from "node:fs";
 import { getLogger } from "../../logger/logger.factory.js";
+import { container } from "../../container/DIContainer.js";
+import { JsonWsAdapter } from "../../websockets/adapters/JsonWsAdapter.js";
 
 const decoratorMetadataSymbol: symbol =
   (Symbol as any).metadata ?? Symbol.for("Symbol.metadata");
+
+export function registerGateways(
+  app: FastifyInstance,
+  gateways: Constructor[],
+) {
+  // Handler para limpiar conexiones muertas cada 30 segundos
+  const pingInterval = setInterval(() => {
+    // Si el servidor de WebSockets está activo
+    if (app.websocketServer) {
+      // Iteramos sobre todos los clientes conectados al servidor de WebSockets
+      for (const client of app.websocketServer.clients) {
+        const wsClient = client as any;
+        // Si el cliente no respondió al último ping, lo matamos.
+        if (wsClient.isAlive === false) {
+          return client.terminate();
+        }
+        // Marcamos el cliente como no vivo y le enviamos un ping. Si responde, lo marcaremos como vivo en el handler de pong.
+        wsClient.isAlive = false;
+        client.ping();
+      }
+    }
+  }, 30000);
+
+  // Apagamos el intervalo de limpieza de conexiones muertas cuando el servidor se cierra para evitar memory leaks
+  app.addHook("onClose", (_instance, done) => {
+    clearInterval(pingInterval);
+    done();
+  });
+
+  for (const GatewayClass of gateways) {
+    const metadata = (GatewayClass as any)[
+      decoratorMetadataSymbol
+    ] as FastifyKitMetadata;
+
+    // Si no tiene decorador de @WebSocketGateway, lo ignoramos
+    if (!metadata?.wsGateway) continue;
+
+    // Resolvemos la clase Gateway del contenedor de dependencias
+    const instance = container.resolve(GatewayClass);
+    // Y extraemos su metadata para registrar sus eventos de WebSockets
+    const options = metadata.wsGateway;
+    const events = metadata.wsEvents || [];
+
+    // Instanciamos el adaptador de WebSockets definido en la configuración del decorador o usamos el adaptador por defecto (JsonWsAdapter)
+    const AdapterClass = options.adapter || JsonWsAdapter;
+    const adapter = new AdapterClass();
+
+    // Mapas para almacenar los métodos de cada tipo de evento (connect, disconnect, message) y sus patrones asociados
+    const eventRouter = new Map<string, string>();
+
+    // Variables para almacenar los nombres de los métodos manejadores de eventos de conexión, desconexión y mensajes sin patrón (firehose)
+    let onConnectMethod: string | null = null;
+    let onDisconnectMethod: string | null = null;
+    let firehoseMethod: string | null = null;
+
+    // Iteramos sobre la metadata de eventos para definir los métodos manejadores de cada tipo de evento y sus patrones asociados
+    for (const event of events) {
+      if (event.type === "connect") onConnectMethod = event.handlerName;
+      if (event.type === "disconnect") onDisconnectMethod = event.handlerName;
+      if (event.type === "message" && event.pattern)
+        eventRouter.set(event.pattern, event.handlerName);
+      if (event.type === "message" && !event.pattern)
+        firehoseMethod = event.handlerName;
+    }
+
+    // Registramos la ruta del WebSocket en Fastify usando la configuración del decorador y el handler para gestionar las conexiones entrantes, mensajes y desconexiones
+    app.get(
+      options.path,
+      { websocket: true },
+      async (connection: WebSocket, request: FastifyRequest) => {
+        // Marcamos la conexion como viva al conectarse al websocket
+        (connection as any).isAlive = true;
+
+        // Al responder a un mensaje pong, marcamos la conexión como viva para que no sea terminada por el handler de ping
+        connection.on("pong", () => {
+          (connection as any).isAlive = true;
+        });
+
+        // Si hay un método manejador del evento de conexión
+        if (onConnectMethod) {
+          try {
+            // Extraemos los metadatos de los parametros del metodo handler
+            const paramsMeta = metadata.parameters?.[onConnectMethod] || [];
+
+            // Generamos los argumentos en base a la metadata de los parametros del metodo handler
+            const args = await extractArguments(
+              request,
+              null as any,
+              paramsMeta,
+              { socket: connection, payload: null },
+            );
+            // Llamamos al método handler del evento de conexión con los argumentos extraídos
+            await instance[onConnectMethod](...args);
+          } catch (err: any) {
+            getLogger().error(
+              `[FastifyKit WS] Error en @OnConnect de ${GatewayClass.name}:`,
+              err,
+            );
+            connection.close(1011, "Internal Server Error");
+            return;
+          }
+        }
+
+        // Registramos el handler de mensajes entrantes para este WebSocket
+        connection.on("message", async (rawMessage: Buffer) => {
+          try {
+            // Decodificamos el mensaje entrante usando el adaptador configurado para este gateway
+            const packet = adapter.decode(rawMessage);
+            let handlerName: string | null = null;
+
+            // Si el mensaje tiene un patrón definido y hay un método manejador registrado para ese patrón, lo usamos. Si no, pero hay un método firehose sin patrón, lo usamos para manejar el mensaje.
+            if (packet.pattern && eventRouter.has(packet.pattern)) {
+              handlerName = eventRouter.get(packet.pattern)!;
+            } else if (firehoseMethod) {
+              handlerName = firehoseMethod;
+            }
+
+            // Si encontramos un método manejador para este mensaje, lo ejecutamos con los argumentos correspondientes
+            if (handlerName) {
+              const paramsMeta = metadata.parameters?.[handlerName] || [];
+              const args = await extractArguments(
+                request,
+                null as any,
+                paramsMeta,
+                { socket: connection, payload: packet.payload },
+              );
+
+              // Guardamos el resultado retornado
+              const result = await instance[handlerName](...args);
+
+              // Si se retorna un mensaje
+              if (result !== undefined && packet.pattern) {
+                // Lo codificamos para enviarlo de vuelta al cliente usando el adaptador configurado para este gateway
+                const encodedResponse = adapter.encode(packet.pattern, result);
+                connection.send(encodedResponse);
+              }
+            }
+          } catch (err: any) {
+            getLogger().error(
+              `[FastifyKit WS] Error procesando mensaje en ${GatewayClass.name}:`,
+              err,
+            );
+          }
+        });
+
+        connection.on("close", async () => {
+          // Si hay un método manejador del evento de desconexión, lo llamamos al cerrar la conexión
+          if (onDisconnectMethod) {
+            try {
+              // Extraemos los metadatos de los parametros del metodo handler
+              const paramsMeta =
+                metadata.parameters?.[onDisconnectMethod] || [];
+              // Generamos los argumentos en base a la metadata de los parametros del metodo handler
+              const args = await extractArguments(
+                request,
+                null as any,
+                paramsMeta,
+                { socket: connection, payload: null },
+              );
+              // Llamamos al método handler del evento de desconexión con los argumentos extraídos
+              await instance[onDisconnectMethod](...args);
+            } catch (err: any) {
+              getLogger().error(
+                `[FastifyKit WS] Error en @OnDisconnect de ${GatewayClass.name}:`,
+                err,
+              );
+            }
+          }
+        });
+      },
+    );
+
+    getLogger().info(
+      `[FastifyKit WS] Gateway mapeado: ${options.path} => ${GatewayClass.name}`,
+    );
+  }
+}
 
 export interface AutoDiscoverOptions {
   /**

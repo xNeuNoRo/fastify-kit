@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { WebSocket } from "ws";
 import { container } from "../../container/DIContainer.js";
 import {
   ForbiddenException,
@@ -338,6 +339,7 @@ async function resolveParamValue(
   param: any,
   request: FastifyRequest,
   reply: FastifyReply,
+  wsContext?: { socket: WebSocket; payload: any },
 ): Promise<any> {
   // Dependiendo del tipo de parámetro definido en la metadata del decorador,
   // extraemos su valor correspondiente del request o reply de Fastify.
@@ -381,6 +383,20 @@ async function resolveParamValue(
       return param.key === undefined
         ? request.cookies
         : request.cookies[param.key];
+    case "socket":
+      if (!wsContext) {
+        throw new InternalServerException(
+          "[FastifyKit] No puedes usar @Socket() fuera de un @WebSocketGateway.",
+        );
+      }
+      return wsContext.socket;
+    case "wsPayload":
+      if (!wsContext) {
+        throw new InternalServerException(
+          "[FastifyKit] No puedes usar @Socket() fuera de un @WebSocketGateway.",
+        );
+      }
+      return wsContext.payload;
     default:
       // Opcional: Lanza un error o devuelve undefined si el tipo no es soportado
       return undefined;
@@ -394,10 +410,11 @@ async function resolveParamValue(
  * @param methodParamsMeta Metadata de los parámetros decorados para el método del controlador correspondiente a esta ruta.
  * @returns Array de argumentos a pasar al método del controlador en el orden correcto según su índice definido en los decoradores de parámetros.
  */
-async function extractArguments(
+export async function extractArguments(
   request: FastifyRequest,
   reply: FastifyReply,
   methodParamsMeta: any[],
+  wsContext?: { socket: WebSocket; payload: any },
 ): Promise<any[]> {
   // Antes de extraer los argumentos, pre-parseamos el formulario multipart en memoria si la petición es multipart/form-data
   await preparseMultipartFormData(request, methodParamsMeta);
@@ -408,7 +425,7 @@ async function extractArguments(
 
   // Iteramos sobre cada parámetro decorado y extraemos su valor del request o reply según el tipo de parámetro definido en la metadata del decorador
   for (const param of methodParamsMeta) {
-    let value = await resolveParamValue(param, request, reply);
+    let value = await resolveParamValue(param, request, reply, wsContext);
 
     // Si el decorador de este parámetro tiene un pipe definido,
     // resolvemos su instancia desde el contenedor de inyección de dependencias
