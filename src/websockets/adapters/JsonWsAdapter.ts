@@ -6,14 +6,16 @@ import type { WsAdapter, FastifyKitWsPacket } from "../interfaces/WsAdapter.js";
  */
 export class JsonWsAdapter implements WsAdapter {
   decode(rawMessage: string | Buffer): FastifyKitWsPacket {
-    try {
-      let text: string;
+    let text: string = "";
 
+    try {
       // Si el mensaje es un string, lo usamos directamente.
-      // Si es un Buffer, lo decodificamos a texto usando TextDecoder
-      // (simulando la red nativa que envía mensajes como Buffer).
+      // Si es un Buffer, lo convertimos a string usando UTF-8.
+      // Si es un ArrayBuffer u otro tipo de dato, intentamos decodificarlo con TextDecoder.
       if (typeof rawMessage === "string") {
         text = rawMessage;
+      } else if (Buffer.isBuffer(rawMessage)) {
+        text = rawMessage.toString("utf-8");
       } else {
         text = new TextDecoder().decode(rawMessage);
       }
@@ -33,13 +35,12 @@ export class JsonWsAdapter implements WsAdapter {
       );
       return {
         pattern: null,
-        payload: rawMessage,
+        payload: text || rawMessage,
       };
     }
   }
 
   encode(pattern: string, data: any): string {
-    // Codificamos el mensaje como un JSON con la estructura { event: pattern, data: payload }
     return JSON.stringify({ event: pattern, data });
   }
 }
