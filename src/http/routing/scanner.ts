@@ -416,8 +416,10 @@ export async function extractArguments(
   methodParamsMeta: any[],
   wsContext?: { socket: WebSocket; payload: any },
 ): Promise<any[]> {
-  // Antes de extraer los argumentos, pre-parseamos el formulario multipart en memoria si la petición es multipart/form-data
-  await preparseMultipartFormData(request, methodParamsMeta);
+  if (!wsContext) {
+    // Antes de extraer los argumentos, pre-parseamos el formulario multipart en memoria si la petición es multipart/form-data
+    await preparseMultipartFormData(request, methodParamsMeta);
+  }
 
   // Creamos un array de argumentos que se pasará al método del controlador,
   // donde cada posición corresponde al índice definido en los decoradores de parámetros.
