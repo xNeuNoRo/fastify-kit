@@ -27,7 +27,8 @@ export function registerGateways(
         const wsClient = client as any;
         // Si el cliente no respondió al último ping, lo matamos.
         if (wsClient.isAlive === false) {
-          return client.terminate();
+          client.terminate();
+          continue;
         }
         // Marcamos el cliente como no vivo y le enviamos un ping. Si responde, lo marcaremos como vivo en el handler de pong.
         wsClient.isAlive = false;

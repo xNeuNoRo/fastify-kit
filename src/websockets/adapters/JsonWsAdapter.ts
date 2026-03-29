@@ -7,10 +7,16 @@ import type { WsAdapter, FastifyKitWsPacket } from "../interfaces/WsAdapter.js";
 export class JsonWsAdapter implements WsAdapter {
   decode(rawMessage: string | Buffer): FastifyKitWsPacket {
     try {
-      // Si el mensaje es un Buffer, lo convertimos a string usando UTF-8
-      const text = Buffer.isBuffer(rawMessage)
-        ? rawMessage.toString("utf-8")
-        : rawMessage;
+      let text: string;
+
+      // Si el mensaje es un string, lo usamos directamente.
+      // Si es un Buffer, lo decodificamos a texto usando TextDecoder
+      // (simulando la red nativa que envía mensajes como Buffer).
+      if (typeof rawMessage === "string") {
+        text = rawMessage;
+      } else {
+        text = new TextDecoder().decode(rawMessage);
+      }
 
       // Intentamos parsear el texto como JSON.
       const parsed = JSON.parse(text);
