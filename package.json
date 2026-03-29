@@ -19,6 +19,9 @@
     "dist/**/*.js",
     "dist/**/*.d.ts"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build:clean": "rm -rf dist",
     "build": "npm run build:clean && tsc",
