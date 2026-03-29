@@ -1,3 +1,7 @@
+import {
+  WebSocketGatewayOptions,
+  WsEventHandlerMetadata,
+} from "../../websockets/decorators/types.js";
 import type { CanActivate } from "../guards/CanActivate.js";
 import type { PipeTransform } from "../pipes/PipeTransform.js";
 import type { AutoDiscoverOptions } from "../routing/discovery.js";
@@ -20,7 +24,9 @@ export type ParameterType =
   | "reply"
   | "ip"
   | "file"
-  | "cookie";
+  | "cookie"
+  | "socket"
+  | "wsPayload";
 
 /**
  * @description Interfaz que define las opciones de configuración para el manejo de archivos en los métodos decorados con @File.
@@ -111,4 +117,6 @@ export type FastifyKitMetadata = DecoratorMetadata & {
   methodVersions?: Record<string | symbol, string>; // Versiones a nivel de método
   scheduledTasks?: ScheduledTaskMetadata[]; // Metadata para tareas programadas
   rateLimits?: Record<string | symbol, RateLimitOptions>; // Metadata para rate limiting a nivel de método
+  wsGateway?: WebSocketGatewayOptions; // Metadata para gateways de WebSockets a nivel de clase
+  wsEvents?: WsEventHandlerMetadata[]; // Metadata para eventos de WebSockets a nivel de método
 };

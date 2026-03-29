@@ -16,6 +16,7 @@ import { container } from "../../../../src/container/DIContainer.js";
 import {
   discoverControllers,
   discoverModules,
+  registerGateways,
 } from "../../../../src/http/routing/discovery.js";
 import { LOGGER_TOKEN } from "../../../../src/logger/LoggerContract.js";
 
@@ -167,6 +168,194 @@ describe("Motor de Auto-Descubrimiento (Discovery)", () => {
       // Y debe haber logueado el error nativo con console.warn
       // eslint-disable-next-line no-console
       expect(console.warn).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("Registro de Gateways WebSockets (registerGateways)", () => {
+    // Usamos un símbolo para simular la metadata que el decorador @WebSocketGateway agregaría a la clase del gateway
+    const metaSymbol = Symbol.for("Symbol.metadata");
+
+    // Gateway Simulado
+    class MockGateway {
+      handleConnect = vi.fn();
+      handleMessage = vi.fn().mockReturnValue({ ok: true });
+      handleFirehose = vi.fn().mockReturnValue("Respuesta cruda"); // Simulamos un handler de firehose que devuelve una respuesta cruda (no JSON)
+      handleDisconnect = vi.fn();
+    }
+
+    (MockGateway as any)[metaSymbol] = {
+      wsGateway: { path: "/ws/mock" },
+      wsEvents: [
+        { type: "connect", handlerName: "handleConnect" },
+        { type: "message", handlerName: "handleMessage", pattern: "PING" },
+        { type: "message", handlerName: "handleFirehose" }, // Firehose (sin patrón)
+        { type: "disconnect", handlerName: "handleDisconnect" },
+      ],
+      parameters: {},
+    };
+
+    // Antes de cada test, preparamos los mocks necesarios para simular el entorno de Fastify y los clientes WebSocket
+    let appMock: any;
+    let wsClientMock: any;
+    let gatewayInstance: MockGateway;
+    const tick = () => new Promise((resolve) => process.nextTick(resolve)); // Helper de limpieza de microtareas
+
+    beforeEach(() => {
+      wsClientMock = {
+        isAlive: true,
+        ping: vi.fn(),
+        terminate: vi.fn(),
+      };
+
+      appMock = {
+        get: vi.fn(),
+        addHook: vi.fn(),
+        websocketServer: {
+          clients: new Set([wsClientMock]),
+        },
+      };
+
+      gatewayInstance = new MockGateway();
+      const originalResolve = container.resolve.bind(container);
+      vi.spyOn(container, "resolve").mockImplementation((token) => {
+        if (token === MockGateway) return gatewayInstance;
+        return originalResolve(token);
+      });
+    });
+
+    // Después de cada test, restauramos los mocks para evitar interferencias entre tests
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    });
+
+    it("Debería ignorar las clases que no poseen el decorador @WebSocketGateway", () => {
+      class NormalClass {
+        dummy = true;
+      }
+      registerGateways(appMock, [NormalClass]);
+      expect(appMock.get).not.toHaveBeenCalled();
+    });
+
+    it("Debería iniciar un intervalo (Ping/Pong) para limpiar conexiones muertas y registrar el hook onClose", () => {
+      // Usamos timers falsos para poder simular el paso del tiempo y verificar el comportamiento del ping/pong
+      vi.useFakeTimers();
+
+      registerGateways(appMock, [MockGateway]);
+      expect(appMock.addHook).toHaveBeenCalledWith(
+        "onClose",
+        expect.any(Function),
+      );
+
+      // Simulamos que pasan 30 segundos
+      vi.advanceTimersByTime(30000);
+      expect(wsClientMock.ping).toHaveBeenCalledTimes(1);
+      expect(wsClientMock.isAlive).toBe(false);
+
+      // Simulamos que el cliente nunca respondió (pasan otros 30 segundos)
+      vi.advanceTimersByTime(30000);
+      expect(wsClientMock.terminate).toHaveBeenCalledTimes(1);
+    });
+
+    it("Debería ejecutar correctamente el ciclo de vida (Connect, Message JSON, Firehose Crudo, Disconnect)", async () => {
+      registerGateways(appMock, [MockGateway]);
+      const routeHandler = appMock.get.mock.calls[0][2];
+
+      // Simulamos la conexión de un cliente WebSocket y capturamos los handlers registrados para cada evento
+      const wsHandlers: Record<string, (data?: any) => void> = {};
+      const connectionMock = {
+        on: vi.fn((event, cb) => {
+          wsHandlers[event] = cb;
+        }),
+        close: vi.fn(),
+        send: vi.fn(),
+        isAlive: false,
+        readyState: 1, // Simulamos que la conexión está abierta
+      };
+
+      // Simulamos la conexión de un cliente WebSocket
+      routeHandler(connectionMock, {} as any);
+      await tick(); // Esperamos a que se ejecuten las microtareas pendientes
+
+      // Verificamos que el handler de conexión se haya ejecutado y que la conexión esté marcada como viva
+      expect(connectionMock.isAlive).toBe(true);
+      expect(gatewayInstance.handleConnect).toHaveBeenCalled();
+
+      // Simulamos el envío de un mensaje JSON con el patrón/evento "PING"
+      wsHandlers["message"](
+        Buffer.from(JSON.stringify({ event: "PING", data: "Hola" })),
+      );
+      // Esperamos a que se ejecuten las microtareas pendientes (incluyendo la respuesta del handler)
+      await tick();
+      await tick();
+
+      // Verificamos que el handler de mensaje se haya ejecutado y que la respuesta correcta se haya enviado al cliente
+      expect(gatewayInstance.handleMessage).toHaveBeenCalled();
+      expect(connectionMock.send).toHaveBeenCalledWith(
+        JSON.stringify({ event: "PING", data: { ok: true } }),
+      );
+
+      // Simulamos el envío de un mensaje que no tiene patrón/evento definido (Firehose)
+      wsHandlers["message"](Buffer.from("MENSAJE_CUALQUIERA"));
+      // Esperamos a que se ejecuten las microtareas pendientes (incluyendo la respuesta del handler de firehose)
+      await tick();
+      await tick();
+
+      // Verificamos que el handler de firehose se haya ejecutado y que la respuesta cruda se haya enviado al cliente
+      expect(gatewayInstance.handleFirehose).toHaveBeenCalled();
+      expect(connectionMock.send).toHaveBeenCalledWith("Respuesta cruda");
+
+      // Simulamos la desconexión del cliente
+      wsHandlers["close"]();
+      await tick();
+
+      // Verificamos que el handler de desconexión se haya ejecutado
+      expect(gatewayInstance.handleDisconnect).toHaveBeenCalled();
+    });
+
+    it("Debería responder 'ERROR:HANDLER_NOT_FOUND_FOR_PATTERN:<pattern>' si recibe un mensaje pero no hay handler registrado", async () => {
+      class EmptyGateway {
+        dummy = true;
+      }
+      (EmptyGateway as any)[metaSymbol] = {
+        wsGateway: { path: "/ws/empty" },
+        wsEvents: [], // No tiene firehose ni handler explicito (OnMessage)
+        parameters: {},
+      };
+
+      // Mockeamos el resolve para que devuelva una instancia de este gateway vacío, y lo registramos
+      const originalResolve = container.resolve.bind(container);
+      vi.spyOn(container, "resolve").mockImplementation((token) => {
+        if (token === EmptyGateway) return new EmptyGateway() as any;
+        return originalResolve(token);
+      });
+      registerGateways(appMock, [EmptyGateway]);
+
+      // Simulamos la conexión de un cliente WebSocket y capturamos los handlers registrados para cada evento
+      const routeHandler = appMock.get.mock.calls[0][2];
+      const wsHandlers: Record<string, (data?: any) => void> = {};
+      const connectionMock = {
+        on: vi.fn((event, cb) => {
+          wsHandlers[event] = cb;
+        }),
+        send: vi.fn(),
+        readyState: 1, // Simulamos que la conexión está abierta
+      };
+
+      // Simulamos la conexión de un cliente WebSocket
+      routeHandler(connectionMock, {} as any);
+      // Esperamos a que se ejecuten las microtareas pendientes
+      await tick();
+
+      // Mandamos un mensaje a un Gateway que no tiene listeners
+      wsHandlers["message"](Buffer.from("Basura binaria"));
+      await tick();
+      await tick();
+
+      // En lugar de tragarse el mensaje en silencio, el framework le avisa al cliente
+      expect(connectionMock.send).toHaveBeenCalledWith(
+        "ERROR:HANDLER_NOT_FOUND_FOR_PATTERN:null",
+      );
     });
   });
 });
