@@ -367,10 +367,20 @@ async function resolveParamValue(
     case "request":
       return request;
     case "reply":
+      if (wsContext) {
+        throw new InternalServerException(
+          "[FastifyKit] No puedes usar @Res() dentro de un @WebSocketGateway. Retorna el valor directamente o utiliza @Socket().",
+        );
+      }
       return reply;
     case "ip":
       return request.ip;
     case "file":
+      if (wsContext) {
+        throw new InternalServerException(
+          "[FastifyKit] No puedes usar @File() dentro de un @WebSocketGateway.",
+        );
+      }
       return resolveMultipartFile(param, request);
     case "cookie":
       // Si el plugin no se registró, request.cookies no existirá. Le avisamos al dev.
