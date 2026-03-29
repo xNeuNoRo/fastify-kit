@@ -270,6 +270,7 @@ describe("Motor de Auto-Descubrimiento (Discovery)", () => {
         close: vi.fn(),
         send: vi.fn(),
         isAlive: false,
+        readyState: 1, // Simulamos que la conexión está abierta
       };
 
       // Simulamos la conexión de un cliente WebSocket
@@ -338,6 +339,7 @@ describe("Motor de Auto-Descubrimiento (Discovery)", () => {
           wsHandlers[event] = cb;
         }),
         send: vi.fn(),
+        readyState: 1, // Simulamos que la conexión está abierta
       };
 
       // Simulamos la conexión de un cliente WebSocket
