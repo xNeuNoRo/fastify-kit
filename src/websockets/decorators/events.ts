@@ -10,36 +10,20 @@ function createWsEventDecorator(
   type: "connect" | "disconnect" | "message",
   pattern?: string,
 ) {
-  return function (
-    target: Function | Object,
-    context: string | symbol | ClassMethodDecoratorContext,
-  ) {
-    if (typeof context === "object" && context.kind !== "method") {
+  return function (target: Function, context: ClassMethodDecoratorContext) {
+    if (context.kind !== "method") {
       throw new Error(
         `[FastifyKit] Un decorador de evento WebSocket (${type}) solo puede ser aplicado a métodos.`,
       );
     }
 
-    const propertyKey = typeof context === "object" ? context.name : context;
-
-    // Extraemos el constructor de la clase
-    const constructorFn = (typeof target === "function"
-      ? target
-      : target.constructor) as unknown as Record<symbol, unknown>;
-
-    // Accedemos a la metadata de la clase
-    const metadataSymbol =
-      (Symbol as SymbolConstructor & { metadata?: symbol }).metadata ??
-      Symbol.for("Symbol.metadata");
-
-    // Aseguramos que la clase tenga un objeto de metadata y luego agregamos la información del evento a ese objeto
-    constructorFn[metadataSymbol] = constructorFn[metadataSymbol] || {};
-    const metadata = constructorFn[metadataSymbol] as FastifyKitMetadata;
+    // Accedemos a la metadata de la clase y aseguramos que exista un array para los eventos de WebSockets
+    const metadata = context.metadata as FastifyKitMetadata;
     metadata.wsEvents = metadata.wsEvents || [];
 
     // Agregamos la información del evento a la metadata de la clase
     metadata.wsEvents.push({
-      handlerName: String(propertyKey),
+      handlerName: String(context.name),
       type,
       pattern,
     });

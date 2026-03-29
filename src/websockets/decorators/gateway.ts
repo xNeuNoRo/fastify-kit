@@ -32,15 +32,8 @@ export function WebSocketGateway(
         ? { path: pathOrOptions }
         : pathOrOptions;
 
-    // Accedemos a la metadata de la clase
-    const metadataSymbol: symbol =
-      (Symbol as SymbolConstructor & { metadata?: symbol }).metadata ??
-      Symbol.for("Symbol.metadata");
-
-    // Aseguramos que la clase tenga un objeto de metadata y luego asignamos la configuración del gateway a ese objeto
-    const targetConstructor = target as unknown as Record<symbol, unknown>;
-    targetConstructor[metadataSymbol] = targetConstructor[metadataSymbol] || {};
-    const metadata = targetConstructor[metadataSymbol] as FastifyKitMetadata;
+    // Accedemos a la metadata de la clase y le asignamos la configuración del gateway de WebSockets
+    const metadata = context.metadata as FastifyKitMetadata;
     metadata.wsGateway = options;
   };
 }
