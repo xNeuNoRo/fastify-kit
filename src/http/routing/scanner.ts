@@ -393,7 +393,7 @@ async function resolveParamValue(
     case "wsPayload":
       if (!wsContext) {
         throw new InternalServerException(
-          "[FastifyKit] No puedes usar @Socket() fuera de un @WebSocketGateway.",
+          "[FastifyKit] No puedes usar @WsPayload() fuera de un @WebSocketGateway.",
         );
       }
       return wsContext.payload;
