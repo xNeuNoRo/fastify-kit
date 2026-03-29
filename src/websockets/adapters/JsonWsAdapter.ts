@@ -5,6 +5,8 @@ import type { WsAdapter, FastifyKitWsPacket } from "../interfaces/WsAdapter.js";
  * @description Adaptador de WebSockets que utiliza JSON como formato de mensaje. Este adaptador implementa la interfaz WsAdapter, proporcionando métodos para decodificar mensajes entrantes y codificar mensajes salientes en formato JSON.
  */
 export class JsonWsAdapter implements WsAdapter {
+  private readonly decoder = new TextDecoder();
+
   decode(rawMessage: string | Buffer): FastifyKitWsPacket {
     let text: string = "";
 
@@ -17,7 +19,7 @@ export class JsonWsAdapter implements WsAdapter {
       } else if (Buffer.isBuffer(rawMessage)) {
         text = rawMessage.toString("utf-8");
       } else {
-        text = new TextDecoder().decode(rawMessage);
+        text = this.decoder.decode(rawMessage);
       }
 
       // Intentamos parsear el texto como JSON.

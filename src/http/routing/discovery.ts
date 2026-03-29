@@ -20,6 +20,10 @@ const decoratorMetadataSymbol: symbol =
  * @param app Instancia de Fastify donde se configurará el mecanismo de heartbeat para las conexiones WebSocket. Se espera que esta instancia tenga un servidor de WebSockets configurado (por ejemplo, usando el decorador @WebSocketGateway) para que el mecanismo de heartbeat pueda interactuar con las conexiones WebSocket activas.
  */
 function setupHeartbeatAndTeardown(app: FastifyInstance) {
+  // Simple flag para evitar configurar el heartbeat más de una vez si se llama a registerGateways varias veces.
+  if ((app as any)._wsHeartbeatSetup) return;
+  (app as any)._wsHeartbeatSetup = true;
+
   // Handler para limpiar conexiones muertas cada 30 segundos
   const pingInterval = setInterval(() => {
     // Si el servidor de WebSockets está activo
@@ -128,7 +132,7 @@ function sendMessageResponse(
   pattern: string | undefined,
   result: unknown,
 ) {
-  if (result === undefined) return;
+  if (result === undefined || connection.readyState !== 1) return;
 
   // Si el mensaje entrante tenía un patrón definido,
   // usamos el adaptador para codificar la respuesta y enviarla al cliente.
@@ -200,9 +204,13 @@ async function processIncomingMessage({
     );
 
     // Si no encontramos un handler para el patrón del mensaje,
-    // en lugar de ignorarlo en silencio, le avisamos al cliente que no se encontró un handler para ese patrón específico.
+    // en lugar de ignorarlo en silencio, le avisamos al cliente (si está conectado) que no se encontró un handler para ese patrón específico.
     if (!handlerName) {
-      connection.send("ERROR:HANDLER_NOT_FOUND_FOR_PATTERN:" + packet.pattern);
+      if (connection.readyState === 1) {
+        connection.send(
+          "ERROR:HANDLER_NOT_FOUND_FOR_PATTERN:" + packet.pattern,
+        );
+      }
       return;
     }
 
@@ -218,7 +226,11 @@ async function processIncomingMessage({
     sendMessageResponse(connection, adapter, packet.pattern, result);
   } catch (err: any) {
     // En caso de error, le avisamos al cliente que hubo un error procesando el mensaje, y lo logueamos para que el desarrollador pueda investigarlo.
-    connection.send("ERROR:INVALID_MESSAGE_FORMAT");
+    if (connection.readyState === 1) {
+      connection.send(
+        `ERROR:EXECUTION_FAILED:${err.message || "Internal Server Error"}`,
+      );
+    }
     getLogger().error(
       `[FastifyKit WS] Error procesando mensaje en ${GatewayClass.name}:`,
       err,
