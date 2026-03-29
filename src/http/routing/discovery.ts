@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import "@fastify/websocket";
+import type {} from "@fastify/websocket";
 import { FastifyInstance, FastifyRequest } from "fastify";
 import type { WebSocket } from "ws";
 import { extractArguments, type Constructor } from "./scanner.js";
@@ -69,7 +69,7 @@ function setupHeartbeatAndTeardown(app: FastifyInstance) {
  * @param isConnectEvent Booleano que indica si el método de ciclo de vida a ejecutar es un método de conexión (\@OnConnect) o de desconexión (\@OnDisconnect), que se usa principalmente para propósitos de logging en caso de error para indicar en qué tipo de evento ocurrió el error.
  */
 async function executeLifecycleMethod(
-  methodName: string,
+  methodName: PropertyKey,
   GatewayClass: Constructor,
   instance: any,
   metadata: FastifyKitMetadata,
@@ -78,7 +78,7 @@ async function executeLifecycleMethod(
   isConnectEvent: boolean,
 ) {
   try {
-    // Extramos los argumentos necesario y lo ejecutamos
+    // Extraemos los argumentos necesario y lo ejecutamos
     const paramsMeta = metadata.parameters?.[methodName] || [];
     const args = await extractArguments(request, null as any, paramsMeta, {
       socket: connection,
@@ -107,9 +107,9 @@ async function executeLifecycleMethod(
  */
 function resolveHandlerName(
   pattern: string | undefined,
-  eventRouter: Map<string, string>,
-  firehoseMethod: string | null,
-): string | null {
+  eventRouter: Map<string, PropertyKey>,
+  firehoseMethod: PropertyKey | null,
+): PropertyKey | null {
   // Si el mensaje entrante tiene un patrón definido y existe un handler registrado para ese patrón, devolvemos el nombre de ese handler. Si no, devolvemos el handler de firehose (si está definido) o null si no hay ningún handler disponible para manejar el mensaje.
   if (pattern && eventRouter.has(pattern)) {
     return eventRouter.get(pattern)!;
@@ -191,8 +191,8 @@ async function processIncomingMessage({
   request: FastifyRequest;
   connection: WebSocket;
   adapter: any;
-  eventRouter: Map<string, string>;
-  firehoseMethod: string | null;
+  eventRouter: Map<string, PropertyKey>;
+  firehoseMethod: PropertyKey | null;
 }) {
   try {
     const packet = adapter.decode(rawMessage);
@@ -246,12 +246,12 @@ async function processIncomingMessage({
  */
 function mapGatewayEvents(
   events: WsEventHandlerMetadata[],
-  eventRouter: Map<string, string>,
+  eventRouter: Map<string, PropertyKey>,
 ) {
   // Variables para almacenar los nombres de los métodos manejadores de eventos de conexión, desconexión y mensajes sin patrón (firehose)
-  let onConnectMethod: string | null = null;
-  let onDisconnectMethod: string | null = null;
-  let firehoseMethod: string | null = null;
+  let onConnectMethod: PropertyKey | null = null;
+  let onDisconnectMethod: PropertyKey | null = null;
+  let firehoseMethod: PropertyKey | null = null;
 
   // Iteramos sobre la metadata de eventos para definir los métodos manejadores de cada tipo de evento y sus patrones asociados
   for (const event of events) {
@@ -270,8 +270,6 @@ export function registerGateways(
   app: FastifyInstance,
   gateways: Constructor[],
 ) {
-  setupHeartbeatAndTeardown(app);
-
   for (const GatewayClass of gateways) {
     const metadata = (GatewayClass as any)[
       decoratorMetadataSymbol
@@ -279,6 +277,9 @@ export function registerGateways(
 
     // Si no tiene decorador de @WebSocketGateway, lo ignoramos
     if (!metadata?.wsGateway) continue;
+
+    // Configuramos el mecanismo de heartbeat para mantener vivas las conexiones WebSocket
+    setupHeartbeatAndTeardown(app);
 
     // Resolvemos la clase Gateway del contenedor de dependencias
     const instance = container.resolve(GatewayClass);
@@ -291,7 +292,7 @@ export function registerGateways(
     const adapter = new AdapterClass();
 
     // Mapas para almacenar los métodos de cada tipo de evento (connect, disconnect, message) y sus patrones asociados
-    const eventRouter = new Map<string, string>();
+    const eventRouter = new Map<string, PropertyKey>();
 
     // Mapeamos la metadata de eventos del Gateway
     const { onConnectMethod, onDisconnectMethod, firehoseMethod } =
@@ -301,8 +302,9 @@ export function registerGateways(
     app.get(
       options.path,
       { websocket: true },
-      (connection: WebSocket, request: FastifyRequest) => {
-        (connection as any).isAlive = true;
+      (connection: any, request: FastifyRequest) => {
+        const socket = connection?.socket || connection;
+        socket.isAlive = true;
 
         // Registramos el handler de @OnConnect() para que se ejecute cuando un cliente se conecte
         if (onConnectMethod) {
@@ -312,19 +314,19 @@ export function registerGateways(
             instance,
             metadata,
             request,
-            connection,
+            socket,
             true,
           );
         }
 
-        connection.on("message", async (rawMessage: Buffer) => {
+        socket.on("message", async (rawMessage: Buffer) => {
           await processIncomingMessage({
             rawMessage,
             GatewayClass,
             instance,
             metadata,
             request,
-            connection,
+            connection: socket,
             adapter,
             eventRouter,
             firehoseMethod,
@@ -340,7 +342,7 @@ export function registerGateways(
               instance,
               metadata,
               request,
-              connection,
+              socket,
               false,
             );
           }
@@ -348,7 +350,7 @@ export function registerGateways(
 
         // Evento de ping recibido del cliente para mantener viva la conexión.
         connection.on("pong", () => {
-          (connection as any).isAlive = true;
+          socket.isAlive = true;
         });
       },
     );

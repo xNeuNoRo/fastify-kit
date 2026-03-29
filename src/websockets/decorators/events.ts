@@ -23,7 +23,7 @@ function createWsEventDecorator(
 
     // Agregamos la información del evento a la metadata de la clase
     metadata.wsEvents.push({
-      handlerName: String(context.name),
+      handlerName: context.name,
       type,
       pattern,
     });
