@@ -3,7 +3,6 @@ import fastify, {
   type FastifyInstance,
   type FastifyServerOptions,
 } from "fastify";
-import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import { fastifyKitRequestContext } from "../http/plugins/requestContext.js";
 import { fastifyKitErrorHandler } from "../http/plugins/errorHandler.js";
 import {
@@ -14,31 +13,48 @@ import { ApiResponse } from "../http/responses/ApiResponse.js";
 import {
   discoverControllers,
   discoverModules,
+  registerGateways,
 } from "../http/routing/discovery.js";
+import { container } from "../container/DIContainer.js";
+import { requestContext } from "../http/context/requestContext.js";
 import type {
   ModuleOptions,
   FastifyKitMetadata,
 } from "../http/decorators/types.js";
-import { container } from "../container/DIContainer.js";
-import { requestContext } from "../http/context/requestContext.js";
+import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
+import type { FastifyCookieOptions } from "@fastify/cookie";
+import type { FastifyMultipartOptions } from "@fastify/multipart";
+import type { CreateRateLimitOptions } from "@fastify/rate-limit";
+import type { FastifyCorsOptions } from "@fastify/cors";
+import type { FastifyHelmetOptions } from "@fastify/helmet";
+import type { ServerOptions as HttpsServerOptions } from "node:https";
 
 export interface FastifyKitOptions {
-  module: any;
+  module: Constructor;
   globalPrefix?: string;
   swagger?: {
     title: string;
     description: string;
     version: string;
+    [key: string]: any;
   };
   security?: {
-    enableCors?: boolean;
-    enableHelmet?: boolean;
-    rateLimit?: { max: number; timeWindow: string };
+    enableCors?: boolean | FastifyCorsOptions;
+    enableHelmet?: boolean | FastifyHelmetOptions;
+    rateLimit?: CreateRateLimitOptions;
   };
+  multipart?: boolean | FastifyMultipartOptions;
+  cookies?: boolean | FastifyCookieOptions;
   fastifyOptions?: FastifyServerOptions & {
     http2?: boolean;
-    https?: any; // Mantenemos any aquí porque los tipos de TLS de Node son muy verbosos
+    https?: HttpsServerOptions | null;
   };
+  // Activar o desactivar el manejo de websockets del framework
+  websockets?:
+    | boolean
+    | {
+        maxPayload?: number; // Tamaño máximo de payload en bytes para mensajes de WebSocket (opcional, por defecto 10MB)
+      };
 }
 
 export class FastifyKit {
@@ -49,6 +65,18 @@ export class FastifyKit {
   private static readonly METADATA_SYMBOL: symbol =
     (Symbol as SymbolConstructor & { metadata?: symbol }).metadata ??
     Symbol.for("Symbol.metadata");
+
+  private static readonly defaultHelmetConfig: FastifyHelmetOptions = {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net"],
+        imgSrc: ["'self'", "data:", "validator.swagger.io"],
+      },
+    },
+  };
 
   /**
    * @description Método estático para crear una instancia de Fastify configurada con FastifyKit. Este método se encarga de registrar los plugins necesarios para el manejo de contexto de solicitud, manejo de errores, seguridad (CORS, Helmet, rate limit) y documentación (Swagger/Scalar) según las opciones proporcionadas. También registra una ruta de health check y las rutas definidas en los controladores escaneados.
@@ -105,65 +133,8 @@ export class FastifyKit {
       options.module,
     );
 
-    // Registramos los plugins personalizados para manejo de contexto de solicitud y manejo de errores
-    await app.register(fastifyKitRequestContext);
-    await app.register(fastifyKitErrorHandler);
-
-    // si el usuario activa CORS, registramos el plugin de CORS para permitir solicitudes desde cualquier origen (útil para desarrollo, cambiar en producción)
-    if (options.security?.enableCors) {
-      await app.register(import("@fastify/cors"), { origin: true });
-    }
-
-    // si el usuario activa Helmet, registramos el plugin de helmet para mejorar la seguridad de la app configurando
-    // una política de seguridad de contenido (CSP) que permita solo recursos de confianza
-    if (options.security?.enableHelmet) {
-      await app.register(import("@fastify/helmet"), {
-        contentSecurityPolicy: {
-          directives: {
-            defaultSrc: ["'self'"],
-            // Permitimos los estilos y fuentes que usa Scalar UI para que no se rompa la web
-            styleSrc: [
-              "'self'",
-              "'unsafe-inline'",
-              "https://fonts.googleapis.com",
-            ],
-            fontSrc: ["'self'", "https://fonts.gstatic.com"],
-            // Permitimos ejecución de scripts inline solo para la UI de Scalar
-            scriptSrc: [
-              "'self'",
-              "'unsafe-inline'",
-              "https://cdn.jsdelivr.net",
-            ],
-            imgSrc: ["'self'", "data:", "validator.swagger.io"],
-          },
-        },
-      });
-    }
-
-    // Si el usuario activa rate limit, registramos el plugin de rate limit para limitar la cantidad de peticiones por IP y evitar abusos
-    if (options.security?.rateLimit) {
-      await app.register(import("@fastify/rate-limit"), {
-        ...options.security.rateLimit,
-      });
-    }
-
-    // Si el usuario activa Swagger/Scalar, registramos el plugin de Scalar para generar una documentación interactiva y visualmente atractiva de la API en la ruta /docs
-    if (options.swagger) {
-      await app.register(import("@fastify/swagger"), {
-        openapi: {
-          openapi: "3.0.0",
-          info: options.swagger,
-        },
-      });
-      await app.register(import("@scalar/fastify-api-reference"), {
-        routePrefix: "/docs",
-        configuration: {
-          theme: "purple",
-          layout: "modern",
-          metaData: { title: options.swagger.title },
-        },
-      });
-    }
+    // Registramos los plugins esenciales
+    await this.registerCorePlugins(app, options);
 
     // Registramos una ruta de health check para verificar que la API está funcionando correctamente
     app.get("/health", async () =>
@@ -181,6 +152,188 @@ export class FastifyKit {
       { prefix },
     );
 
+    // Si el usuario ha activado el soporte para WebSockets, buscamos en todos los controladores
+    // y proveedores registrados aquellos que tengan el decorador @WebSocketGateway y los registramos utilizando la función registerGateways.
+    if (options.websockets) {
+      this.registerWebSocketGateways(app, allControllers, allProviders);
+    }
+
+    // Finalmente, configuramos las tareas programadas (cron jobs)
+    // definidas en los proveedores de los módulos. Esto se hace al final
+    // para asegurarnos de que todos los proveedores estén registrados e
+    // instanciados correctamente antes de iniciar las tareas programadas.
+    this.setupScheduledTasks(app, allProviders);
+
+    app.log.info("[FastifyKit] kit inicializado correctamente!");
+    return app as any;
+  }
+
+  /**
+   * @description Método privado para registrar los plugins esenciales en la instancia de Fastify, incluyendo multipart para manejo de archivos, cookies para manejo de cookies, websockets para manejo de gateways de WebSocket, plugins personalizados para manejo de contexto de solicitud y manejo de errores, plugins de seguridad (CORS, Helmet, rate limit) según las opciones proporcionadas por el usuario, y el plugin de documentación (Swagger/Scalar) si se ha configurado la opción de Swagger.
+   * @param app La instancia de Fastify en la que se registrarán los plugins esenciales. Esta instancia se va a configurar con los plugins necesarios para el funcionamiento de FastifyKit, y luego se devolverá para que el usuario pueda usarla como su servidor de API.
+   * @param options Las opciones de configuración para FastifyKit, que incluyen la activación de multipart, cookies, websockets, seguridad y documentación. Estas opciones se utilizan para determinar qué plugins registrar en la instancia de Fastify y con qué configuraciones específicas.
+   */
+  private static async registerCorePlugins(
+    app: FastifyInstance<any, any, any, any, TypeBoxTypeProvider>,
+    options: FastifyKitOptions,
+  ) {
+    // Si el usuario activa multipart, registramos el plugin de multipart para manejar la carga de archivos en los controladores.
+    if (options.multipart) {
+      const multipartConfig =
+        typeof options.multipart === "object" ? options.multipart : {};
+
+      await app.register(import("@fastify/multipart"), {
+        ...multipartConfig,
+        attachFieldsToBody: multipartConfig.attachFieldsToBody ?? false, // Por defecto, no adjuntamos los campos al body para evitar conflictos con los decoradores de parámetros
+      });
+    }
+
+    // Si el usuario activa cookies, registramos el plugin de cookies para manejar las cookies en los controladores.
+    if (options.cookies) {
+      const cookieConfig =
+        typeof options.cookies === "object" ? options.cookies : {};
+      await app.register(import("@fastify/cookie"), {
+        ...cookieConfig,
+      });
+    }
+
+    // Si el usuario activa websockets, registramos el plugin de websockets para manejar los gateways
+    // de WebSocket definidos en los controladores y proveedores de los módulos.
+    if (options.websockets) {
+      const wsConfig =
+        typeof options.websockets === "object" ? options.websockets : {};
+
+      await app.register(import("@fastify/websocket"), {
+        options: {
+          maxPayload: wsConfig.maxPayload ?? 10 * 1024 * 1024, // Por defecto, 10MB
+        },
+      });
+    }
+
+    // Registramos los plugins personalizados para manejo de contexto de solicitud y manejo de errores
+    await app.register(fastifyKitRequestContext);
+    await app.register(fastifyKitErrorHandler);
+
+    // Registramos los plugins de seguridad
+    await this.registerSecurityPlugins(app, options.security);
+
+    // Registramos el plugin de documentación (Swagger/Scalar)
+    // si el usuario ha proporcionado la configuración de Swagger en las opciones.
+    await this.registerDocumentationPlugin(app, options);
+  }
+
+  /**
+   * @description Método privado para registrar los plugins de seguridad (CORS, Helmet, rate limit) según las opciones proporcionadas por el usuario.
+   * @param app La instancia de Fastify en la que se registrarán los plugins de seguridad. Se utiliza para llamar a app.register con cada plugin de seguridad activado en las opciones.
+   * @param securityOptions Las opciones de seguridad proporcionadas por el usuario en las opciones de FastifyKit. Estas opciones pueden incluir la activación de CORS, Helmet y rate limit, así como sus configuraciones específicas. El método verifica cada una de estas opciones y registra el plugin correspondiente si están activadas.
+   */
+  private static async registerSecurityPlugins(
+    app: FastifyInstance<any, any, any, any, TypeBoxTypeProvider>,
+    securityOptions?: FastifyKitOptions["security"],
+  ) {
+    // Si el usuario activa CORS, registramos el plugin de CORS
+    // para permitir solicitudes desde otros orígenes según la configuración proporcionada.
+    if (securityOptions?.enableCors) {
+      // Si el usuario pasó un objeto de configuración para CORS, lo usamos.
+      // Si solo pasó "true", usamos una configuración básica que permite cualquier origen (origin: true).
+      const corsConfig =
+        typeof securityOptions.enableCors === "object"
+          ? securityOptions.enableCors
+          : { origin: true };
+      await app.register(import("@fastify/cors"), corsConfig);
+    }
+
+    // Si el usuario activa Helmet, registramos el plugin de Helmet para agregar headers de seguridad a las respuestas
+    if (securityOptions?.enableHelmet) {
+      // Si el usuario pasó un objeto de configuración para Helmet, lo usamos.
+      const helmetConfig =
+        typeof securityOptions.enableHelmet === "object"
+          ? securityOptions.enableHelmet
+          : FastifyKit.defaultHelmetConfig;
+
+      await app.register(import("@fastify/helmet"), helmetConfig);
+    }
+
+    // Si el usuario activa rate limit, registramos el plugin de rate limit para limitar la cantidad de peticiones por IP y evitar abusos
+    if (securityOptions?.rateLimit) {
+      await app.register(import("@fastify/rate-limit"), {
+        ...securityOptions.rateLimit,
+      });
+    }
+  }
+
+  /**
+   * @description Método privado para registrar el plugin de documentación (Swagger/Scalar) si el usuario ha proporcionado la configuración de Swagger en las opciones.
+   * @param app La instancia de Fastify en la que se registrará el plugin de documentación. Se utiliza para llamar a app.register con el plugin de Swagger y Scalar si se ha configurado.
+   * @param options Las opciones de configuración para FastifyKit, que incluyen la configuración de Swagger en la propiedad "swagger". Si esta propiedad está presente, se registrará el plugin de documentación.
+   */
+  private static async registerDocumentationPlugin(
+    app: FastifyInstance<any, any, any, any, TypeBoxTypeProvider>,
+    options: FastifyKitOptions,
+  ) {
+    // Si el usuario activa Swagger/Scalar, registramos el plugin de Scalar para generar una documentación interactiva y visualmente atractiva de la API en la ruta /docs
+    if (options.swagger) {
+      await app.register(import("@fastify/swagger"), {
+        openapi: {
+          openapi: "3.0.0",
+          info: options.swagger,
+        },
+      });
+      await app.register(import("@scalar/fastify-api-reference"), {
+        routePrefix: "/docs",
+        configuration: {
+          theme: "purple",
+          layout: "modern",
+          metaData: { title: options.swagger.title },
+        },
+      });
+    }
+  }
+
+  /**
+   * @description Método privado para registrar los gateways de WebSocket definidos en los controladores y proveedores de los módulos. Este método recorre todos los controladores y proveedores registrados, verifica si tienen el decorador \@WebSocketGateway definido en su metadata, y si es así, los registra utilizando la función registerGateways. Esto permite que el usuario pueda definir gateways de WebSocket en cualquier controlador o proveedor de sus módulos, y la Factory se encargará de descubrirlos y registrarlos automáticamente si ha activado el soporte para WebSockets en las opciones.
+   * @param app La instancia de Fastify en la que se registrarán los gateways de WebSocket. Se utiliza para llamar a la función registerGateways con los gateways encontrados en los controladores y proveedores.
+   * @param allControllers El array de controladores registrados en los módulos, que se revisará para encontrar aquellos que tengan el decorador \@WebSocketGateway definido en su metadata. Cada controlador es una clase que puede tener métodos decorados como handlers de WebSocket.
+   * @param allProviders El array de proveedores registrados en los módulos, que se revisará para encontrar aquellos que tengan el decorador \@WebSocketGateway definido en su metadata. Cada proveedor es un objeto que contiene un token y una implementación, y la implementación es la clase que se revisará para encontrar el decorador de WebSocket.
+   */
+  private static registerWebSocketGateways(
+    app: FastifyInstance<any, any, any, any, TypeBoxTypeProvider>,
+    allControllers: Constructor[],
+    allProviders: { token: any; implementation: Constructor }[],
+  ) {
+    // Unimos controladores y proveedores porque un Gateway puede ser registrado como cualquiera de los dos en el decorador @Module
+    const allClasses = [
+      ...allControllers,
+      ...allProviders.map((p) => p.implementation),
+    ];
+
+    // Filtramos las clases que tienen el decorador @WebSocketGateway
+    const gateways = allClasses.filter((Clase) => {
+      const metadata = (Clase as any)[
+        this.METADATA_SYMBOL
+      ] as FastifyKitMetadata;
+      return !!metadata?.wsGateway;
+    });
+
+    // Si encontramos gateways, los registramos.
+    if (gateways.length > 0) {
+      registerGateways(app, gateways);
+    } else {
+      app.log.warn(
+        "[FastifyKit WS] WebSockets activados en opciones, pero no se encontró ningún @WebSocketGateway en los módulos.",
+      );
+    }
+  }
+
+  /**
+   * @description Método privado para configurar las tareas programadas (cron jobs) definidas en los proveedores de los módulos. Este método recorre todos los proveedores registrados, verifica si tienen tareas programadas definidas en su metadata, y si es así, instancia el proveedor (respetando el patrón Singleton) y configura un trabajo programado utilizando la expresión cron proporcionada. Además, se asegura de que cada tarea programada se ejecute dentro del contexto de solicitud adecuado para que puedan acceder a la información de la solicitud incluso cuando se ejecutan en segundo plano. Finalmente, se registra un hook para detener todos los trabajos programados cuando el servidor se detenga, evitando que sigan ejecutándose en segundo plano después de que la API haya cerrado.
+   * @param app La instancia de Fastify en la que se configurarán las tareas programadas. Se utiliza para registrar los trabajos programados y el hook de cierre.
+   * @param allProviders El array de proveedores registrados en los módulos, que se revisará para encontrar aquellos que tengan tareas programadas definidas en su metadata. Cada proveedor es un objeto que contiene un token y una implementación.
+   */
+  private static setupScheduledTasks(
+    app: FastifyInstance<any, any, any, any, TypeBoxTypeProvider>,
+    allProviders: { token: any; implementation: Constructor }[],
+  ): void {
     // Array para almacenar los trabajos programados y poder detenerlos cuando el servidor se detenga
     const scheduledJobs: Cron[] = [];
 
@@ -207,7 +360,7 @@ export class FastifyKit {
               } catch (err) {
                 app.log.error(
                   { err },
-                  // 🪄 Usamos implementation.name para que el log sea legible (ej: CacheService.limpiar)
+                  // Usamos implementation.name para que el log sea legible (ej: CacheService.limpiar)
                   `[FastifyKit Cron] Error en tarea programada ${provider.implementation.name}.${String(task.methodName)}:`,
                 );
               }
@@ -218,7 +371,7 @@ export class FastifyKit {
           scheduledJobs.push(job);
 
           app.log.info(
-            // 🪄 Usamos implementation.name aquí también
+            // Usamos implementation.name aquí también
             `[FastifyKit Cron] Tarea programada registrada: ${provider.implementation.name}.${String(task.methodName)} (${task.cronExpression})`,
           );
         }

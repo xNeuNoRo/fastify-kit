@@ -9,6 +9,8 @@ import {
   Req,
   Res,
   Ip,
+  File,
+  Cookie,
 } from "../../../../src/http/decorators/parameters.js";
 import type { FastifyKitMetadata } from "../../../../src/http/decorators/types.js";
 
@@ -144,6 +146,99 @@ describe("Decoradores de Parámetros HTTP (@UseParams)", () => {
     expect(paramsCreate).toHaveLength(1);
     expect(paramsCreate![0].index).toBe(0);
     expect(paramsCreate![0].type).toBe("body");
+  });
+
+  it("Debería registrar correctamente la metadata del decorador @File con sus opciones", () => {
+    class FileUploadController {
+      @UseParams(
+        // Archivo con límites estrictos y modo por defecto (buffer)
+        File("avatar", { maxSize: 5 * 1024 * 1024, mimetypes: ["image/png"] }),
+        // Archivo configurado para stream
+        File("documento", { mode: "stream" }),
+        // Archivo sin opciones (por defecto)
+        File("basico"),
+      )
+      async upload() {
+        /* dummy method */
+      }
+    }
+
+    // Obtenemos la metadata del controlador
+    const metadata = (FileUploadController as any)[
+      (Symbol as any).metadata
+    ] as FastifyKitMetadata;
+
+    const params = metadata.parameters?.["upload"];
+
+    // Validamos que se guardaron los 3 parámetros de archivo
+    expect(params).toBeDefined();
+    expect(params).toHaveLength(3);
+
+    // Verificamos el primer archivo (avatar con límites)
+    expect(params![0]).toEqual({
+      index: 0,
+      type: "file",
+      key: "avatar",
+      pipe: undefined,
+      fileOptions: { maxSize: 5242880, mimetypes: ["image/png"] },
+    });
+
+    // Verificamos el segundo archivo (documento como stream)
+    expect(params![1]).toEqual({
+      index: 1,
+      type: "file",
+      key: "documento",
+      pipe: undefined,
+      fileOptions: { mode: "stream" },
+    });
+
+    // Verificamos el tercer archivo (sin opciones definidas)
+    expect(params![2]).toEqual({
+      index: 2,
+      type: "file",
+      key: "basico",
+      pipe: undefined,
+      fileOptions: undefined, // Garantizamos que no se inyecta basura
+    });
+  });
+
+  it("Debería registrar correctamente la metadata del decorador @Cookie", () => {
+    class CookieController {
+      @UseParams(
+        Cookie("session_id"), // Caso 1: Cookie específica
+        Cookie(), // Caso 2: Objeto completo de cookies
+      )
+      async test() {
+        /* dummy method */
+      }
+    }
+
+    // Obtenemos la metadata del controlador
+    const metadata = (CookieController as any)[
+      (Symbol as any).metadata
+    ] as FastifyKitMetadata;
+
+    // Validamos que se creó la sección de parámetros para el método 'test' y que tiene los 2 casos de @Cookie
+    const params = metadata.parameters?.["test"];
+
+    expect(params).toBeDefined();
+    expect(params).toHaveLength(2);
+
+    // Verificamos el primer caso de @Cookie con key "session_id"
+    expect(params![0]).toEqual({
+      index: 0,
+      type: "cookie",
+      key: "session_id",
+      pipe: undefined,
+    });
+
+    // Verificamos el segundo caso de @Cookie sin key (objeto completo)
+    expect(params![1]).toEqual({
+      index: 1,
+      type: "cookie",
+      key: undefined,
+      pipe: undefined,
+    });
   });
 
   it("Debería lanzar un error si @UseParams se aplica a algo que no es un método", () => {

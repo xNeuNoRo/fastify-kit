@@ -11,7 +11,10 @@ if ((Symbol as any).metadata === undefined) {
 // ----------------------------------------------
 export { FastifyKit, type FastifyKitOptions } from "./core/FastifyKit.js";
 export { Module } from "./core/module.decorator.js";
-export { discoverControllers, discoverModules } from "./http/routing/discovery.js";
+export {
+  discoverControllers,
+  discoverModules,
+} from "./http/routing/discovery.js";
 export type { ModuleOptions } from "./http/decorators/types.js";
 export type { AutoDiscoverOptions } from "./http/routing/discovery.js";
 export type { Constructor } from "./http/routing/scanner.js";
@@ -31,7 +34,12 @@ export {
   Req,
   Res,
   Ip,
+  File,
+  Cookie,
+  Socket,
+  WsPayload,
 } from "./http/decorators/parameters.js";
+export type { MultipartFile, FileOptions } from "./http/decorators/types.js";
 
 // ----------------------------------------------
 // HTTP Security & Guards
@@ -131,3 +139,22 @@ export { InjectConfig } from "./config/inject-config.decorator.js";
 // Validation (TypeBox)
 // ----------------------------------------------
 export { Validate } from "./validation/validate.decorator.js";
+
+// ----------------------------------------------
+// WebSockets (Gateways & Firehose)
+// ----------------------------------------------
+export { WebSocketGateway } from "./websockets/decorators/gateway.js";
+export {
+  SubscribeMessage,
+  OnMessage,
+  OnConnect,
+  OnDisconnect,
+} from "./websockets/decorators/events.js";
+export type { WebSocketGatewayOptions } from "./websockets/decorators/types.js";
+
+// Adaptadores y Contratos
+export { JsonWsAdapter } from "./websockets/adapters/JsonWsAdapter.js";
+export type {
+  WsAdapter,
+  FastifyKitWsPacket,
+} from "./websockets/interfaces/WsAdapter.js";

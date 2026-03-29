@@ -362,6 +362,235 @@ describe("Motor de Enrutamiento (Scanner)", () => {
     });
   });
 
+  describe("Extracción de Archivos Multipart (@File)", () => {
+    it("Debería lanzar BadRequestException si la petición no es multipart", async () => {
+      const metadataSymbol = Symbol.metadata;
+      class FileController {
+        async upload(file: any) {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          return file;
+        }
+      }
+
+      // Simulamos metadata de @UseParams(File("avatar"))
+      (FileController as any)[metadataSymbol] = {
+        routes: [{ method: "post", path: "/upload", handlerName: "upload" }],
+        parameters: { upload: [{ index: 0, type: "file", key: "avatar" }] },
+      };
+
+      registerControllers(mockApp, [FileController]);
+      const handler = mockApp.post.mock.calls[0][2];
+
+      // Simulamos un Request normal (sin isMultipart o que devuelve false)
+      const mockReq = { isMultipart: () => false } as any;
+      const mockReply = { sent: false } as any;
+
+      await expect(handler(mockReq, mockReply)).rejects.toThrow();
+    });
+
+    it("Debería lanzar UnsupportedMediaTypeException si el archivo no coincide con los mimetypes permitidos", async () => {
+      const metadataSymbol = Symbol.metadata;
+      class MimeController {
+        async upload(file: any) {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          return file;
+        }
+      }
+
+      // Metadata con restricción de mimetype a solo PNG
+      (MimeController as any)[metadataSymbol] = {
+        routes: [{ method: "post", path: "/mime", handlerName: "upload" }],
+        parameters: {
+          upload: [
+            {
+              index: 0,
+              type: "file",
+              key: "documento",
+              fileOptions: { mimetypes: ["image/png"] },
+            },
+          ],
+        },
+      };
+
+      registerControllers(mockApp, [MimeController]);
+      const handler = mockApp.post.mock.calls[0][2];
+
+      // Simulamos que el usuario manda un PDF en lugar de un PNG
+      const mockReq = {
+        isMultipart: () => true,
+        parts: async function* () {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          yield {
+            type: "file",
+            fieldname: "documento",
+            mimetype: "application/pdf",
+            toBuffer: vi.fn().mockResolvedValue(Buffer.from("pdf")),
+            file: { truncated: false },
+          };
+        },
+      } as any;
+
+      await expect(handler(mockReq, { sent: false })).rejects.toThrow();
+    });
+
+    it("Debería procesar correctamente el archivo en modo Buffer", async () => {
+      const metadataSymbol = Symbol.metadata;
+      class BufferController {
+        upload = vi.fn().mockResolvedValue("buffer ok");
+      }
+
+      (BufferController as any)[metadataSymbol] = {
+        routes: [{ method: "post", path: "/buffer", handlerName: "upload" }],
+        parameters: {
+          upload: [
+            {
+              index: 0,
+              type: "file",
+              key: "avatar",
+              fileOptions: { mode: "buffer" },
+            },
+          ],
+        },
+      };
+
+      registerControllers(mockApp, [BufferController]);
+      const handler = mockApp.post.mock.calls[0][2];
+
+      // Mock de archivo válido en modo buffer
+      const fakeBuffer = Buffer.from("contenido falso");
+      const mockReq = {
+        body: {},
+        isMultipart: () => true,
+        parts: async function* () {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          yield {
+            type: "file",
+            fieldname: "avatar",
+            mimetype: "image/png",
+            filename: "test.png",
+            encoding: "7bit",
+            toBuffer: vi.fn().mockResolvedValue(fakeBuffer),
+            file: { truncated: false },
+          };
+        },
+      } as any;
+
+      await handler(mockReq, { sent: false });
+
+      // Verificamos que se inyectó correctamente el objeto MultipartFile
+      const instanceMock = container.resolve(BufferController);
+      expect(instanceMock.upload).toHaveBeenCalledWith({
+        filename: "test.png",
+        mimetype: "image/png",
+        encoding: "7bit",
+        buffer: fakeBuffer,
+      });
+    });
+
+    it("Debería atrapar el límite de Fastify y lanzar FileTooLargeException", async () => {
+      const metadataSymbol = Symbol.metadata;
+      class SizeController {
+        async upload(file: any) {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          return file;
+        }
+      }
+
+      (SizeController as any)[metadataSymbol] = {
+        routes: [{ method: "post", path: "/size", handlerName: "upload" }],
+        parameters: {
+          upload: [
+            {
+              index: 0,
+              type: "file",
+              key: "avatar",
+              fileOptions: { maxSize: 1024 },
+            },
+          ],
+        },
+      };
+
+      registerControllers(mockApp, [SizeController]);
+      const handler = mockApp.post.mock.calls[0][2];
+
+      // Fastify lanza este error específico cuando el stream excede el tamaño en caliente
+      const fastifyError = new Error("Limit reached");
+      (fastifyError as any).code = "FST_REQ_FILE_TOO_LARGE";
+
+      const mockReq = {
+        isMultipart: () => true,
+        parts: async function* () {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          const fastifyError = new Error("Limit reached");
+          (fastifyError as any).code = "FST_REQ_FILE_TOO_LARGE";
+          throw fastifyError;
+        },
+      } as any;
+
+      await expect(handler(mockReq, { sent: false })).rejects.toThrow();
+    });
+  });
+
+  describe("Extracción de Cookies (@Cookie)", () => {
+    it("Debería lanzar error si se usa @Cookie pero el plugin no está activado", async () => {
+      const metadataSymbol = Symbol.metadata;
+      class BadCookieController {
+        async get(cookie: string) {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          return cookie;
+        }
+      }
+
+      (BadCookieController as any)[metadataSymbol] = {
+        routes: [{ method: "get", path: "/nocookie", handlerName: "get" }],
+        parameters: { get: [{ index: 0, type: "cookie", key: "token" }] },
+      };
+
+      registerControllers(mockApp, [BadCookieController]);
+      const handler = mockApp.get.mock.calls[0][2];
+
+      // Simulamos un Request SIN el plugin registrado (request.cookies es undefined)
+      const mockReq = {} as any;
+      const mockReply = { sent: false } as any;
+
+      // Debe lanzar un error indicando que el plugin de cookies no está activado
+      await expect(handler(mockReq, mockReply)).rejects.toThrow();
+    });
+
+    it("Debería extraer una cookie específica y también el objeto completo de cookies", async () => {
+      const metadataSymbol = Symbol.metadata;
+      class GoodCookieController {
+        test = vi.fn().mockResolvedValue("cookie ok");
+      }
+
+      (GoodCookieController as any)[metadataSymbol] = {
+        routes: [{ method: "get", path: "/cookie", handlerName: "test" }],
+        parameters: {
+          test: [
+            { index: 0, type: "cookie", key: "token" },
+            { index: 1, type: "cookie" },
+          ],
+        },
+      };
+
+      registerControllers(mockApp, [GoodCookieController]);
+      const handler = mockApp.get.mock.calls[0][2];
+
+      // Simulamos un Request CON el plugin de Fastify activo
+      const fakeCookies = { token: "abc-123", theme: "dark" };
+      const mockReq = { cookies: fakeCookies } as any;
+
+      await handler(mockReq, { sent: false });
+
+      const instanceMock = container.resolve(GoodCookieController);
+
+      // Verificamos que se inyectó "abc-123" en el primer parámetro, y el objeto entero en el segundo
+      expect(instanceMock.test).toBeDefined();
+      expect(instanceMock.test).toHaveBeenCalledTimes(1);
+      expect(instanceMock.test).toHaveBeenCalledWith("abc-123", fakeCookies);
+    });
+  });
+
   describe("Formateo de Respuesta (formatResponse)", () => {
     it("No debería hacer nada si la respuesta ya fue enviada (reply.sent)", async () => {
       const metadataSymbol = Symbol.metadata;
