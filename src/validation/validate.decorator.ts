@@ -41,13 +41,27 @@ export function Validate(schema: TSchema, argIndex: number = 0) {
 
     return function (this: This, ...args: Args): Return {
       const logger = getLogger();
-      const dataToValidate = args[argIndex];
+      let dataToValidate = args[argIndex];
 
       // Si el argumento a validar no está presente, lanzamos un error específico para facilitar la depuración
       if (dataToValidate === undefined) {
         const errorMsg = `[FastifyKit Validate]: Falta el argumento en la posición ${argIndex} para el método '${String(context.name)}'`;
         logger.error(`🔴 ${errorMsg}`);
         throw new Error(errorMsg);
+      }
+
+      // Intentamos convertir y castear los datos al tipo esperado por el esquema.
+      // Si ocurre un error durante esta conversión, lo registramos como un error crítico,
+      // pero no lanzamos una excepción aquí porque la validación posterior aún puede detectar problemas de tipo o estructura.
+      try {
+        const converted = Value.Convert(schema, dataToValidate);
+        dataToValidate = Value.Cast(schema, converted);
+        args[argIndex] = dataToValidate;
+      } catch (err: any) {
+        logger.error(
+          `🔴 [FastifyKit Validate] Error crítico en conversión de datos`,
+          err,
+        );
       }
 
       // Validamos los datos utilizando TypeBox. Si no son válidos, obtenemos los errores y los registramos antes de lanzar una excepción.
@@ -62,7 +76,7 @@ export function Validate(schema: TSchema, argIndex: number = 0) {
         }));
 
         logger.warn(
-          `🔴 [FastifyKit Validate] Los datos rechazados en '${String(context.name)}'`,
+          `🔴 [FastifyKit Validate] Datos rechazados en '${String(context.name)}'`,
           { errors },
         );
 
