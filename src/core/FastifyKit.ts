@@ -43,7 +43,7 @@ export interface FastifyKitOptions {
     enableHelmet?: boolean | FastifyHelmetOptions;
     rateLimit?: CreateRateLimitOptions;
   };
-  multipart?: boolean | "keyValues" | FastifyMultipartOptions;
+  multipart?: boolean | FastifyMultipartOptions;
   cookies?: boolean | FastifyCookieOptions;
   fastifyOptions?: FastifyServerOptions & {
     http2?: boolean;
