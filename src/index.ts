@@ -9,7 +9,11 @@ if ((Symbol as any).metadata === undefined) {
 // ----------------------------------------------
 // Core & Bootstrap
 // ----------------------------------------------
-export { FastifyKit, type FastifyKitOptions } from "./core/FastifyKit.js";
+export {
+  FastifyKit,
+  type FastifyKitOptions,
+  FASTIFY_INSTANCE_TOKEN,
+} from "./core/FastifyKit.js";
 export { Module } from "./core/module.decorator.js";
 export {
   discoverControllers,
