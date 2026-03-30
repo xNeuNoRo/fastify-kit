@@ -325,6 +325,7 @@ async function resolveStreamMultipartFile(
   request: FastifyRequest,
   maxSize?: number,
   mimetypes?: string[],
+  isOptional: boolean = false,
 ): Promise<any> {
   try {
     for await (const part of request.parts({
@@ -357,6 +358,8 @@ async function resolveStreamMultipartFile(
       };
     }
 
+    if (isOptional) return undefined;
+
     throwMissingMultipartFile(param.key);
   } catch (error: any) {
     mapMultipartSizeError(error, maxSize);
@@ -379,21 +382,33 @@ async function resolveMultipartFile(
   const maxSize = options.maxSize;
   const mimetypes = options.mimetypes;
   const mode = options.mode || "buffer";
+  const isOptional = options.optional === true;
 
   // Si ya esta precargado en memoria por preparseMultipartFormData,
   // lo resolvemos como buffer
   const body = request.body as any;
   const fileInBody = body?.[param.key];
-  if (
+  const existsInBody =
     Buffer.isBuffer(fileInBody) ||
     fileInBody?.filename ||
-    (Array.isArray(fileInBody) && fileInBody[0]?.filename)
-  ) {
+    (Array.isArray(fileInBody) && fileInBody[0]?.filename);
+  if (existsInBody) {
     return resolveBufferedMultipartFile(param, request, options.mimetypes);
   }
 
+  const existsInMap = (request as any)._filesMap?.has(param.key);
+  if (!existsInBody && !existsInMap && mode === "buffer" && isOptional) {
+    return undefined;
+  }
+
   if (mode === "stream") {
-    return resolveStreamMultipartFile(param, request, maxSize, mimetypes);
+    return resolveStreamMultipartFile(
+      param,
+      request,
+      maxSize,
+      mimetypes,
+      isOptional,
+    );
   }
 
   return resolveBufferedMultipartFile(param, request, mimetypes);
