@@ -95,6 +95,24 @@ function shouldPreparseMultipart(
     return false;
   }
 
+  // Si el body ya tiene alguna propiedad que parece un archivo
+  // (tiene una propiedad "filename"), asumimos que el formulario multipart ya
+  // fue precargado en memoria por alguna razón (por ejemplo, por otro middleware o plugin)
+  // y no intentamos precargarlo nuevamente para evitar problemas de rendimiento o conflictos.
+  const body = request.body as any;
+  if (body && typeof body === "object" && !Array.isArray(body)) {
+    const values = Object.values(body);
+    const alreadyParsed = values.some(
+      (v: any) =>
+        (v && typeof v === "object" && "filename" in v) ||
+        (Array.isArray(v) &&
+          v[0] &&
+          typeof v[0] === "object" &&
+          "filename" in v[0]),
+    );
+    if (alreadyParsed) return false;
+  }
+
   return !methodParamsMeta.some(
     (p) => p.type === "file" && p.fileOptions?.mode === "stream",
   );
@@ -175,6 +193,9 @@ async function preparseMultipartFormData(
     return;
   }
 
+  // Si por alguna razon el stream ya esta cerrado, no intentamos preparsear para evitar errores.
+  if (request?.raw?.readableEnded) return;
+
   initializeMultipartRequest(request);
 
   const globalMaxSize = getGlobalMaxFileSize(methodParamsMeta);
@@ -250,7 +271,25 @@ function resolveBufferedMultipartFile(
   request: FastifyRequest,
   mimetypes?: string[],
 ): any {
-  const fileData = (request as any)._filesMap?.get(param.key);
+  let fileData = (request as any)._filesMap?.get(param.key);
+
+  if (!fileData && request.body) {
+    const rawValue = (request.body as any)[param.key];
+    if (rawValue) {
+      // Normalizamos Fastify puede devolver objeto o array de objetos
+      const file = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+
+      // Adaptamos el formato de Fastify al formato esperado por el decorador @File() para mantener la consistencia
+      if (file?.filename) {
+        fileData = {
+          filename: file.filename,
+          mimetype: file.mimetype,
+          encoding: file.encoding,
+          buffer: file.data, // El plugin usa .data para el Buffer
+        };
+      }
+    }
+  }
 
   if (!fileData) {
     throwMissingMultipartFile(param.key);
