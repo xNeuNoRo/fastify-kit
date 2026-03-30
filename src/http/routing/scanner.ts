@@ -320,6 +320,7 @@ async function resolveStreamMultipartFile(
       // Si la parte es un campo de formulario (no un archivo), la agregamos al body para
       // que esté disponible en los decoradores @Body() si el dev lo necesita
       if (part.type === "field") {
+        request.body = request.body || {};
         (request.body as any)[part.fieldname] = part.value;
         continue;
       }
@@ -368,8 +369,13 @@ async function resolveMultipartFile(
 
   // Si ya esta precargado en memoria por preparseMultipartFormData,
   // lo resolvemos como buffer
-  const isAlreadyInBody = (request.body as any)?.[param.key];
-  if (isAlreadyInBody) {
+  const body = request.body as any;
+  const fileInBody = body?.[param.key];
+  if (
+    fileInBody &&
+    (fileInBody.filename ||
+      (Array.isArray(fileInBody) && fileInBody[0]?.filename))
+  ) {
     return resolveBufferedMultipartFile(param, request, options.mimetypes);
   }
 
@@ -480,6 +486,11 @@ export async function extractArguments(
   wsContext?: { socket: WebSocket; payload: any },
 ): Promise<any[]> {
   if (!wsContext) {
+    // Si la petición es multipart/form-data y aún no se ha precargado
+    if (typeof request.isMultipart === "function" && request.isMultipart()) {
+      request.body = request.body || {}; // Inicializamos el body en caso de,
+    }
+
     // Antes de extraer los argumentos, pre-parseamos el formulario multipart en memoria si la petición es multipart/form-data
     await preparseMultipartFormData(request, methodParamsMeta);
   }
