@@ -23,6 +23,7 @@ import type {
 } from "../http/decorators/types.js";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import type { FastifyCookieOptions } from "@fastify/cookie";
+import type { FastifyJWTOptions } from "@fastify/jwt";
 import type { FastifyMultipartOptions } from "@fastify/multipart";
 import type { CreateRateLimitOptions } from "@fastify/rate-limit";
 import type { FastifyCorsOptions } from "@fastify/cors";
@@ -45,6 +46,7 @@ export interface FastifyKitOptions {
   };
   multipart?: boolean | "keyValues" | FastifyMultipartOptions;
   cookies?: boolean | FastifyCookieOptions;
+  jwt?: boolean | FastifyJWTOptions;
   fastifyOptions?: FastifyServerOptions & {
     http2?: boolean;
     https?: HttpsServerOptions | null;
@@ -195,6 +197,15 @@ export class FastifyKit {
       await app.register(import("@fastify/cookie"), {
         ...cookieConfig,
       });
+    }
+
+    // Si el usuario activa JWT, registramos el plugin de JWT para manejar la autenticación basada en tokens en los controladores.
+    if (options.jwt) {
+      const jwtConfig =
+        typeof options.jwt === "object"
+          ? options.jwt
+          : ({} as FastifyJWTOptions);
+      await app.register(import("@fastify/jwt"), jwtConfig);
     }
 
     // Si el usuario activa websockets, registramos el plugin de websockets para manejar los gateways
