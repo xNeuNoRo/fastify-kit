@@ -366,6 +366,13 @@ async function resolveMultipartFile(
   const mimetypes = options.mimetypes;
   const mode = options.mode || "buffer";
 
+  // Si ya esta precargado en memoria por preparseMultipartFormData,
+  // lo resolvemos como buffer
+  const isAlreadyInBody = (request.body as any)?.[param.key];
+  if (isAlreadyInBody) {
+    return resolveBufferedMultipartFile(param, request, options.mimetypes);
+  }
+
   if (mode === "stream") {
     return resolveStreamMultipartFile(param, request, maxSize, mimetypes);
   }
