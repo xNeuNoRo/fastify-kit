@@ -42,6 +42,8 @@ export interface FileOptions {
    * @default 'buffer'
    */
   mode?: "buffer" | "stream";
+  /* Si es true, el archivo es opcional */
+  optional?: boolean;
 }
 
 /**
