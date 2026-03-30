@@ -59,6 +59,8 @@ export interface FastifyKitOptions {
       };
 }
 
+export const FASTIFY_INSTANCE_TOKEN = Symbol("FastifyInstance");
+
 export class FastifyKit {
   // Usamos un símbolo para almacenar la metadata de los módulos y
   // evitar conflictos con otras propiedades de la clase.
@@ -129,6 +131,9 @@ export class FastifyKit {
         },
       } as FastifyServerOptions["ajv"],
     }).withTypeProvider<TypeBoxTypeProvider>();
+
+    // Registramos la instancia de Fastify en el contenedor de inyección de dependencias para que pueda ser inyectada en cualquier controlador o proveedor utilizando el token FASTIFY_INSTANCE_TOKEN.
+    container.registerInstance(FASTIFY_INSTANCE_TOKEN, app);
 
     // Escaneamos todos los módulos y submódulos para obtener la lista completa de controladores a registrar en Fastify. Esto permite que el usuario solo tenga que especificar el módulo raíz en las opciones, y la Factory se encargará de descubrir todos los controladores en el árbol de módulos.
     const { allControllers, allProviders } = await this.bootstrapModule(
