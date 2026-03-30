@@ -104,11 +104,11 @@ function shouldPreparseMultipart(
     const values = Object.values(body);
     const alreadyParsed = values.some(
       (v: any) =>
-        (v && typeof v === "object" && "filename" in v) ||
-        (Array.isArray(v) &&
-          v[0] &&
-          typeof v[0] === "object" &&
-          "filename" in v[0]),
+        (v &&
+          typeof v === "object" &&
+          ("filename" in v || "data" in v || "value" in v)) ||
+        Buffer.isBuffer(v) ||
+        (Array.isArray(v) && (v[0]?.filename || Buffer.isBuffer(v[0]))),
     );
     if (alreadyParsed) return false;
   }
@@ -189,6 +189,10 @@ async function preparseMultipartFormData(
   request: FastifyRequest,
   methodParamsMeta: any[],
 ): Promise<void> {
+  if (typeof request.isMultipart === "function" && request.isMultipart()) {
+    request.body = request.body || {};
+  }
+
   if (!shouldPreparseMultipart(request, methodParamsMeta)) {
     return;
   }
@@ -279,13 +283,22 @@ function resolveBufferedMultipartFile(
       // Normalizamos Fastify puede devolver objeto o array de objetos
       const file = Array.isArray(rawValue) ? rawValue[0] : rawValue;
 
-      // Adaptamos el formato de Fastify al formato esperado por el decorador @File() para mantener la consistencia
-      if (file?.filename) {
+      if (Buffer.isBuffer(file)) {
         fileData = {
-          filename: file.filename,
-          mimetype: file.mimetype,
-          encoding: file.encoding,
-          buffer: file.data, // El plugin usa .data para el Buffer
+          filename: "uploaded_file", // Nombre generico ya que no podemos obtenerlo del buffer
+          mimetype: "application/octet-stream",
+          encoding: "7bit",
+          buffer: file,
+        };
+      } else if (file && typeof file === "object" && file?.filename) {
+        fileData = {
+          filename: file.filename || "uploaded_file",
+          mimetype: file.mimetype || "application/octet-stream",
+          encoding: file.encoding || "7bit",
+          buffer:
+            file.data ||
+            file.value ||
+            (Buffer.isBuffer(file) ? file : undefined),
         };
       }
     }
@@ -372,9 +385,9 @@ async function resolveMultipartFile(
   const body = request.body as any;
   const fileInBody = body?.[param.key];
   if (
-    fileInBody &&
-    (fileInBody.filename ||
-      (Array.isArray(fileInBody) && fileInBody[0]?.filename))
+    Buffer.isBuffer(fileInBody) ||
+    fileInBody?.filename ||
+    (Array.isArray(fileInBody) && fileInBody[0]?.filename)
   ) {
     return resolveBufferedMultipartFile(param, request, options.mimetypes);
   }
