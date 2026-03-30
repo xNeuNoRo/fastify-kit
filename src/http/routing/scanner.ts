@@ -278,6 +278,13 @@ async function resolveStreamMultipartFile(
     for await (const part of request.parts({
       limits: { fileSize: maxSize },
     })) {
+      // Si la parte es un campo de formulario (no un archivo), la agregamos al body para
+      // que esté disponible en los decoradores @Body() si el dev lo necesita
+      if (part.type === "field") {
+        (request.body as any)[part.fieldname] = part.value;
+        continue;
+      }
+
       if (part.type !== "file") {
         continue;
       }
@@ -431,12 +438,25 @@ export async function extractArguments(
     await preparseMultipartFormData(request, methodParamsMeta);
   }
 
+  // Ordenamos los parámetros decorados para procesar primero los que son de tipo "file" con modo "stream",
+  // ya que estos no se precargan en memoria y deben ser resueltos directamente desde el stream del request.
+  // Esto es importante para evitar problemas de rendimiento al acceder a archivos grandes sin cargarlos
+  // completamente en memoria, y también para asegurar que el stream del archivo esté disponible para
+  // ser leído cuando se procese el parámetro correspondiente.
+  const sortedParams = [...methodParamsMeta].sort((a, b) => {
+    const isAStream = a.type === "file" && a.fileOptions?.mode === "stream";
+    const isBStream = b.type === "file" && b.fileOptions?.mode === "stream";
+    if (isAStream && !isBStream) return -1;
+    if (!isAStream && isBStream) return 1;
+    return 0;
+  });
+
   // Creamos un array de argumentos que se pasará al método del controlador,
   // donde cada posición corresponde al índice definido en los decoradores de parámetros.
   const args: any[] = [];
 
   // Iteramos sobre cada parámetro decorado y extraemos su valor del request o reply según el tipo de parámetro definido en la metadata del decorador
-  for (const param of methodParamsMeta) {
+  for (const param of sortedParams) {
     let value = await resolveParamValue(param, request, reply, wsContext);
 
     // Si el decorador de este parámetro tiene un pipe definido,
