@@ -527,25 +527,22 @@ export async function extractArguments(
   methodParamsMeta: any[],
   wsContext?: { socket: WebSocket; payload: any },
 ): Promise<any[]> {
+  console.log("   -> [EXTRACT] Inicio de extracción");
+  
   if (!wsContext) {
-    // Si la petición es multipart/form-data y aún no se ha precargado
     if (
       typeof request.isMultipart === "function" &&
       request.isMultipart() &&
       !(request as any)._multipartParsed
     ) {
-      request.body = request.body || {}; // Inicializamos el body en caso de,
+      request.body = request.body || {}; 
     }
 
-    // Antes de extraer los argumentos, pre-parseamos el formulario multipart en memoria si la petición es multipart/form-data
+    console.log("   -> [EXTRACT] Evaluando preparseMultipartFormData...");
     await preparseMultipartFormData(request, methodParamsMeta);
+    console.log("   -> [EXTRACT] preparse finalizado");
   }
 
-  // Ordenamos los parámetros decorados para procesar primero los que son de tipo "file" con modo "stream",
-  // ya que estos no se precargan en memoria y deben ser resueltos directamente desde el stream del request.
-  // Esto es importante para evitar problemas de rendimiento al acceder a archivos grandes sin cargarlos
-  // completamente en memoria, y también para asegurar que el stream del archivo esté disponible para
-  // ser leído cuando se procese el parámetro correspondiente.
   const sortedParams = [...methodParamsMeta].sort((a, b) => {
     const isAStream = a.type === "file" && a.fileOptions?.mode === "stream";
     const isBStream = b.type === "file" && b.fileOptions?.mode === "stream";
@@ -554,19 +551,14 @@ export async function extractArguments(
     return 0;
   });
 
-  // Creamos un array de argumentos que se pasará al método del controlador,
-  // donde cada posición corresponde al índice definido en los decoradores de parámetros.
   const args: any[] = [];
 
-  // Iteramos sobre cada parámetro decorado y extraemos su valor del request o reply según el tipo de parámetro definido en la metadata del decorador
   for (const param of sortedParams) {
+    console.log(`   -> [EXTRACT] Resolviendo parámetro index: ${param.index}, tipo: ${param.type}`);
     let value = await resolveParamValue(param, request, reply, wsContext);
 
-    // Si el decorador de este parámetro tiene un pipe definido,
-    // resolvemos su instancia desde el contenedor de inyección de dependencias
-    // y llamamos a su método transform pasando el valor extraído.
-    // El resultado transformado se asigna como valor final del argumento que se pasará al método del controlador.
     if (param.pipe) {
+      console.log(`   -> [EXTRACT] Ejecutando Pipe para tipo: ${param.type}`);
       const pipeInstance = container.resolve<PipeTransform>(param.pipe);
       value = await pipeInstance.transform(value);
     }
@@ -574,6 +566,7 @@ export async function extractArguments(
     args[param.index] = value;
   }
 
+  console.log("   -> [EXTRACT] Extracción completada");
   return args;
 }
 
@@ -667,37 +660,38 @@ export function registerControllers(
         fullPath,
         {
           schema: route.schema,
-          // Solo lo inyectamos si hay guards para evitar overhead
           preHandler: buildGuardHandler(allGuards),
-          // Solo lo inyectamos si hay configuración de rate limit para evitar overhead
-          ...(rateLimitConfig
-            ? {
-                config: {
-                  rateLimit: rateLimitConfig,
-                },
-              }
-            : {}),
+          ...(rateLimitConfig ? { config: { rateLimit: rateLimitConfig } } : {}),
         },
         async (request, reply) => {
+          console.log(`\n🟢 [DEBUG] 1. Request recibida en: ${fullPath}`);
           let result;
 
-          // Si no hay decoradores de parámetros, mantenemos compatibilidad pasandole (req, reply) directamente al método del controlador
-          if (methodParamsMeta.length === 0) {
-            result = await instance[route.handlerName](request, reply);
-          }
-          // Si hay decoradores de parámetros, extraemos los argumentos a pasar al método del controlador según los decoradores de parámetros definidos en el método del controlador y luego llamamos al método del controlador pasando esos argumentos.
-          else {
-            const args = await extractArguments(
-              request,
-              reply,
-              methodParamsMeta,
-            );
-            // Llamamos al método del controlador correspondiente a esta ruta pasando los argumentos extraídos de la request y reply según los decoradores de parámetros definidos en el método del controlador
-            result = await instance[route.handlerName](...args);
-          }
+          try {
+            if (methodParamsMeta.length === 0) {
+              console.log(`🟢 [DEBUG] 2a. Ejecutando sin @UseParams`);
+              result = await instance[route.handlerName](request, reply);
+            } else {
+              console.log(`🟢 [DEBUG] 2b. Entrando a extractArguments...`);
+              const args = await extractArguments(request, reply, methodParamsMeta);
+              
+              // Mapeamos los tipos para no imprimir objetos gigantes en consola
+              const argTypes = args.map(a => a?.constructor?.name || typeof a);
+              console.log(`🟢 [DEBUG] 3. Argumentos extraídos:`, argTypes);
 
-          // Formateamos la respuesta devuelta por el método del controlador para enviarla al cliente utilizando la función formatResponse, que se encarga de verificar si el controlador ya ha enviado una respuesta o si el resultado devuelto es una instancia de ApiResponse, y formatea la respuesta de manera consistente.
-          return formatResponse(result, reply);
+              console.log(`🟢 [DEBUG] 4. Llamando al controlador [${String(route.handlerName)}]`);
+              result = await instance[route.handlerName](...args);
+              console.log(`🟢 [DEBUG] 5. Controlador finalizó con éxito`);
+            }
+
+            console.log(`🟢 [DEBUG] 6. Formateando respuesta...`);
+            const formatted = formatResponse(result, reply);
+            console.log(`🟢 [DEBUG] 7. Respuesta formateada. Fin de la ruta.`);
+            return formatted;
+          } catch (err) {
+            console.error(`🔴 [DEBUG] ERROR ATRAPADO EN LA EJECUCIÓN DE LA RUTA:`, err);
+            throw err;
+          }
         },
       );
     }
