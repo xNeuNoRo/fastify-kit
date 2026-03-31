@@ -515,7 +515,11 @@ export async function extractArguments(
 ): Promise<any[]> {
   if (!wsContext) {
     // Si la petición es multipart/form-data y aún no se ha precargado
-    if (typeof request.isMultipart === "function" && request.isMultipart()) {
+    if (
+      typeof request.isMultipart === "function" &&
+      request.isMultipart() &&
+      !(request as any)._multipartParsed
+    ) {
       request.body = request.body || {}; // Inicializamos el body en caso de,
     }
 
@@ -572,6 +576,11 @@ function formatResponse(result: any, reply: FastifyReply) {
   if (reply.sent) {
     return;
   }
+
+  // Si el resultado devuelto por el controlador es exactamente el objeto reply,
+  // asumimos que el controlador está manejando la respuesta manualmente y
+  // no hacemos nada para evitar interferir con su manejo personalizado de la respuesta.
+  if (result === reply) return;
 
   // Si el resultado devuelto por el controlador es una instancia de ApiResponse,
   // simplemente lo retornamos y ya que Fastify se encargará de serializarlo y enviarlo como respuesta.
