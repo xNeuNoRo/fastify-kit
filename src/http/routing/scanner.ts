@@ -189,6 +189,20 @@ async function preparseMultipartFormData(
   request: FastifyRequest,
   methodParamsMeta: any[],
 ): Promise<void> {
+  // Si no es multipart o ya se procesó, salir de inmediato de forma síncrona
+  if (
+    typeof request.isMultipart !== "function" ||
+    !request.isMultipart() ||
+    (request as any)._multipartParsed
+  ) {
+    return;
+  }
+
+  // Si la ruta no tiene decoradores @File(), no tiene sentido intentar consumir el stream
+  if (!methodParamsMeta.some((p) => p.type === "file")) {
+    return;
+  }
+
   if (typeof request.isMultipart === "function" && request.isMultipart()) {
     request.body = request.body || {};
   }
