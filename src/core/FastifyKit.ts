@@ -8,13 +8,13 @@ import { fastifyKitErrorHandler } from "../http/plugins/errorHandler.js";
 import {
   registerControllers,
   type Constructor,
-} from "../http/routing/scanner.js";
+} from "../http/routing/scanner/index.js";
 import { ApiResponse } from "../http/responses/ApiResponse.js";
 import {
   discoverControllers,
   discoverModules,
-  registerGateways,
 } from "../http/routing/discovery.js";
+import { registerGateways } from "../websockets/gateway.registry.js";
 import { container } from "../container/DIContainer.js";
 import { requestContext } from "../http/context/requestContext.js";
 import type {

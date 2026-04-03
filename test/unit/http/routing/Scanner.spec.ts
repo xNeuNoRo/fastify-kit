@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { container } from "../../../../src/container/DIContainer.js";
 import { ForbiddenException } from "../../../../src/http/exceptions/index.js";
 import { ApiResponse } from "../../../../src/http/responses/ApiResponse.js";
-import { registerControllers } from "../../../../src/http/routing/scanner.js";
+import { registerControllers } from "../../../../src/http/routing/scanner/index.js";
 import { LOGGER_TOKEN } from "../../../../src/logger/LoggerContract.js";
 
 declare global {
