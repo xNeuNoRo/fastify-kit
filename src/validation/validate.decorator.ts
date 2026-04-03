@@ -55,7 +55,7 @@ export function Validate(schema: TSchema, argIndex: number = 0) {
       // pero no lanzamos una excepción aquí porque la validación posterior aún puede detectar problemas de tipo o estructura.
       try {
         const converted = Value.Convert(schema, dataToValidate);
-        dataToValidate = Value.Cast(schema, converted);
+        dataToValidate = Value.Default(schema, converted);
         args[argIndex] = dataToValidate;
       } catch (err: any) {
         logger.error(
