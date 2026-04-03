@@ -21,7 +21,7 @@ export {
 } from "./http/routing/discovery.js";
 export type { ModuleOptions } from "./http/decorators/types.js";
 export type { AutoDiscoverOptions } from "./http/routing/discovery.js";
-export type { Constructor } from "./http/routing/scanner.js";
+export type { Constructor } from "./http/routing/scanner/index.js";
 
 // ----------------------------------------------
 // HTTP Routing & Controllers
