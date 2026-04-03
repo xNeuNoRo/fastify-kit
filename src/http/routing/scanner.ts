@@ -560,7 +560,23 @@ export async function extractArguments(
 
   // Iteramos sobre cada parámetro decorado y extraemos su valor del request o reply según el tipo de parámetro definido en la metadata del decorador
   for (const param of sortedParams) {
-    let value = await resolveParamValue(param, request, reply, wsContext);
+    let value;
+
+    // Para los parámetros de tipo "request" y "reply", asignamos directamente el objeto request o reply sin usar 'await',
+    // ya que no requieren procesamiento asíncrono para extraer su valor.
+    if (param.type === "reply") {
+      if (wsContext) {
+        throw new InternalServerException(
+          "[FastifyKit] No puedes usar @Res() dentro de un @WebSocketGateway.",
+        );
+      }
+      value = reply; // Asignación síncrona directa, sin 'await'
+    } else if (param.type === "request") {
+      value = request; // Asignación síncrona directa
+    } else {
+      // Para el resto de cosas (body, query, params, files), usamos el await normal
+      value = await resolveParamValue(param, request, reply, wsContext);
+    }
 
     // Si el decorador de este parámetro tiene un pipe definido,
     // resolvemos su instancia desde el contenedor de inyección de dependencias
