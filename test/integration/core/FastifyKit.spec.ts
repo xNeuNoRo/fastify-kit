@@ -433,7 +433,7 @@ describe("FastifyKit (Orquestador Core)", () => {
     it("Debería llamar al Auto-Discovery y deduplicar proveedores compartidos", async () => {
       // Importamos y espiamos las funciones de discovery sin ejecutar el disco real
       const DiscoveryModule =
-        await import("../../../src/http/routing/discovery.js");
+        await import("../../../src/core/discovery.js");
       const discoverCtrlSpy = vi
         .spyOn(DiscoveryModule, "discoverControllers")
         .mockResolvedValue([]);

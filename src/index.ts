@@ -18,9 +18,9 @@ export { Module } from "./core/module.decorator.js";
 export {
   discoverControllers,
   discoverModules,
-} from "./http/routing/discovery.js";
+} from "./core/discovery.js";
 export type { ModuleOptions } from "./http/decorators/types.js";
-export type { AutoDiscoverOptions } from "./http/routing/discovery.js";
+export type { AutoDiscoverOptions } from "./core/discovery.js";
 export type { Constructor } from "./http/routing/scanner/index.js";
 
 // ----------------------------------------------

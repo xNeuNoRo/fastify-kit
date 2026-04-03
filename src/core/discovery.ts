@@ -1,10 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Constructor } from "./scanner/index.js";
+import type { Constructor } from "../http/routing/scanner/index.js";
 import { pathToFileURL } from "node:url";
-import type { FastifyKitMetadata } from "../decorators/types.js";
+import type { FastifyKitMetadata } from "../http/decorators/types.js";
 import { Dirent } from "node:fs";
-import { getLogger } from "../../logger/logger.factory.js";
+import { getLogger } from "../logger/logger.factory.js";
 
 const decoratorMetadataSymbol: symbol =
   (Symbol as any).metadata ?? Symbol.for("Symbol.metadata");

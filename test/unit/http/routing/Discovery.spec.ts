@@ -16,7 +16,7 @@ import { container } from "../../../../src/container/DIContainer.js";
 import {
   discoverControllers,
   discoverModules,
-} from "../../../../src/http/routing/discovery.js";
+} from "../../../../src/core/discovery.js";
 import { LOGGER_TOKEN } from "../../../../src/logger/LoggerContract.js";
 import { registerGateways } from "../../../../src/websockets/gateway.registry.js";
 

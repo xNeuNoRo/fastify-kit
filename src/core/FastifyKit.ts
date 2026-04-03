@@ -10,10 +10,7 @@ import {
   type Constructor,
 } from "../http/routing/scanner/index.js";
 import { ApiResponse } from "../http/responses/ApiResponse.js";
-import {
-  discoverControllers,
-  discoverModules,
-} from "../http/routing/discovery.js";
+import { discoverControllers, discoverModules } from "./discovery.js";
 import { registerGateways } from "../websockets/gateway.registry.js";
 import { container } from "../container/DIContainer.js";
 import { requestContext } from "../http/context/requestContext.js";
@@ -118,15 +115,16 @@ export class FastifyKit {
     options: FastifyKitOptions,
   ): Promise<FastifyInstance<any, any, any, any, TypeBoxTypeProvider>> {
     const userAjv = options.fastifyOptions?.ajv;
+    const isAjvObject = typeof userAjv === "object" && userAjv !== null;
 
     const app = fastify({
       ...options.fastifyOptions,
       ajv: {
         // Preservamos las opciones ajv del usuario (si existen)
-        ...userAjv,
+        ...(isAjvObject ? userAjv : {}),
         customOptions: {
           // Preservamos las customOptions del usuario (si existen)
-          ...userAjv?.customOptions,
+          ...(isAjvObject ? userAjv.customOptions : {}),
           strict: false, // Forzamos nuestro requerimiento crítico para TypeBox
         },
       } as FastifyServerOptions["ajv"],
@@ -172,7 +170,7 @@ export class FastifyKit {
     this.setupScheduledTasks(app, allProviders);
 
     app.log.info("[FastifyKit] kit inicializado correctamente!");
-    return app as any;
+    return app;
   }
 
   /**
@@ -415,6 +413,12 @@ export class FastifyKit {
   private static async bootstrapModule(
     moduleClass: any,
     visited = new Set(),
+    globalControllers = new Set<Constructor>(),
+    globalProvidersMap = new Map<
+      any,
+      { token: any; implementation: Constructor }
+    >(),
+    isRoot = true,
   ): Promise<{
     allControllers: Constructor[];
     allProviders: { token: any; implementation: Constructor }[];
@@ -431,26 +435,44 @@ export class FastifyKit {
       metadata.providers,
       moduleClass,
     );
-    const [controllers, allModules] = await Promise.all([
+    for (const provider of currentProviders) {
+      // Agregamos el proveedor al mapa global para evitar duplicados en submódulos
+      if (!globalProvidersMap.has(provider.token)) {
+        globalProvidersMap.set(provider.token, provider);
+      }
+    }
+    const [localControllers, allModules] = await Promise.all([
       this.collectModuleControllers(metadata),
       this.collectModuleImports(metadata),
     ]);
 
-    // Bootstrappeamos recursivamente cada submódulo para obtener sus controladores
-    // y agregarlos a la lista de controladores a registrar.
-    for (const subModule of allModules) {
-      const { allControllers: subControllers, allProviders: subProviders } =
-        await this.bootstrapModule(subModule, visited);
-      controllers.push(...subControllers);
-      currentProviders.push(...subProviders);
+    // Agregamos los controladores locales al conjunto global para evitar duplicados en submódulos
+    for (const controller of localControllers) {
+      globalControllers.add(controller);
     }
 
-    // Finalmente, retornamos todos los controladores y proveedores encontrados en
-    // este módulo y sus submódulos (evitando duplicados con Set) para que puedan ser registrados en Fastify.
-    return {
-      allControllers: Array.from(new Set(controllers)),
-      allProviders: this.deduplicateProviders(currentProviders),
-    };
+    // Bootstrappeamos recursivamente los submódulos, pasándoles las referencias globales para que puedan agregar sus controladores y proveedores sin duplicados.
+    for (const subModule of allModules) {
+      await this.bootstrapModule(
+        subModule,
+        visited,
+        globalControllers,
+        globalProvidersMap,
+        false,
+      );
+    }
+
+    // Si estamos en el módulo raíz, retornamos todos los controladores y proveedores globales encontrados en todo el árbol de módulos.
+    if (isRoot) {
+      return {
+        allControllers: Array.from(globalControllers),
+        allProviders: Array.from(globalProvidersMap.values()),
+      };
+    }
+
+    // Retorno "dummy" para las llamadas recursivas internas, ya que
+    // su trabajo real fue mutar `globalControllers` y `globalProvidersMap`.
+    return { allControllers: [], allProviders: [] };
   }
 
   /**
@@ -545,28 +567,5 @@ export class FastifyKit {
 
     // Fusionamos los módulos importados explícitamente y los descubiertos
     return [...manualImports, ...discoveredModules];
-  }
-
-  /**
-   * @description Función auxiliar para deduplicar los proveedores registrados en un módulo y sus submódulos, utilizando un Map basado en el token de cada proveedor para garantizar que no haya proveedores duplicados registrados en Fastify. Esto es importante para evitar conflictos y asegurar que cada token de proveedor corresponda a una única implementación en el contenedor de inyección de dependencias.
-   * @param providers El array de proveedores a deduplicar, que puede contener proveedores registrados en el módulo actual y en sus submódulos. Cada proveedor es un objeto que contiene un token y una implementación.
-   * @returns Un array de proveedores deduplicados, donde cada token de proveedor corresponde a una única implementación. Si había proveedores duplicados en el array original (es decir, proveedores con el mismo token), solo se mantendrá uno de ellos en el array resultante.
-   */
-  private static deduplicateProviders(
-    providers: { token: any; implementation: Constructor }[],
-  ): { token: any; implementation: Constructor }[] {
-    // Deduplicamos los proveedores usando un Map basado en el "token"
-    const uniqueProvidersMap = new Map<
-      any,
-      { token: any; implementation: Constructor }
-    >();
-
-    for (const provider of providers) {
-      if (!uniqueProvidersMap.has(provider.token)) {
-        uniqueProvidersMap.set(provider.token, provider);
-      }
-    }
-
-    return Array.from(uniqueProvidersMap.values());
   }
 }
