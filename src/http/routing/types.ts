@@ -1,4 +1,4 @@
-import { FastifySchema } from "fastify";
+import type { FastifySchema } from "fastify";
 
 export type HttpMethod = "get" | "post" | "put" | "patch" | "delete";
 
