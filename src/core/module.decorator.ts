@@ -1,4 +1,4 @@
-import type { Constructor } from "../http/routing/scanner.js";
+import type { Constructor } from "../http/routing/scanner/index.js";
 import type { ModuleOptions, FastifyKitMetadata } from "../http/decorators/types.js";
 
 /**
