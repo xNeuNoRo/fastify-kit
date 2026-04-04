@@ -317,19 +317,25 @@ export function registerGateways(
       (connection: any, request: FastifyRequest) => {
         const socket = (connection?.socket || connection) as FastifyKitSocket;
 
+        // Extraemos el namespace del path del gateway para que los
+        // handlers puedan usarlo y separar mejor la lógica si el mismo handler maneja varios namespaces.
+        const namespace = options.path;
+
         // Registramos todos los metadatos para el socket
         socket.id = randomUUID();
         socket.isAlive = true;
         socket.data = {};
+        socket.namespace = namespace;
 
         // Delegamos todos los metodos del socket al manager registrado para las salas
         socket.join = (room: string) =>
-          roomManager.join(socket.id, room, socket);
-        socket.leave = (room: string) => roomManager.leave(socket.id, room);
+          roomManager.join(namespace, room, socket.id, socket);
+        socket.leave = (room: string) =>
+          roomManager.leave(namespace, room, socket.id);
         socket.leaveAll = () => roomManager.leaveAll(socket.id);
         socket.to = (room: string) => ({
           emit: async (pattern: string, payload: any) =>
-            roomManager.emitToRoom(room, pattern, payload, adapter),
+            roomManager.emitToRoom(namespace, room, pattern, payload, adapter),
         });
 
         // Registramos el handler de @OnConnect() para que se ejecute cuando un cliente se conecte

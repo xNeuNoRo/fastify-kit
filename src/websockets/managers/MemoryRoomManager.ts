@@ -8,47 +8,73 @@ import {
 
 @Injectable(WS_ROOM_MANAGER_TOKEN)
 export class MemoryRoomManager implements WsRoomManager {
-  // Mapa principal: nombre_de_sala => Map<socketId, Socket>
+  // Mapa principal. Clave compuesta: "namespace:room" => Map<socketId, Socket>
   private readonly rooms = new Map<string, Map<string, FastifyKitSocket>>();
-  // Mapa inverso para optimizar leaveAll: socketId => Set<nombre_de_sala>
-  private readonly socketRooms = new Map<string, Set<string>>();
+  // Mapa inverso para optimizar leaveAll: socketId => Set<{ namespace, room }>
+  private readonly socketRooms = new Map<
+    string,
+    Set<{ namespace: string; room: string }>
+  >();
+
+  // Utilidad para obtener la clave compuesta del mapa principal a partir del namespace y la sala
+  private getRoomKey(namespace: string, room: string): string {
+    return `${namespace}:${room}`;
+  }
 
   async join(
-    socketId: string,
+    namespace: string,
     room: string,
+    socketId: string,
     socket: FastifyKitSocket,
   ): Promise<void> {
-    // Si la sala no existe, la creamos
-    if (!this.rooms.has(room)) {
-      this.rooms.set(room, new Map());
+    const roomKey = this.getRoomKey(namespace, room);
+
+    // Si la sala en ese namespace no existe, la creamos
+    if (!this.rooms.has(roomKey)) {
+      this.rooms.set(roomKey, new Map());
     }
     // Añadimos el socket a la sala
-    this.rooms.get(room)!.set(socketId, socket);
+    this.rooms.get(roomKey)!.set(socketId, socket);
 
-    // Actualizamos el mapa inverso (basicamente el historial de salas del socket)
+    // Actualizamos el historial de salas del socket
     if (!this.socketRooms.has(socketId)) {
       this.socketRooms.set(socketId, new Set());
     }
-    this.socketRooms.get(socketId)!.add(room);
+
+    // Guardamos explícitamente la referencia al namespace y la sala
+    this.socketRooms.get(socketId)!.add({ namespace, room });
   }
 
-  async leave(socketId: string, room: string): Promise<void> {
+  async leave(
+    namespace: string,
+    room: string,
+    socketId: string,
+  ): Promise<void> {
+    const roomKey = this.getRoomKey(namespace, room);
+
     // Si la sala existe
-    if (this.rooms.has(room)) {
+    if (this.rooms.has(roomKey)) {
       // Removemos el socket de la sala
-      const roomMap = this.rooms.get(room)!;
+      const roomMap = this.rooms.get(roomKey)!;
       roomMap.delete(socketId);
 
       // Si la sala quedó vacía, liberamos la memoria
       if (roomMap.size === 0) {
-        this.rooms.delete(room);
+        this.rooms.delete(roomKey);
       }
     }
 
     // Lo sacamos del historial del socket
     if (this.socketRooms.has(socketId)) {
       const sRooms = this.socketRooms.get(socketId)!;
-      sRooms.delete(room);
+
+      // Buscamos y eliminamos la entrada exacta
+      for (const entry of sRooms) {
+        if (entry.namespace === namespace && entry.room === room) {
+          sRooms.delete(entry);
+          break;
+        }
+      }
 
       // Si el socket no pertenece a ninguna sala, lo limpiamos completamente
       if (sRooms.size === 0) {
@@ -60,30 +86,37 @@ export class MemoryRoomManager implements WsRoomManager {
   async leaveAll(socketId: string): Promise<void> {
     const rooms = this.socketRooms.get(socketId);
 
-    // SI hay salas en el historial de conexiones del socket, las recorremos y lo removemos de cada una
+    // Si hay salas en el historial, iteramos y lo removemos de cada una
     if (rooms) {
       // Usamos Array.from para evitar mutar el Set mientras iteramos sobre él
-      for (const room of Array.from(rooms)) {
-        await this.leave(socketId, room);
+      for (const entry of Array.from(rooms)) {
+        await this.leave(entry.namespace, entry.room, socketId);
       }
     }
   }
 
-  async getSocketsInRoom(room: string): Promise<FastifyKitSocket[]> {
-    const roomSockets = this.rooms.get(room);
+  async getSocketsInRoom(
+    namespace: string,
+    room: string,
+  ): Promise<FastifyKitSocket[]> {
+    const roomKey = this.getRoomKey(namespace, room);
+    const roomSockets = this.rooms.get(roomKey);
+
     if (!roomSockets) return [];
-    // Devolvemos un array con los sockets conectados a la sala (usamos Array.from para convertir el Map en un array de valores)
+
+    // Devolvemos un array con los sockets conectados a la sala
     return Array.from(roomSockets.values());
   }
 
   async emitToRoom(
+    namespace: string,
     room: string,
     pattern: string,
     payload: any,
     adapter: WsAdapter,
   ): Promise<void> {
-    // Obtenemos los sockets conectados a la sala
-    const sockets = await this.getSocketsInRoom(room);
+    // Obtenemos los sockets conectados a la sala en el namespace correcto
+    const sockets = await this.getSocketsInRoom(namespace, room);
     if (sockets.length === 0) return;
 
     // Codificamos el mensaje usando el adaptador

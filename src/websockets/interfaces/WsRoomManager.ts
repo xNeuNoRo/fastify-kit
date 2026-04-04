@@ -16,14 +16,19 @@ export interface WsRoomManager {
    * @param room El nombre de la sala.
    * @param socket La instancia del socket para poder enviarle mensajes luego.
    */
-  join(socketId: string, room: string, socket: FastifyKitSocket): Promise<void>;
+  join(
+    namespace: string,
+    room: string,
+    socketId: string,
+    socket: FastifyKitSocket,
+  ): Promise<void>;
 
   /**
    * @description Remueve un socket de una sala específica.
    * @param socketId El ID único del socket a remover.
    * @param room El nombre de la sala.
    */
-  leave(socketId: string, room: string): Promise<void>;
+  leave(namespace: string, room: string, socketId: string): Promise<void>;
 
   /**
    * @description Remueve un socket de todas las salas a las que pertenece.
@@ -37,7 +42,10 @@ export interface WsRoomManager {
    * @param room El nombre de la sala.
    * @returns Un array de sockets conectados.
    */
-  getSocketsInRoom(room: string): Promise<FastifyKitSocket[]>;
+  getSocketsInRoom(
+    namespace: string,
+    room: string,
+  ): Promise<FastifyKitSocket[]>;
 
   /**
    * @description Codifica y emite un mensaje a todos los sockets pertenecientes a una sala.
@@ -48,6 +56,7 @@ export interface WsRoomManager {
    * @param adapter El adaptador de WebSockets actual para formatear el mensaje correctamente.
    */
   emitToRoom(
+    namespace: string,
     room: string,
     pattern: string,
     payload: any,

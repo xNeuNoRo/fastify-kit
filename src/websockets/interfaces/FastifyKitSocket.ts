@@ -23,6 +23,12 @@ export interface FastifyKitSocket<
   data: TData;
 
   /**
+   * @description El namespace al que pertenece este socket, 
+   * esto permite a los handlers diferenciar la lógica si manejan múltiples namespaces.
+   */
+  namespace: string;
+
+  /**
    * @description Une este socket a una sala específica.
    * @param room El nombre de la sala a la que se unirá el socket.
    */
