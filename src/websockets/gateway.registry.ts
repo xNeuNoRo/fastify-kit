@@ -1,5 +1,4 @@
-import type {} from "@fastify/websocket";
-import { FastifyInstance, FastifyRequest } from "fastify";
+import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { WebSocket } from "ws";
 import { getLogger } from "../logger/logger.factory.js";
 import { container } from "../container/DIContainer.js";
@@ -7,6 +6,10 @@ import { JsonWsAdapter } from "./adapters/JsonWsAdapter.js";
 import { WsEventHandlerMetadata } from "./decorators/types.js";
 import type { FastifyKitMetadata } from "../http/decorators/types.js";
 import { extractArguments } from "../http/routing/scanner/parameter.resolver.js";
+import { randomUUID } from "node:crypto";
+import type { FastifyKitSocket } from "./interfaces/FastifyKitSocket.js";
+import { getRoomManager } from "./managers/room-manager.factory.js";
+import { ForbiddenException } from "../http/exceptions/SecurityExceptions.js";
 
 export type Constructor<T = any> = new (...args: any[]) => T;
 
@@ -58,7 +61,7 @@ async function executeLifecycleMethod(
   instance: any,
   preSortedParams: Map<PropertyKey, any[]>,
   request: FastifyRequest,
-  connection: WebSocket,
+  connection: FastifyKitSocket,
   isConnectEvent: boolean,
 ) {
   try {
@@ -101,6 +104,20 @@ function resolveHandlerName(
   }
   // Si el mensaje no tiene un patrón definido o no existe un handler registrado para ese patrón, devolvemos el handler de firehose si está definido, o null si no hay ningún handler disponible para manejar el mensaje.
   return firehoseMethod;
+}
+
+function buildWsGuardHandler(guards: Constructor[]) {
+  if (guards.length === 0) return undefined;
+
+  return async (request: FastifyRequest, reply: FastifyReply) => {
+    for (const GuardClass of guards) {
+      const guardInstance = container.resolve(GuardClass);
+      const canActivate = await guardInstance.canActivate(request, reply);
+      if (!canActivate) {
+        throw new ForbiddenException("Acceso denegado a este WebSocket.");
+      }
+    }
+  };
 }
 
 function sendMessageResponse(
@@ -161,7 +178,7 @@ async function processIncomingMessage({
   instance: any;
   preSortedParams: Map<PropertyKey, any[]>;
   request: FastifyRequest;
-  connection: WebSocket;
+  connection: FastifyKitSocket;
   adapter: any;
   eventRouter: Map<string, PropertyKey>;
   firehoseMethod: PropertyKey | null;
@@ -283,13 +300,37 @@ export function registerGateways(
       }
     }
 
+    // Si el Gateway tiene guards a nivel de clase, construimos un handler
+    // para ejecutarlos antes de procesar cualquier evento de WebSocket.
+    // Si algún guard deniega el acceso, se lanzará una excepción y no se procesará el evento.
+    const classGuards = metadata.classGuards || [];
+    const preHandler = buildWsGuardHandler(classGuards);
+
+    // Obtenemos el gestor de salas activo para poder usarlo
+    // en los handlers de eventos de conexión, desconexión y mensajes.
+    const roomManager = getRoomManager();
+
     // Registramos la ruta del WebSocket en Fastify usando la configuración del decorador y el handler para gestionar las conexiones entrantes, mensajes y desconexiones
     app.get(
       options.path,
-      { websocket: true },
+      { websocket: true, ...(preHandler ? { preHandler } : {}) },
       (connection: any, request: FastifyRequest) => {
-        const socket = connection?.socket || connection;
+        const socket = (connection?.socket || connection) as FastifyKitSocket;
+
+        // Registramos todos los metadatos para el socket
+        socket.id = randomUUID();
         socket.isAlive = true;
+        socket.data = {};
+
+        // Delegamos todos los metodos del socket al manager registrado para las salas
+        socket.join = (room: string) =>
+          roomManager.join(socket.id, room, socket);
+        socket.leave = (room: string) => roomManager.leave(socket.id, room);
+        socket.leaveAll = () => roomManager.leaveAll(socket.id);
+        socket.to = (room: string) => ({
+          emit: async (pattern: string, payload: any) =>
+            roomManager.emitToRoom(room, pattern, payload, adapter),
+        });
 
         // Registramos el handler de @OnConnect() para que se ejecute cuando un cliente se conecte
         if (onConnectMethod) {
@@ -320,6 +361,10 @@ export function registerGateways(
 
         // Evento de desconexión del cliente
         connection.on("close", async () => {
+          // Nos aseguramos de limpiar el socket de todas
+          // las salas a las que pertenece para evitar memory leaks
+          await socket.leaveAll();
+
           if (onDisconnectMethod) {
             await executeLifecycleMethod(
               onDisconnectMethod,
