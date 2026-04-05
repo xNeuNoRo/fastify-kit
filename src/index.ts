@@ -15,10 +15,7 @@ export {
   FASTIFY_INSTANCE_TOKEN,
 } from "./core/FastifyKit.js";
 export { Module } from "./core/module.decorator.js";
-export {
-  discoverControllers,
-  discoverModules,
-} from "./core/discovery.js";
+export { discoverControllers, discoverModules } from "./core/discovery.js";
 export type { ModuleOptions } from "./http/decorators/types.js";
 export type { AutoDiscoverOptions } from "./core/discovery.js";
 export type { Constructor } from "./http/routing/scanner/index.js";
@@ -52,6 +49,16 @@ export { UseGuards } from "./http/decorators/guards.js";
 export { RateLimit } from "./http/decorators/rate-limit.js";
 export type { CanActivate } from "./http/guards/CanActivate.js";
 export type { RateLimitOptions } from "./http/decorators/types.js";
+
+// ----------------------------------------------
+// HTTP Interceptors (AOP)
+// ----------------------------------------------
+export { UseInterceptors } from "./http/decorators/interceptors.js";
+export type {
+  Interceptor,
+  ExecutionContext,
+  CallHandler,
+} from "./http/interceptors/Interceptor.js";
 
 // ----------------------------------------------
 // HTTP Responses & Exceptions
@@ -177,7 +184,7 @@ export { WS_ROOM_MANAGER_TOKEN } from "./websockets/interfaces/WsRoomManager.js"
 
 // Herramientas de Broadcasting Proactivo
 export { WsBroadcaster } from "./websockets/broadcaster/WsBroadcaster.js";
-export { 
-  broadcastToRoom, 
-  broadcastToRooms 
+export {
+  broadcastToRoom,
+  broadcastToRooms,
 } from "./websockets/broadcaster/WsBroadcaster.js"; // Facades

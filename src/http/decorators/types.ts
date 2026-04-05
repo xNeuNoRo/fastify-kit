@@ -8,6 +8,7 @@ import type { PipeTransform } from "../pipes/PipeTransform.js";
 import type { AutoDiscoverOptions } from "../../core/discovery.js";
 import type { Constructor } from "../routing/scanner/index.js";
 import type { RouteDefinition } from "../routing/types.js";
+import type { Interceptor } from "../interceptors/Interceptor.js";
 
 /**
  * @description Tipos y interfaces para la metadata de los decoradores en FastifyKit.
@@ -124,4 +125,6 @@ export type FastifyKitMetadata = DecoratorMetadata & {
   rateLimits?: Record<string | symbol, RateLimitOptions>; // Metadata para rate limiting a nivel de método
   wsGateway?: WebSocketGatewayOptions; // Metadata para gateways de WebSockets a nivel de clase
   wsEvents?: WsEventHandlerMetadata[]; // Metadata para eventos de WebSockets a nivel de método
+  classInterceptors?: Constructor<Interceptor>[];
+  routeInterceptors?: Record<string | symbol, Constructor<Interceptor>[]>;
 };

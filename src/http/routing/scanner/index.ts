@@ -5,6 +5,11 @@ import { ApiResponse, getLogger } from "../../../index.js";
 import { extractArguments } from "./parameter.resolver.js";
 import { FastifyKitMetadata } from "../../decorators/types.js";
 import { getGlobalMaxFileSize } from "./multipart.handler.js";
+import type {
+  ExecutionContext,
+  Interceptor,
+} from "../../interceptors/Interceptor.js";
+import { executeInterceptors } from "../../interceptors/interceptor.executor.js";
 
 export type Constructor<T = any> = new (...args: any[]) => T;
 
@@ -98,8 +103,10 @@ export function registerControllers(
     const prefix = metadata.prefix || "";
     const routes = metadata.routes;
 
-    // Obtenemos los guards definidos a nivel de clase para este controlador desde el metadata
+    // Obtenemos los guards definidos a nivel de clase para este controlador desde la metadata
     const classGuards = metadata.classGuards || [];
+    // Obtenemos los interceptors definidos a nivel de clase para este controlador desde la metadata
+    const classInterceptors = metadata.classInterceptors || [];
 
     // Iteramos sobre cada ruta definida en el controlador y la registramos en Fastify
     for (const route of routes) {
@@ -129,6 +136,18 @@ export function registerControllers(
       // Combinamos: Primero los de la clase, luego los del método
       const allGuards = [...classGuards, ...routeGuards];
 
+      // Obtenemos los interceptors definidos a nivel de método para esta ruta desde el metadata
+      const routeInterceptors =
+        metadata.routeInterceptors?.[route.handlerName] || [];
+      const allInterceptorClasses = [
+        ...classInterceptors,
+        ...routeInterceptors,
+      ];
+      // Resolvemos las instancias de los interceptors desde el contenedor de inyección de dependencias
+      const resolvedInterceptors = allInterceptorClasses.map(
+        (InterceptorClass) => container.resolve<Interceptor>(InterceptorClass),
+      );
+
       // Construimos la ruta completa combinando el prefijo del controlador, el path de la ruta y la versión (si se definió), utilizando la función buildRoutePath.
       const routeVersion =
         metadata.methodVersions?.[route.handlerName] || metadata.version;
@@ -154,14 +173,13 @@ export function registerControllers(
             : {}),
         },
         async (request, reply) => {
-          let result;
+          const executeController = async () => {
+            // Si no hay decoradores de parámetros, mantenemos compatibilidad pasandole (req, reply) directamente al método del controlador
+            if (methodParamsMeta.length === 0) {
+              return await instance[route.handlerName](request, reply);
+            }
 
-          // Si no hay decoradores de parámetros, mantenemos compatibilidad pasandole (req, reply) directamente al método del controlador
-          if (methodParamsMeta.length === 0) {
-            result = await instance[route.handlerName](request, reply);
-          }
-          // Si hay decoradores de parámetros, extraemos los argumentos a pasar al método del controlador según los decoradores de parámetros definidos en el método del controlador y luego llamamos al método del controlador pasando esos argumentos.
-          else {
+            // Si hay decoradores de parámetros, extraemos los argumentos a pasar al método del controlador según los decoradores de parámetros definidos en el método del controlador y luego llamamos al método del controlador pasando esos argumentos.
             const args = await extractArguments(
               request,
               reply,
@@ -171,7 +189,26 @@ export function registerControllers(
               globalMaxSize,
             );
             // Llamamos al método del controlador correspondiente a esta ruta pasando los argumentos extraídos de la request y reply según los decoradores de parámetros definidos en el método del controlador
-            result = await instance[route.handlerName](...args);
+            return await instance[route.handlerName](...args);
+          };
+
+          let result: unknown;
+
+          // Si no hay interceptores, ejecutamos el controlador directamente
+          // De esa forma evitamos overhead innecesario ya que no existe flujo de interceptores como tal para esta ruta.
+          if (resolvedInterceptors.length === 0) {
+            result = await executeController();
+          } else {
+            // Si hay interceptores, construimos un flujo de ejecución de interceptores donde cada interceptor llama al siguiente en la cadena hasta llegar a la ejecución del controlador.
+            const context: ExecutionContext = {
+              request,
+              reply,
+            };
+            result = await executeInterceptors(
+              context, // Le pasamos el contexto de la request y reply
+              resolvedInterceptors, // Los interceptores definidos de la ruta
+              executeController, // Y el finalHandler que seria el controlador
+            );
           }
 
           // Formateamos la respuesta devuelta por el método del controlador para enviarla al cliente utilizando la función formatResponse, que se encarga de verificar si el controlador ya ha enviado una respuesta o si el resultado devuelto es una instancia de ApiResponse, y formatea la respuesta de manera consistente.
