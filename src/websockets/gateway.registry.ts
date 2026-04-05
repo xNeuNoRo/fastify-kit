@@ -1,3 +1,4 @@
+import type {} from "@fastify/websocket";
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { WebSocket } from "ws";
 import { getLogger } from "../logger/logger.factory.js";
