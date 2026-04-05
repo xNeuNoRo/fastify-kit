@@ -12,8 +12,9 @@ export const WS_ROOM_MANAGER_TOKEN = Symbol("WS_ROOM_MANAGER_TOKEN");
 export interface WsRoomManager {
   /**
    * @description Une un socket a una sala específica.
-   * @param socketId El ID único del socket.
+   * @param namespace El namespace del Gateway al que pertenece la sala (ej: "/chat").
    * @param room El nombre de la sala.
+   * @param socketId El ID único del socket.
    * @param socket La instancia del socket para poder enviarle mensajes luego.
    */
   join(
