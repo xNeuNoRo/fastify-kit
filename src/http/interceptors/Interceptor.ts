@@ -16,7 +16,7 @@ export interface CallHandler<T = unknown> {
 }
 
 /**
- * @description Contrato estricto que los Interceptores en FastifyKit debe cumplir.
+ * @description Contrato estricto que los Interceptores en FastifyKit deben cumplir.
  * T: Tipo de lo que devuelve el CallHandler (el controlador).
  * R: Tipo de lo que finalmente retorna el Interceptor.
  */
