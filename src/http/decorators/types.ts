@@ -1,3 +1,4 @@
+import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   WebSocketGatewayOptions,
   WsEventHandlerMetadata,
@@ -26,7 +27,8 @@ export type ParameterType =
   | "file"
   | "cookie"
   | "socket"
-  | "wsPayload";
+  | "wsPayload"
+  | "custom"; // Para permitir tipos personalizados, como @User, @AuthToken, etc.
 
 /**
  * @description Interfaz que define las opciones de configuración para el manejo de archivos en los métodos decorados con @File.
@@ -66,6 +68,7 @@ export interface ParameterMetadata {
   key?: string;
   pipe?: Constructor<PipeTransform>;
   fileOptions?: FileOptions;
+  customFactory?: (request: FastifyRequest, reply: FastifyReply) => unknown;
 }
 
 /**

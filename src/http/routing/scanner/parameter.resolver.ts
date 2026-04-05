@@ -83,6 +83,13 @@ export async function resolveParamValue(
         );
       }
       return wsContext.payload;
+    case "custom":
+      // Para parámetros personalizados, llamamos a la función customFactory definida
+      // en la metadata del decorador, pasando el request y reply. Y retornamos su resultado.
+      if (param.customFactory) {
+        return await param.customFactory(request, reply);
+      }
+      return undefined;
     default:
       // Opcional: Lanza un error o devuelve undefined si el tipo no es soportado
       return undefined;
