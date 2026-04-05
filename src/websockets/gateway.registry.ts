@@ -367,7 +367,7 @@ export function registerGateways(
         });
 
         // Evento de desconexión del cliente
-        connection.on("close", async () => {
+        socket.on("close", async () => {
           // Nos aseguramos de limpiar el socket de todas
           // las salas a las que pertenece para evitar memory leaks
           await socket.leaveAll();
@@ -386,7 +386,7 @@ export function registerGateways(
         });
 
         // Evento de ping recibido del cliente para mantener viva la conexión.
-        connection.on("pong", () => {
+        socket.on("pong", () => {
           socket.isAlive = true;
         });
       },
