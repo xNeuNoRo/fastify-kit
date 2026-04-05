@@ -189,8 +189,9 @@ export function createParamDecorator<TFactoryResult>(
   ) => TFactoryResult | Promise<TFactoryResult>,
 ) {
   // Retornamos una función que a su vez retorna el objeto metadata
-  return () => ({
+  return (pipe?: Constructor<PipeTransform>) => ({
     type: "custom" as ParameterType,
     customFactory: factory,
+    pipe,
   });
 }
