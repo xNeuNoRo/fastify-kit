@@ -28,7 +28,7 @@ describe("Motor de Ejecución de Interceptores (executeInterceptors)", () => {
 
     // Interceptores que registran su entrada y salida en la traza
     const interceptor1: Interceptor = {
-      async intercept(ctx, next) {
+      async intercept(_ctx, next) {
         traza.push("1-entrada");
         const res = await next.handle();
         traza.push("1-salida");
@@ -38,7 +38,7 @@ describe("Motor de Ejecución de Interceptores (executeInterceptors)", () => {
 
     // Este interceptor se ejecutará entre el interceptor1 y el controlador
     const interceptor2: Interceptor = {
-      async intercept(ctx, next) {
+      async intercept(_ctx, next) {
         traza.push("2-entrada");
         const res = await next.handle();
         traza.push("2-salida");
@@ -74,7 +74,7 @@ describe("Motor de Ejecución de Interceptores (executeInterceptors)", () => {
   it("Debería permitir que un interceptor mute el resultado final", async () => {
     // Este interceptor agrega una propiedad al resultado del controlador
     const interceptorMutador: Interceptor = {
-      async intercept(ctx, next) {
+      async intercept(_ctx, next) {
         const res = (await next.handle()) as Record<string, unknown>;
         return { ...res, interceptado: true };
       },
@@ -125,7 +125,7 @@ describe("Motor de Ejecución de Interceptores (executeInterceptors)", () => {
   it("Debería lanzar un error de seguridad si un interceptor llama a next.handle() múltiples veces", async () => {
     // Este interceptor malicioso intenta romper el patrón onion llamando a next.handle() más de una vez
     const interceptorMalicioso: Interceptor = {
-      async intercept(ctx, next) {
+      async intercept(_ctx, next) {
         await next.handle();
         return await next.handle();
       },
