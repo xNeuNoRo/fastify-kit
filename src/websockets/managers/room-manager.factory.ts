@@ -1,4 +1,4 @@
-import { container, type Contract } from "../../container/DIContainer.js";
+import { container } from "../../container/DIContainer.js";
 import { getLogger } from "../../logger/logger.factory.js";
 import {
   WS_ROOM_MANAGER_TOKEN,
@@ -14,16 +14,16 @@ let fallbackRoomManager: WsRoomManager | null = null;
  * Si no hay ninguno registrado, utiliza el MemoryRoomManager por defecto.
  */
 export function getRoomManager(): WsRoomManager {
-  try {
-    return container.resolve<WsRoomManager>(
-      WS_ROOM_MANAGER_TOKEN as unknown as Contract<WsRoomManager>,
-    );
-  } catch (error) {
-    fallbackRoomManager ??= new MemoryRoomManager();
-    // Lo registramos en log a nivel debug para que el dev sepa qué motor está usando
+  if (container.has(WS_ROOM_MANAGER_TOKEN)) {
+    return container.resolve<WsRoomManager>(WS_ROOM_MANAGER_TOKEN);
+  }
+
+  if (!fallbackRoomManager) {
     getLogger().debug(
       "[FastifyKit WS] Utilizando MemoryRoomManager por defecto para las salas de WebSockets.",
     );
-    return fallbackRoomManager;
+    fallbackRoomManager = new MemoryRoomManager();
   }
+
+  return fallbackRoomManager;
 }
