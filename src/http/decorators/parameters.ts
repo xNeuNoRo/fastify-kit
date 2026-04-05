@@ -1,5 +1,5 @@
 import type { PipeTransform } from "../pipes/PipeTransform.js";
-import type { Constructor } from "../routing/scanner.js";
+import type { Constructor } from "../routing/scanner/index.js";
 import type {
   ParameterType,
   FastifyKitMetadata,
