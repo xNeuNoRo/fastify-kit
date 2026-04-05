@@ -15,6 +15,7 @@ import {
   WsPayload,
   Socket,
   Body,
+  createParamDecorator,
 } from "../../../src/http/decorators/parameters.js";
 import type { MultipartFile } from "../../../src/http/decorators/types.js";
 import { Scheduled } from "../../../src/scheduling/scheduled.decorator.js";
@@ -29,6 +30,7 @@ import {
 } from "../../../src/websockets/decorators/events.js";
 import { WebSocketGateway } from "../../../src/websockets/decorators/gateway.js";
 import type { FastifyKitSocket } from "../../../src/websockets/interfaces/FastifyKitSocket.js";
+import type { PipeTransform } from "../../../src/http/pipes/PipeTransform.js";
 
 // Aseguramos que el símbolo para metadata esté definido para poder usarlo en los tests
 if (!(Symbol as any).metadata) {
@@ -229,6 +231,69 @@ describe("FastifyKit (Orquestador Core)", () => {
       await expect(
         FastifyKit.create({ module: BrokenModule }),
       ).rejects.toThrow();
+    });
+
+    it("Debería procesar decoradores de parámetros personalizados (Custom Decorators) y combinarlos con nativos", async () => {
+      // Creamos un Pipe falso solo para la prueba
+      class DummyParseIntPipe implements PipeTransform {
+        transform(value: any) {
+          return Number.parseInt(value, 10);
+        }
+      }
+
+      // Definimos los decoradores custom (uno síncrono y uno asíncrono simulando base de datos)
+      const TenantId = createParamDecorator(
+        (req) => req.headers["x-tenant-id"] || "0",
+      );
+      const CurrentUser = createParamDecorator(async (req) => {
+        await new Promise((resolve) => setTimeout(resolve, 5)); // Simulamos asincronía
+        return { username: req.headers["x-user"] || "guest", role: "admin" };
+      });
+
+      // Controlador de prueba combinando parámetros custom y nativos (Body)
+      @Controller("/custom")
+      class CustomParamsController {
+        @Post("/info")
+        // Integramos el Pipe en la llamada a TenantId
+        @UseParams(TenantId(DummyParseIntPipe), CurrentUser(), Body("accion"))
+        obtenerInfo(tenant: number, user: any, accion: string) {
+          // Si los decoradores funcionan, estos argumentos vendrán inyectados correctamente
+          return { tenant, user, accion };
+        }
+      }
+
+      @Module({ controllers: [CustomParamsController] })
+      class CustomModule {}
+
+      // Levantamos la app
+      const app = await FastifyKit.create({ module: CustomModule });
+
+      // Inyectamos la petición HTTP simulando a un cliente real
+      const res = await app.inject({
+        method: "POST",
+        url: "/custom/info",
+        headers: {
+          "x-tenant-id": "456", // Enviamos un string numérico
+          "x-user": "angel_developer",
+        },
+        payload: { accion: "desplegar_produccion" },
+      });
+
+      // Validamos que el Scanner extrajo e inyectó a la perfección
+      expect(res).toBeDefined();
+      expect(res.statusCode).toBe(200);
+      const json = JSON.parse(res.payload);
+
+      // Validamos que el valor se haya inyectado transformado a Number por el Pipe
+      expect(json.data.tenant).toBe(456);
+      expect(typeof json.data.tenant).toBe("number");
+      expect(json.data.user).toEqual({
+        username: "angel_developer",
+        role: "admin",
+      });
+      expect(json.data.accion).toBe("desplegar_produccion");
+
+      await app.close();
     });
   });
 

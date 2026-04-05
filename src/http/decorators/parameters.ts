@@ -1,5 +1,6 @@
+import type { FastifyReply, FastifyRequest } from "fastify";
 import type { PipeTransform } from "../pipes/PipeTransform.js";
-import type { Constructor } from "../routing/scanner.js";
+import type { Constructor } from "../routing/scanner/index.js";
 import type {
   ParameterType,
   FastifyKitMetadata,
@@ -136,6 +137,7 @@ export function UseParams(
     key?: string;
     pipe?: Constructor<PipeTransform>;
     fileOptions?: FileOptions;
+    customFactory?: (request: FastifyRequest, reply: FastifyReply) => unknown;
   }[]
 ) {
   return function (_target: any, context: ClassMethodDecoratorContext) {
@@ -162,6 +164,34 @@ export function UseParams(
       key: param.key,
       pipe: param.pipe,
       fileOptions: param.fileOptions,
+      customFactory: param.customFactory,
     }));
   };
+}
+
+/**
+ * @description Permite crear decoradores personalizados para inyectar cualquier valor derivado del request o reply, como por ejemplo el usuario autenticado, un token de autorización, etc. El decorador resultante se puede usar dentro de \@UseParams para inyectar el valor personalizado en los métodos de controlador.
+ * @param factory Una función que recibe el objeto FastifyRequest y FastifyReply. Y retorna el valor a inyectar. Puede ser síncrona o asíncrona.
+ * @returns Un objeto compatible con \@UseParams.
+ * @example
+ * // Defines tu inyector personalizado
+ * export const CurrentUser = createParamDecorator((req) => req.user);
+ * export const TenantId = createParamDecorator((req) => req.headers['x-tenant-id']);
+ * // Lo usas en tu controlador
+ * \@Get("/perfil")
+ * \@UseParams(CurrentUser(), TenantId())
+ * perfil(user: User, tenant: string) { ... }
+ */
+export function createParamDecorator<TFactoryResult>(
+  factory: (
+    request: FastifyRequest,
+    reply: FastifyReply,
+  ) => TFactoryResult | Promise<TFactoryResult>,
+) {
+  // Retornamos una función que a su vez retorna el objeto metadata
+  return (pipe?: Constructor<PipeTransform>) => ({
+    type: "custom" as ParameterType,
+    customFactory: factory,
+    pipe,
+  });
 }
