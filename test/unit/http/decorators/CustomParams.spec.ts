@@ -2,6 +2,7 @@ import type { FastifyRequest, FastifyReply } from "fastify";
 import { describe, it, expect } from "vitest";
 
 import { createParamDecorator } from "../../../../src/http/decorators/parameters.js";
+import type { PipeTransform } from "../../../../src/http/pipes/PipeTransform.js";
 import { resolveParamValue } from "../../../../src/http/routing/scanner/parameter.resolver.js";
 
 describe("Decoradores de Parámetros Personalizados (createParamDecorator)", () => {
@@ -85,5 +86,24 @@ describe("Decoradores de Parámetros Personalizados (createParamDecorator)", () 
     );
 
     expect(resolvedValue).toBeUndefined();
+  });
+
+  it("Debería guardar correctamente un Pipe si el usuario lo proporciona al invocar el decorador", () => {
+    // Creamos un Pipe falso solo para el test
+    class DummyPipe implements PipeTransform {
+      transform(value: any) {
+        return Number(value);
+      }
+    }
+
+    const TenantId = createParamDecorator((req) => req.headers["x-tenant-id"]);
+
+    // Invocamos el decorador pasándole nuestro DummyPipe como argumento, como lo haría el usuario al usarlo en un controlador
+    const result = TenantId(DummyPipe);
+
+    expect(result.type).toBe("custom");
+    expect(typeof result.customFactory).toBe("function");
+    // Verificamos la metadata
+    expect(result.pipe).toBe(DummyPipe);
   });
 });
