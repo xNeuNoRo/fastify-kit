@@ -162,3 +162,22 @@ export type {
   WsAdapter,
   FastifyKitWsPacket,
 } from "./websockets/interfaces/WsAdapter.js";
+
+// ----------------------------------------------
+// WEBSOCKETS (Room Management & Broadcasting System)
+// ----------------------------------------------
+
+// Interfaces y tipos relacionados con la gestión de salas y broadcasting de WebSockets
+export type { WsEventHandlerMetadata } from "./websockets/decorators/types.js";
+export type { FastifyKitSocket } from "./websockets/interfaces/FastifyKitSocket.js";
+export type { WsRoomManager } from "./websockets/interfaces/WsRoomManager.js";
+
+// Token para que puedan inyectar su propio RedisRoomManager o similar
+export { WS_ROOM_MANAGER_TOKEN } from "./websockets/interfaces/WsRoomManager.js";
+
+// Herramientas de Broadcasting Proactivo
+export { WsBroadcaster } from "./websockets/broadcaster/WsBroadcaster.js";
+export { 
+  broadcastToRoom, 
+  broadcastToRooms 
+} from "./websockets/broadcaster/WsBroadcaster.js"; // Facades

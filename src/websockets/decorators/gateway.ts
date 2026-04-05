@@ -1,5 +1,5 @@
 import { FastifyKitMetadata } from "../../http/decorators/types.js";
-import { Constructor } from "../../http/routing/scanner.js";
+import { Constructor } from "../../http/routing/scanner/index.js";
 import { WebSocketGatewayOptions } from "./types.js";
 
 /**

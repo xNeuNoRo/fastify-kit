@@ -14,14 +14,21 @@ import {
   Cookie,
   WsPayload,
   Socket,
+  Body,
 } from "../../../src/http/decorators/parameters.js";
 import type { MultipartFile } from "../../../src/http/decorators/types.js";
 import { Scheduled } from "../../../src/scheduling/scheduled.decorator.js";
 import {
+  WsBroadcaster,
+  broadcastToRoom,
+} from "../../../src/websockets/broadcaster/WsBroadcaster.js";
+import {
   SubscribeMessage,
   OnMessage,
+  OnConnect,
 } from "../../../src/websockets/decorators/events.js";
 import { WebSocketGateway } from "../../../src/websockets/decorators/gateway.js";
+import type { FastifyKitSocket } from "../../../src/websockets/interfaces/FastifyKitSocket.js";
 
 // Aseguramos que el símbolo para metadata esté definido para poder usarlo en los tests
 if (!(Symbol as any).metadata) {
@@ -427,13 +434,176 @@ describe("FastifyKit (Orquestador Core)", () => {
         warnSpy.mockRestore();
       }
     });
+
+    it("Debería manejar Salas, Contexto de Sesión (socket.data) y Broadcasting Proactivo desde HTTP", async () => {
+      vi.spyOn(console, "debug").mockImplementation(() => {}); // Silenciamos logs de debug para esta prueba que pueden ser muy verbosos
+      // Gateway Avanzado (Prueba Salas y Contexto)
+      @WebSocketGateway("/ws/salas")
+      class RoomGateway {
+        // Guardamos data en memoria al conectarse
+        @OnConnect()
+        @UseParams(Socket())
+        handleConnect(client: FastifyKitSocket) {
+          // Simulamos que al conectarse, el cliente obtiene un rol y un testId únicos que se guardan en socket.data para usar en otros eventos.
+          client.data = { rol: "admin", testId: client.id.substring(0, 5) };
+        }
+
+        @SubscribeMessage("UNIRSE")
+        @UseParams(Socket(), WsPayload())
+        async unirseSala(client: FastifyKitSocket, sala: string) {
+          await client.join(sala);
+          return { exito: true, sala };
+        }
+
+        @SubscribeMessage("ENVIAR_SALA")
+        @UseParams(Socket(), WsPayload())
+        async enviarASala(
+          client: FastifyKitSocket,
+          payload: { sala: string; msj: string },
+        ) {
+          // Usamos el rol guardado en memoria (O(1))
+          await client.to(payload.sala).emit("MENSAJE_SALA", {
+            de: client.data.rol,
+            msj: payload.msj,
+          });
+        }
+      }
+
+      // Controlador HTTP (Prueba Broadcaster y Facades)
+      @Controller("/http-to-ws")
+      class NotificadorController {
+        @Post("/notificar")
+        @UseParams(Body())
+        async notificar(body: { sala: string; msj: string }) {
+          const broadcaster = container.resolve(WsBroadcaster);
+
+          // Prueba 1: Emisión inyectada
+          await broadcaster.emitToRoom(
+            "/ws/salas",
+            body.sala,
+            "ALERTA_SISTEMA",
+            { msj: body.msj },
+          );
+
+          // Prueba 2: Emisión vía Facade global
+          await broadcastToRoom("/ws/salas", "global", "ALERTA_SISTEMA", {
+            msj: "Alerta Global Facade",
+          });
+
+          return { enviado: true };
+        }
+      }
+
+      // Módulo de pruebas que registra el Gateway y el Controlador, y luego levantamos la app con soporte de websockets
+      @Module({
+        controllers: [NotificadorController],
+        providers: [RoomGateway],
+      })
+      class AdvancedWsModule {}
+
+      const app = await FastifyKit.create({
+        module: AdvancedWsModule,
+        websockets: true,
+      });
+
+      await app.listen({ port: 0, host: "127.0.0.1" });
+      const { port } = app.server.address() as AddressInfo;
+
+      // Simulamos dos clientes de WebSockets que se conectan al Gateway para probar la funcionalidad de salas
+      let clienteA: WebSocketClient | undefined;
+      let clienteB: WebSocketClient | undefined;
+
+      try {
+        clienteA = new WebSocketClient(`ws://127.0.0.1:${port}/ws/salas`);
+        clienteB = new WebSocketClient(`ws://127.0.0.1:${port}/ws/salas`);
+
+        // Esperamos conexiones
+        await Promise.all([
+          new Promise((res) => clienteA!.once("open", res)),
+          new Promise((res) => clienteB!.once("open", res)),
+        ]);
+
+        // Cliente A se une a la sala "vip"
+        const promesaJoin = new Promise((res) =>
+          clienteA!.once("message", res),
+        );
+        clienteA.send(JSON.stringify({ event: "UNIRSE", data: "vip" }));
+        await promesaJoin;
+
+        // Cliente B envía un mensaje a la sala "vip"
+        const promesaMensajeSala = new Promise((res) =>
+          clienteA!.once("message", res),
+        );
+        clienteB.send(
+          JSON.stringify({
+            event: "ENVIAR_SALA",
+            data: { sala: "vip", msj: "Hola A" },
+          }),
+        );
+
+        const respuestaSala = JSON.parse((await promesaMensajeSala) as string);
+        expect(respuestaSala.event).toBe("MENSAJE_SALA");
+        expect(respuestaSala.data.msj).toBe("Hola A");
+        expect(respuestaSala.data.de).toBe("admin"); // Confirma que client.data funciona
+
+        // Cliente A se une a "global"
+        const promesaJoinGlobal = new Promise((res) =>
+          clienteA!.once("message", res),
+        );
+        clienteA.send(JSON.stringify({ event: "UNIRSE", data: "global" }));
+        await promesaJoinGlobal;
+
+        // 4. Test HTTP a WebSocket (Broadcaster Proactivo)
+        const promesasHttp = Promise.all([
+          new Promise((res) => clienteA!.once("message", res)), // Alerta VIP (Inyectado)
+          new Promise((res) =>
+            clienteA!.on("message", (m) => {
+              // Atrapa el segundo mensaje (Alerta Global Facade)
+              let messageText = "";
+              if (typeof m === "string") {
+                messageText = m;
+              } else if (Buffer.isBuffer(m)) {
+                messageText = m.toString("utf-8");
+              } else if (Array.isArray(m)) {
+                messageText = Buffer.concat(m).toString("utf-8");
+              } else if (m instanceof ArrayBuffer) {
+                messageText = Buffer.from(m).toString("utf-8");
+              }
+              if (messageText.includes("Alerta Global Facade")) res(m);
+            }),
+          ),
+        ]);
+
+        // Disparamos el endpoint HTTP
+        const resHttp = await app.inject({
+          method: "POST",
+          url: "/http-to-ws/notificar",
+          payload: { sala: "vip", msj: "Servidor reiniciando" },
+        });
+
+        expect(resHttp.statusCode).toBe(200);
+
+        const [msgVip, msgGlobal] = await promesasHttp;
+
+        expect(JSON.parse(msgVip as string).data.msj).toBe(
+          "Servidor reiniciando",
+        );
+        expect(JSON.parse(msgGlobal as string).data.msj).toBe(
+          "Alerta Global Facade",
+        );
+      } finally {
+        if (clienteA) clienteA.terminate();
+        if (clienteB) clienteB.terminate();
+        if (app.server?.closeAllConnections) app.server.closeAllConnections();
+        await app.close();
+      }
+    });
   });
 
   describe("Ramas Edge: Auto-Discovery, Deduplicación y AJV", () => {
     it("Debería llamar al Auto-Discovery y deduplicar proveedores compartidos", async () => {
       // Importamos y espiamos las funciones de discovery sin ejecutar el disco real
-      const DiscoveryModule =
-        await import("../../../src/core/discovery.js");
+      const DiscoveryModule = await import("../../../src/core/discovery.js");
       const discoverCtrlSpy = vi
         .spyOn(DiscoveryModule, "discoverControllers")
         .mockResolvedValue([]);
