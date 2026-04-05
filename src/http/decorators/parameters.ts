@@ -171,7 +171,7 @@ export function UseParams(
 
 /**
  * @description Permite crear decoradores personalizados para inyectar cualquier valor derivado del request o reply, como por ejemplo el usuario autenticado, un token de autorización, etc. El decorador resultante se puede usar dentro de \@UseParams para inyectar el valor personalizado en los métodos de controlador.
- * @param factory Una función que recibe el objeto FastifyRequest (y opcionalmente FastifyReply) y retorna el valor a inyectar. Puede ser síncrona o asíncrona.
+ * @param factory Una función que recibe el objeto FastifyRequest y FastifyReply. Y retorna el valor a inyectar. Puede ser síncrona o asíncrona.
  * @returns Un objeto compatible con \@UseParams.
  * @example
  * // Defines tu inyector personalizado

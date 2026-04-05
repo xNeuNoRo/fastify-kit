@@ -8,7 +8,7 @@ import { resolveParamValue } from "../../../../src/http/routing/scanner/paramete
 describe("Decoradores de Parámetros Personalizados (createParamDecorator)", () => {
   it("Debería crear correctamente la metadata del decorador", () => {
     // Creamos un decorador falso
-    const CurrentUser = createParamDecorator((req) => req.user);
+    const CurrentUser = createParamDecorator((req) => req.headers["x-user"]);
 
     // Lo invocamos
     const result = CurrentUser();
