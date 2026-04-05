@@ -10,11 +10,8 @@ import {
 export class MemoryRoomManager implements WsRoomManager {
   // Mapa principal. Clave compuesta: "namespace:room" => Map<socketId, Socket>
   private readonly rooms = new Map<string, Map<string, FastifyKitSocket>>();
-  // Mapa inverso para optimizar leaveAll: socketId => Set<{ namespace, room }>
-  private readonly socketRooms = new Map<
-    string,
-    Set<{ namespace: string; room: string }>
-  >();
+  // Mapa inverso para optimizar leaveAll: socketId => Set<"namespace:room">
+  private readonly socketRooms = new Map<string, Set<string>>();
 
   // Utilidad para obtener la clave compuesta del mapa principal a partir del namespace y la sala
   private getRoomKey(namespace: string, room: string): string {
@@ -42,7 +39,7 @@ export class MemoryRoomManager implements WsRoomManager {
     }
 
     // Guardamos explícitamente la referencia al namespace y la sala
-    this.socketRooms.get(socketId)!.add({ namespace, room });
+    this.socketRooms.get(socketId)!.add(roomKey);
   }
 
   async leave(
@@ -69,12 +66,7 @@ export class MemoryRoomManager implements WsRoomManager {
       const sRooms = this.socketRooms.get(socketId)!;
 
       // Buscamos y eliminamos la entrada exacta
-      for (const entry of sRooms) {
-        if (entry.namespace === namespace && entry.room === room) {
-          sRooms.delete(entry);
-          break;
-        }
-      }
+      sRooms.delete(roomKey);
 
       // Si el socket no pertenece a ninguna sala, lo limpiamos completamente
       if (sRooms.size === 0) {
@@ -89,8 +81,13 @@ export class MemoryRoomManager implements WsRoomManager {
     // Si hay salas en el historial, iteramos y lo removemos de cada una
     if (rooms) {
       // Usamos Array.from para evitar mutar el Set mientras iteramos sobre él
-      for (const entry of Array.from(rooms)) {
-        await this.leave(entry.namespace, entry.room, socketId);
+      for (const roomKey of Array.from(rooms)) {
+        // Separamos el string para recuperar el namespace y la sala original
+        const separadorIndex = roomKey.indexOf(":");
+        const ns = roomKey.substring(0, separadorIndex);
+        const r = roomKey.substring(separadorIndex + 1);
+
+        await this.leave(ns, r, socketId);
       }
     }
   }
