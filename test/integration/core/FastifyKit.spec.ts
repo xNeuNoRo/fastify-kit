@@ -15,6 +15,7 @@ import {
   WsPayload,
   Socket,
   Body,
+  createParamDecorator,
 } from "../../../src/http/decorators/parameters.js";
 import type { MultipartFile } from "../../../src/http/decorators/types.js";
 import { Scheduled } from "../../../src/scheduling/scheduled.decorator.js";
@@ -229,6 +230,59 @@ describe("FastifyKit (Orquestador Core)", () => {
       await expect(
         FastifyKit.create({ module: BrokenModule }),
       ).rejects.toThrow();
+    });
+
+    it("Debería procesar decoradores de parámetros personalizados (Custom Decorators) y combinarlos con nativos", async () => {
+      // Definimos los decoradores custom (uno síncrono y uno asíncrono simulando base de datos)
+      const TenantId = createParamDecorator(
+        (req) => req.headers["x-tenant-id"] || "public",
+      );
+      const CurrentUser = createParamDecorator(async (req) => {
+        await new Promise((resolve) => setTimeout(resolve, 5)); // Simulamos asincronía
+        return { username: req.headers["x-user"] || "guest", role: "admin" };
+      });
+
+      // Controlador de prueba combinando parámetros custom y nativos (Body)
+      @Controller("/custom")
+      class CustomParamsController {
+        @Post("/info")
+        @UseParams(TenantId(), CurrentUser(), Body("accion"))
+        obtenerInfo(tenant: string, user: any, accion: string) {
+          // Si los decoradores funcionan, estos argumentos vendrán inyectados correctamente
+          return { tenant, user, accion };
+        }
+      }
+
+      @Module({ controllers: [CustomParamsController] })
+      class CustomModule {}
+
+      // Levantamos la app
+      const app = await FastifyKit.create({ module: CustomModule });
+
+      // Inyectamos la petición HTTP simulando a un cliente real
+      const res = await app.inject({
+        method: "POST",
+        url: "/custom/info",
+        headers: {
+          "x-tenant-id": "empresa-123",
+          "x-user": "angel_developer",
+        },
+        payload: { accion: "desplegar_produccion" },
+      });
+
+      // 5. Validamos que el Scanner extrajo e inyectó todo a la perfección
+      expect(res).toBeDefined();
+      expect(res.statusCode).toBe(200);
+      const json = JSON.parse(res.payload);
+
+      expect(json.data.tenant).toBe("empresa-123");
+      expect(json.data.user).toEqual({
+        username: "angel_developer",
+        role: "admin",
+      });
+      expect(json.data.accion).toBe("desplegar_produccion");
+
+      await app.close();
     });
   });
 
