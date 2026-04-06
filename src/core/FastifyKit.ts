@@ -183,7 +183,7 @@ export class FastifyKit {
       }
     }
 
-    // Ejecutamos el lyfecycle hook onModuleInit antes de que se registre cualquier plugin o ruta en Fastify
+    // Ejecutamos el lifecycle hook onModuleInit antes de que se registre cualquier plugin o ruta en Fastify
     await this.executeLifecycleHook(lifecycleInstances, "onModuleInit");
 
     // Registramos una ruta de health check para verificar que la API está funcionando correctamente
@@ -225,17 +225,24 @@ export class FastifyKit {
       await this.executeLifecycleHook(lifecycleInstances, "onServerReady");
     });
 
-    // Inicializamos el hook beforeApplicationShutdown justo cuando se recibe una señal de
-    // terminación, pero antes de que el servidor deje de aceptar nuevas peticiones.
+    let receivedSignal: string | undefined;
+
+    // Inicializamos el hook onApplicationShutdown justo antes de que el servidor se cierre,
+    // pasando la señal recibida para que las instancias puedan realizar tareas de limpieza
+    // o sacar el nodo de un Load Balancer antes de que deje de aceptar nuevas peticiones.
     app.addHook("onClose", async () => {
       await this.executeLifecycleHook(
         lifecycleInstances,
         "onApplicationShutdown",
+        receivedSignal,
       );
     });
 
-    // Configuración para interceptar SIGTERM/SIGINT antes de que Fastify cierre el servidor, para ejecutar el hook beforeApplicationShutdown en ese momento.
-    this.setupGracefulShutdown(app, lifecycleInstances);
+    // Configuración para interceptar SIGTERM/SIGINT antes de que Fastify cierre el servidor, 
+    // para ejecutar el hook beforeApplicationShutdown en ese momento.
+    this.setupGracefulShutdown(app, lifecycleInstances, (signal) => {
+      receivedSignal = signal;
+    });
 
     return app;
   }
@@ -751,6 +758,7 @@ export class FastifyKit {
   private static setupGracefulShutdown(
     app: FastifyInstance<any, any, any, any, TypeBoxTypeProvider>,
     instances: Set<object>,
+    onSignalReceived: (signal: string) => void,
   ): void {
     // Guardamos las señales que queremos escuchar para el apagado
     const signals = ["SIGTERM", "SIGINT"] as const;
@@ -758,6 +766,9 @@ export class FastifyKit {
     // Iteramos en todas las señales y configuramos un listener para cada una de ellas
     for (const signal of signals) {
       process.on(signal, async () => {
+        // Pasamos la señal recibida al callback
+        onSignalReceived(signal);
+
         // Ejecutamos el hook beforeApplicationShutdown en las instancias que lo implementen, pasando la señal como argumento para que puedan realizar tareas de limpieza o sacar el nodo de un Load Balancer antes de que el servidor deje de aceptar nuevas peticiones.
         await this.executeLifecycleHook(
           instances,
