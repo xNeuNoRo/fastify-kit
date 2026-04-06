@@ -162,6 +162,9 @@ export class FastifyKit {
       options.module,
     );
 
+    // Registramos los plugins esenciales
+    await this.registerCorePlugins(app, options);
+
     // Set para almacenar las instancias de los controladores y proveedores
     // que implementen hooks de ciclo de vida, para luego ejecutar esos hooks en el orden correcto.
     const lifecycleInstances = new Set<object>();
@@ -182,9 +185,6 @@ export class FastifyKit {
 
     // Ejecutamos el lyfecycle hook onModuleInit antes de que se registre cualquier plugin o ruta en Fastify
     await this.executeLifecycleHook(lifecycleInstances, "onModuleInit");
-
-    // Registramos los plugins esenciales
-    await this.registerCorePlugins(app, options);
 
     // Registramos una ruta de health check para verificar que la API está funcionando correctamente
     app.get("/health", async () =>
@@ -237,7 +237,6 @@ export class FastifyKit {
     // Configuración para interceptar SIGTERM/SIGINT antes de que Fastify cierre el servidor, para ejecutar el hook beforeApplicationShutdown en ese momento.
     this.setupGracefulShutdown(app, lifecycleInstances);
 
-    app.log.info("[FastifyKit] kit inicializado correctamente!");
     return app;
   }
 
