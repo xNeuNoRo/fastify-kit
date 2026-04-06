@@ -39,7 +39,7 @@ export {
   Cookie,
   Socket,
   WsPayload,
-    createParamDecorator,
+  createParamDecorator,
 } from "./http/decorators/parameters.js";
 export type { MultipartFile, FileOptions } from "./http/decorators/types.js";
 
@@ -189,3 +189,14 @@ export {
   broadcastToRoom,
   broadcastToRooms,
 } from "./websockets/broadcaster/WsBroadcaster.js"; // Facades
+
+// ==========================================
+// CICLO DE VIDA (LIFECYCLE HOOKS)
+// ==========================================
+export type {
+  OnModuleInit,
+  OnApplicationBootstrap,
+  OnServerReady,
+  BeforeApplicationShutdown,
+  OnApplicationShutdown,
+} from "./core/interfaces/lifecycle.interface.js";
