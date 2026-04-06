@@ -164,7 +164,13 @@ export function registerControllers(
         fullPath,
         {
           schema: methodResponses
-            ? { ...route.schema, response: methodResponses }
+            ? {
+                ...(route.schema || {}),
+                response: {
+                  ...((route.schema?.response as any) || {}),
+                  ...methodResponses,
+                },
+              }
             : route.schema,
           // Solo lo inyectamos si hay guards para evitar overhead
           preHandler: buildGuardHandler(allGuards),
