@@ -156,11 +156,16 @@ export function registerControllers(
       // Obtenemos la configuración de rate limiting para esta ruta desde el metadata
       const rateLimitConfig = metadata.rateLimits?.[route.handlerName];
 
+      // Obtenemos el esquema de respuesta para esta ruta desde el metadata
+      const methodResponses = metadata.responsesSchema?.[route.handlerName];
+
       // Registramos la ruta en Fastify utilizando el método HTTP especificado en el decorador de la ruta (route.method), la ruta completa construida con el prefijo y la ruta, el esquema de validación (si se proporcionó) y el preHandler para validar los guards antes de ejecutar el controlador.
       app[route.method](
         fullPath,
         {
-          schema: route.schema,
+          schema: methodResponses
+            ? { ...route.schema, response: methodResponses }
+            : route.schema,
           // Solo lo inyectamos si hay guards para evitar overhead
           preHandler: buildGuardHandler(allGuards),
           // Solo lo inyectamos si hay configuración de rate limit para evitar overhead
