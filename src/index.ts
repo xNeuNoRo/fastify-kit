@@ -41,6 +41,7 @@ export {
   WsPayload,
   createParamDecorator,
 } from "./http/decorators/parameters.js";
+export { Serialize } from "./http/decorators/serialize.js";
 export type { MultipartFile, FileOptions } from "./http/decorators/types.js";
 
 // ----------------------------------------------
