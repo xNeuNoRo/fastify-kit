@@ -238,7 +238,7 @@ export class FastifyKit {
       );
     });
 
-    // Configuración para interceptar SIGTERM/SIGINT antes de que Fastify cierre el servidor, 
+    // Configuración para interceptar SIGTERM/SIGINT antes de que Fastify cierre el servidor,
     // para ejecutar el hook beforeApplicationShutdown en ese momento.
     this.setupGracefulShutdown(app, lifecycleInstances, (signal) => {
       receivedSignal = signal;
@@ -741,7 +741,7 @@ export class FastifyKit {
           await method.apply(instance, args); // Ejecutamos el hook pasando los argumentos necesarios
         } catch (error) {
           console.error(
-            `❌ [FastifyKit Lifecycle Error] Falla en ${hookName} de la clase ${instance.constructor.name}:`,
+            `[FastifyKit Lifecycle Error] Falla en ${hookName} de la clase ${instance.constructor.name}:`,
             error,
           );
           throw error;
@@ -763,31 +763,48 @@ export class FastifyKit {
     // Guardamos las señales que queremos escuchar para el apagado
     const signals = ["SIGTERM", "SIGINT"] as const;
 
+    // Map para almacenar los handlers de las signals y poder removerlos si es necesario
+    const handlers = new Map<string, NodeJS.SignalsListener>();
+
     // Iteramos en todas las señales y configuramos un listener para cada una de ellas
     for (const signal of signals) {
-      process.on(signal, async () => {
-        // Pasamos la señal recibida al callback
-        onSignalReceived(signal);
+      const handler: NodeJS.SignalsListener = () => {
+        void (async () => {
+          // Pasamos la señal recibida al callback
+          onSignalReceived(signal);
 
-        // Ejecutamos el hook beforeApplicationShutdown en las instancias que lo implementen, pasando la señal como argumento para que puedan realizar tareas de limpieza o sacar el nodo de un Load Balancer antes de que el servidor deje de aceptar nuevas peticiones.
-        await this.executeLifecycleHook(
-          instances,
-          "beforeApplicationShutdown",
-          signal,
-        );
-
-        // Finalmente intentamos cerrar la instancia de Fastify de manera ordenada, y si ocurre algún error durante el cierre, lo capturamos y mostramos un mensaje claro en la consola antes de forzar la salida del proceso con un código de error.
-        try {
-          await app.close();
-          process.exit(0);
-        } catch (error) {
-          console.error(
-            `❌ [FastifyKit] Error crítico durante el apagado:`,
-            error,
+          // Ejecutamos el hook beforeApplicationShutdown en las instancias que lo implementen, pasando la señal como argumento para que puedan realizar tareas de limpieza o sacar el nodo de un Load Balancer antes de que el servidor deje de aceptar nuevas peticiones.
+          await this.executeLifecycleHook(
+            instances,
+            "beforeApplicationShutdown",
+            signal,
           );
-          process.exit(1);
-        }
-      });
+
+          // Finalmente intentamos cerrar la instancia de Fastify de manera ordenada, y si ocurre algún error durante el cierre, lo capturamos y mostramos un mensaje claro en la consola antes de forzar la salida del proceso con un código de error.
+          try {
+            await app.close();
+            process.exit(0);
+          } catch (error) {
+            console.error(
+              `[FastifyKit] Error crítico durante el apagado:`,
+              error,
+            );
+            process.exit(1);
+          }
+        })();
+      };
+
+      // Guardamos el handler en el map para poder removerlo si es necesario
+      handlers.set(signal, handler);
+      // Iniciamos el proceso de apagado llamando al handler una sola vez
+      process.once(signal, handler);
     }
+
+    // Removemos los listeners de las signals cuando la app se cierre para evitar memory leaks en caso de reinicios o cierres múltiples (mas que nada en tests)
+    app.addHook("onClose", async () => {
+      for (const [signal, handler] of handlers.entries()) {
+        process.removeListener(signal, handler);
+      }
+    });
   }
 }

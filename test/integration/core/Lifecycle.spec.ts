@@ -24,7 +24,7 @@ import { Get } from "../../../src/http/decorators/methods.js";
 import { LOGGER_TOKEN } from "../../../src/logger/LoggerContract.js";
 
 describe("Hooks de Ciclo de Vida de FastifyKit (Lifecycle Hooks)", () => {
-  // Mockeamos el procces.exit para evitar que el test se cierre realmente
+  // Mockeamos el process.exit para evitar que el test se cierre realmente
   let processExitSpy: MockInstance;
   // Creamos un array que nos ayudara a validar el orden de ejecución de los hooks y la persistencia del estado entre ellos
   const executionLog: string[] = [];
@@ -146,7 +146,7 @@ describe("Hooks de Ciclo de Vida de FastifyKit (Lifecycle Hooks)", () => {
       db: true,
       cache: true,
     });
-    /// Validamos que el log de ejecución contiene la marca de la petición,
+    // Validamos que el log de ejecución contiene la marca de la petición,
     // lo que confirma que el hook de petición se ejecutó después del arranque
     // y que el estado mutado en el arranque está disponible en la petición
     expect(executionLog).toContain("StatusController:PeticionRecibida");
@@ -162,7 +162,7 @@ describe("Hooks de Ciclo de Vida de FastifyKit (Lifecycle Hooks)", () => {
       await (listener as () => Promise<void>)();
     }
 
-    /// Simular un pequeño delay para asegurar que los hooks de apagado
+    // Simular un pequeño delay para asegurar que los hooks de apagado
     // asíncronos terminen de ejecutarse antes de validar el log de ejecución
     await new Promise((resolve) => setTimeout(resolve, 50));
 
