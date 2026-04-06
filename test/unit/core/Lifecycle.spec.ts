@@ -26,7 +26,7 @@ describe("Ganchos de Ciclo de Vida (Lifecycle Hooks)", () => {
 
   // Diccionario para capturar los listeners que el framework registra en el SO
   const processHandlers: Record<string, (...args: unknown[]) => void> = {};
-  let originalProcessOn: typeof process.on;
+  let originalProcessOnce: typeof process.on;
   let processExitSpy: MockInstance;
   let consoleErrorSpy: MockInstance;
 
@@ -43,13 +43,13 @@ describe("Ganchos de Ciclo de Vida (Lifecycle Hooks)", () => {
 
     // Interceptamos process.exit y lanzamos un error en su lugar
     // para detener la ejecución sin matar el Test Runner de Vitest
-    processExitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
-      throw new Error("process.exit called");
-    }) as any);
+    processExitSpy = vi
+      .spyOn(process, "exit")
+      .mockImplementation(() => undefined as never);
 
     // Interceptamos process.on para secuestrar los eventos SIGTERM/SIGINT
-    originalProcessOn = process.on.bind(process);
-    vi.spyOn(process, "on").mockImplementation(((
+    originalProcessOnce = process.once.bind(process);
+    vi.spyOn(process, "once").mockImplementation(((
       event: string,
       listener: (...args: unknown[]) => void,
     ) => {
@@ -57,7 +57,7 @@ describe("Ganchos de Ciclo de Vida (Lifecycle Hooks)", () => {
         processHandlers[event] = listener;
         return process; // Retornamos process para permitir encadenamiento
       }
-      return originalProcessOn(event, listener as (...args: any[]) => void);
+      return originalProcessOnce(event, listener as (...args: any[]) => void);
     }) as any);
   });
 
@@ -140,9 +140,10 @@ describe("Ganchos de Ciclo de Vida (Lifecycle Hooks)", () => {
     const sigtermHandler = processHandlers["SIGTERM"];
     expect(sigtermHandler).toBeDefined();
 
-    // Ejecutamos el handler manualmente. Sabemos que llamará a process.exit(0),
-    // lo cual será interceptado por nuestro mock y lanzará este error controlado.
-    await expect(sigtermHandler()).rejects.toThrow("process.exit called");
+    // Ejecutamos manualmente el handler de SIGTERM para simular que el proceso recibió esa señal
+    // Esto retorna void por lo tanto no es necesario validarlo como antes
+    sigtermHandler();
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     // Validamos el orden de la Fase 4 y Fase 5:
     // 1. Ejecutó beforeApplicationShutdown con la señal correcta
