@@ -770,19 +770,20 @@ export class FastifyKit {
     for (const signal of signals) {
       const handler: NodeJS.SignalsListener = () => {
         void (async () => {
-          // Pasamos la señal recibida al callback
-          onSignalReceived(signal);
-
-          // Ejecutamos el hook beforeApplicationShutdown en las instancias que lo implementen, pasando la señal como argumento para que puedan realizar tareas de limpieza o sacar el nodo de un Load Balancer antes de que el servidor deje de aceptar nuevas peticiones.
-          await this.executeLifecycleHook(
-            instances,
-            "beforeApplicationShutdown",
-            signal,
-          );
-
-          // Finalmente intentamos cerrar la instancia de Fastify de manera ordenada, y si ocurre algún error durante el cierre, lo capturamos y mostramos un mensaje claro en la consola antes de forzar la salida del proceso con un código de error.
           try {
+            // Pasamos la señal recibida al callback
+            onSignalReceived(signal);
+
+            // Ejecutamos el hook beforeApplicationShutdown en las instancias que lo implementen, pasando la señal como argumento para que puedan realizar tareas de limpieza o sacar el nodo de un Load Balancer antes de que el servidor deje de aceptar nuevas peticiones.
+            await this.executeLifecycleHook(
+              instances,
+              "beforeApplicationShutdown",
+              signal,
+            );
+
+            // Finalmente cerramos la instancia de Fastify
             await app.close();
+            // Si el cierre es exitoso, salimos del proceso con código 0
             process.exit(0);
           } catch (error) {
             console.error(
