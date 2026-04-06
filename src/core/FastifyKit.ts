@@ -61,6 +61,13 @@ export interface FastifyKitOptions {
       };
 }
 
+type LifecycleHookName =
+  | "onModuleInit"
+  | "onApplicationBootstrap"
+  | "onServerReady"
+  | "beforeApplicationShutdown"
+  | "onApplicationShutdown";
+
 export const FASTIFY_INSTANCE_TOKEN = Symbol("FastifyInstance");
 
 export class FastifyKit {
@@ -147,6 +154,21 @@ export class FastifyKit {
       options.module,
     );
 
+    // Set para almacenar las instancias de los controladores y proveedores
+    // que implementen hooks de ciclo de vida, para luego ejecutar esos hooks en el orden correcto.
+    const lifecycleInstances = new Set<object>();
+
+    // Recorremos los controladores y providers para agregarlos al set de instancias de ciclo de vida.
+    for (const Controller of allControllers) {
+      lifecycleInstances.add(container.resolve(Controller));
+    }
+    for (const provider of allProviders) {
+      lifecycleInstances.add(container.resolve(provider.token as Constructor));
+    }
+
+    // Ejecutamos el lyfecycle hook onModuleInit antes de que se registre cualquier plugin o ruta en Fastify
+    await this.executeLifecycleHook(lifecycleInstances, "onModuleInit");
+
     // Registramos los plugins esenciales
     await this.registerCorePlugins(app, options);
 
@@ -177,6 +199,29 @@ export class FastifyKit {
     // para asegurarnos de que todos los proveedores estén registrados e
     // instanciados correctamente antes de iniciar las tareas programadas.
     this.setupScheduledTasks(app, allProviders);
+
+    // Inicializamos el hook onApplicationBootstrap justo antes de que el servidor comience a escuchar peticiones.
+    await this.executeLifecycleHook(
+      lifecycleInstances,
+      "onApplicationBootstrap",
+    );
+
+    // Inicializamos el hook onServerReady justo después de que el servidor ya está escuchando en el puerto
+    app.addHook("onListen", async () => {
+      await this.executeLifecycleHook(lifecycleInstances, "onServerReady");
+    });
+
+    // Inicializamos el hook beforeApplicationShutdown justo cuando se recibe una señal de
+    // terminación, pero antes de que el servidor deje de aceptar nuevas peticiones.
+    app.addHook("onClose", async () => {
+      await this.executeLifecycleHook(
+        lifecycleInstances,
+        "onApplicationShutdown",
+      );
+    });
+
+    // Configuración para interceptar SIGTERM/SIGINT antes de que Fastify cierre el servidor, para ejecutar el hook beforeApplicationShutdown en ese momento.
+    this.setupGracefulShutdown(app, lifecycleInstances);
 
     app.log.info("[FastifyKit] kit inicializado correctamente!");
     return app;
@@ -632,5 +677,75 @@ export class FastifyKit {
 
     // Fusionamos los módulos importados explícitamente y los descubiertos
     return [...manualImports, ...discoveredModules];
+  }
+
+  /**
+   * @description Función auxiliar para ejecutar los hooks de ciclo de vida (onModuleInit, onApplicationBootstrap, onServerReady, beforeApplicationShutdown, onApplicationShutdown) en las instancias que los implementen. Esta función recorre un conjunto de instancias, verifica si cada instancia tiene el hook definido como un método, y si es así, lo ejecuta pasando los argumentos necesarios. Si la ejecución de algún hook falla, se captura el error, se muestra un mensaje claro en la consola indicando qué hook falló y en qué clase, y luego se lanza el error para que pueda ser manejado por el sistema de manejo de errores global.
+   * @param instances Un conjunto de instancias de controladores o proveedores que pueden implementar los hooks de ciclo de vida. Estas instancias se revisarán para verificar si implementan alguno de los hooks definidos, y si es así, se ejecutarán.
+   * @param hookName El nombre del hook de ciclo de vida a ejecutar.
+   * @param args Los argumentos a pasar al hook.
+   */
+  private static async executeLifecycleHook(
+    instances: Set<object>,
+    hookName: LifecycleHookName,
+    ...args: unknown[]
+  ): Promise<void> {
+    // Recorremos todas las instancias para ejecutar el hook correspondiente en aquellas que lo implementen.
+    for (const instance of instances) {
+      if (
+        instance && // Verificamos que la instancia es un objeto y que tiene el hook definido como un método
+        typeof instance === "object" &&
+        hookName in instance &&
+        typeof (instance as Record<string, unknown>)[hookName] === "function"
+      ) {
+        try {
+          const method = (instance as Record<string, Function>)[hookName]; // Obtenemos el método del hook de la instancia
+          await method.apply(instance, args); // Ejecutamos el hook pasando los argumentos necesarios
+        } catch (error) {
+          console.error(
+            `❌ [FastifyKit Lifecycle Error] Falla en ${hookName} de la clase ${instance.constructor.name}:`,
+            error,
+          );
+          throw error;
+        }
+      }
+    }
+  }
+
+  /**
+   * @description Método privado para configurar el apagado elegante (Graceful Shutdown) del servidor Fastify. Este método escucha las señales de terminación del proceso (SIGTERM, SIGINT), y cuando se reciben, ejecuta los hooks de ciclo de vida beforeApplicationShutdown en las instancias que los implementen para permitirles realizar tareas de limpieza o sacar el nodo de un Load Balancer antes de que el servidor deje de aceptar nuevas peticiones. Luego, intenta cerrar la instancia de Fastify de manera ordenada, y si ocurre algún error durante el cierre, lo captura y muestra un mensaje claro en la consola antes de forzar la salida del proceso con un código de error.
+   * @param app La instancia de Fastify en la que se configurará el manejo del apagado elegante. Se utiliza para llamar a app.close() cuando se recibe una señal de terminación, y para registrar los hooks de ciclo de vida relacionados con el apagado.
+   * @param instances Un conjunto de instancias de controladores o proveedores que pueden implementar el hook beforeApplicationShutdown. Estas instancias se revisarán para ejecutar este hook cuando se reciba una señal de terminación, permitiéndoles realizar tareas de limpieza o sacar el nodo de un Load Balancer antes de que el servidor deje de aceptar nuevas peticiones.
+   */
+  private static setupGracefulShutdown(
+    app: FastifyInstance<any, any, any, any, TypeBoxTypeProvider>,
+    instances: Set<object>,
+  ): void {
+    // Guardamos las señales que queremos escuchar para el apagado
+    const signals = ["SIGTERM", "SIGINT"] as const;
+
+    // Iteramos en todas las señales y configuramos un listener para cada una de ellas
+    for (const signal of signals) {
+      process.on(signal, async () => {
+        // Ejecutamos el hook beforeApplicationShutdown en las instancias que lo implementen, pasando la señal como argumento para que puedan realizar tareas de limpieza o sacar el nodo de un Load Balancer antes de que el servidor deje de aceptar nuevas peticiones.
+        await this.executeLifecycleHook(
+          instances,
+          "beforeApplicationShutdown",
+          signal,
+        );
+
+        // Finalmente intentamos cerrar la instancia de Fastify de manera ordenada, y si ocurre algún error durante el cierre, lo capturamos y mostramos un mensaje claro en la consola antes de forzar la salida del proceso con un código de error.
+        try {
+          await app.close();
+          process.exit(0);
+        } catch (error) {
+          console.error(
+            `❌ [FastifyKit] Error crítico durante el apagado:`,
+            error,
+          );
+          process.exit(1);
+        }
+      });
+    }
   }
 }
