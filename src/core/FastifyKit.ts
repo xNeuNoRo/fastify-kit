@@ -68,6 +68,14 @@ type LifecycleHookName =
   | "beforeApplicationShutdown"
   | "onApplicationShutdown";
 
+const LIFECYCLE_HOOKS: LifecycleHookName[] = [
+  "onModuleInit",
+  "onApplicationBootstrap",
+  "onServerReady",
+  "beforeApplicationShutdown",
+  "onApplicationShutdown",
+];
+
 export const FASTIFY_INSTANCE_TOKEN = Symbol("FastifyInstance");
 
 export class FastifyKit {
@@ -160,10 +168,16 @@ export class FastifyKit {
 
     // Recorremos los controladores y providers para agregarlos al set de instancias de ciclo de vida.
     for (const Controller of allControllers) {
-      lifecycleInstances.add(container.resolve(Controller));
+      if (this.hasLifecycleHook(Controller)) {
+        lifecycleInstances.add(container.resolve(Controller));
+      }
     }
     for (const provider of allProviders) {
-      lifecycleInstances.add(container.resolve(provider.token as Constructor));
+      if (this.hasLifecycleHook(provider.implementation)) {
+        lifecycleInstances.add(
+          container.resolve(provider.token as Constructor),
+        );
+      }
     }
 
     // Ejecutamos el lyfecycle hook onModuleInit antes de que se registre cualquier plugin o ruta en Fastify
@@ -677,6 +691,24 @@ export class FastifyKit {
 
     // Fusionamos los módulos importados explícitamente y los descubiertos
     return [...manualImports, ...discoveredModules];
+  }
+
+  /**
+   * @description Verifica si una clase (no instanciada) implementa al menos un hook de ciclo de vida
+   * escaneando directamente su prototipo. Evita instanciaciones innecesarias (Eager Loading).
+   * @param targetClass La clase a verificar, que puede ser un controlador o proveedor registrado en los módulos.
+   */
+  private static hasLifecycleHook(targetClass: Constructor): boolean {
+    // Si no tiene prototipo quiere decir que no es una clase valida
+    if (!targetClass?.prototype) return false;
+
+    // Iteramos hasta encontrar en el prototipo de la clase un metodo que coincida con el hook proporcionado
+    for (const hook of LIFECYCLE_HOOKS) {
+      if (typeof targetClass.prototype[hook] === "function") {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
