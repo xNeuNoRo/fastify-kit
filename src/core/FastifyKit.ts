@@ -33,7 +33,7 @@ import { Value } from "@sinclair/typebox/value";
 
 export interface FastifyKitOptions {
   module: Constructor;
-  envSchema: TSchema;
+  envSchema?: TSchema;
   globalPrefix?: string;
   swagger?: {
     title: string;
