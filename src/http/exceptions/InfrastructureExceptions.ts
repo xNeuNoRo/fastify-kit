@@ -34,8 +34,9 @@ export class BadGatewayException extends HttpException {
 export class ServiceUnavailableException extends HttpException {
   constructor(
     message: string = "El servicio no está disponible temporalmente.",
+    details?: unknown,
   ) {
-    super(message, ErrorCode.SERVICE_UNAVAILABLE, 503);
+    super(message, ErrorCode.SERVICE_UNAVAILABLE, 503, details);
   }
 }
 
