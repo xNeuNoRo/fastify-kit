@@ -4,15 +4,23 @@
 export type HealthStatus = "up" | "down";
 
 /**
- * @description El resultado de la evaluación de un indicador de salud específico.
- * La llave (key) será el nombre del servicio evaluado (ej: "database", "redis").
+ * @description Detalle de la evaluación de un servicio.
+ * Ej: { status: "up", latency: "12ms" }
+ * { status: "down", latency: "200ms", error: "Database connection failed" }
  */
-export interface HealthIndicatorResult {
-  [key: string]: {
-    status: HealthStatus;
-    [optionalKey: string]: any; // Permite agregar métricas extra como latencia, errores, etc.
-  };
+export interface HealthIndicatorDetails {
+  status: HealthStatus;
+  latency?: string;
+  error?: string;
+  // Firma de índice segura para cualquier otra métrica custom
+  [optionalKey: string]: unknown;
 }
+
+/**
+ * @description El resultado de la evaluación de un indicador de salud.
+ * Ej: { "database": { status: "up", latency: "12ms" } }
+ */
+export type HealthIndicatorResult = Record<string, HealthIndicatorDetails>;
 
 /**
  * @description El reporte global de salud que devolverá el endpoint /health.

@@ -14,7 +14,7 @@ export class EventLoopHealthIndicator extends HealthIndicator {
       const start = Date.now();
 
       // Truco en NODEJS, para medir el Event Loop aprovechamos,
-      // el hecho de que el setTimout es una microtarea que se ejecuta inmediatamente después de que el Event Loop esté libre.
+      // el hecho de que el setTimeout es una macrotarea que se ejecuta inmediatamente después de que el Event Loop esté libre.
       // Si el Event Loop está bloqueado, el setTimeout se retrasará, y podemos medir ese retraso
       // para determinar la salud del Event Loop.
       setTimeout(() => {

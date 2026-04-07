@@ -14,7 +14,7 @@ export abstract class HealthIndicator {
   protected getStatus(
     key: string,
     isHealthy: boolean,
-    data?: { [key: string]: any },
+    data?: Record<string, unknown>,
   ): HealthIndicatorResult {
     return {
       [key]: {
