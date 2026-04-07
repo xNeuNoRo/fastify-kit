@@ -9,7 +9,6 @@ import {
   registerControllers,
   type Constructor,
 } from "../http/routing/scanner/index.js";
-import { ApiResponse } from "../http/responses/ApiResponse.js";
 import { discoverControllers, discoverModules } from "./discovery.js";
 import { registerGateways } from "../websockets/gateway.registry.js";
 import { container } from "../container/DIContainer.js";
