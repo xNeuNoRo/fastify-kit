@@ -201,3 +201,20 @@ export type {
   BeforeApplicationShutdown,
   OnApplicationShutdown,
 } from "./core/interfaces/lifecycle.interface.js";
+
+// ==========================================
+// Health Checks (Terminus Pattern)
+// ==========================================
+export { HealthCheckService } from "./health/HealthCheckService.js";
+export { HealthCheckError } from "./health/HealthCheckError.js";
+export { HealthIndicator } from "./health/indicators/HealthIndicator.js";
+
+// Indicadores integrados (Built-in)
+export { MemoryHealthIndicator } from "./health/indicators/MemoryHealthIndicator.js";
+export { HttpHealthIndicator } from "./health/indicators/HttpHealthIndicator.js";
+export { PingHealthIndicator } from "./health/indicators/PingHealthIndicator.js";
+export { DiskSpaceHealthIndicator } from "./health/indicators/DiskSpaceHealthIndicator.js";
+export { EventLoopHealthIndicator } from "./health/indicators/EventLoopHealthIndicator.js";
+
+// Tipos
+export type { HealthCheckResult, HealthIndicatorResult, HealthStatus } from "./health/interfaces.js";
