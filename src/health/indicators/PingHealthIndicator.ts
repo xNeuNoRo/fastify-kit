@@ -12,7 +12,7 @@ export class PingHealthIndicator extends HealthIndicator {
    */
   async check(
     key: string,
-    pingCallback: () => Promise<any>,
+    pingCallback: () => Promise<unknown>,
   ): Promise<HealthIndicatorResult> {
     try {
       const startTime = Date.now();
