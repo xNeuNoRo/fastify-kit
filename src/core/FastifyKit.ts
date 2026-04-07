@@ -186,13 +186,6 @@ export class FastifyKit {
     // Ejecutamos el lifecycle hook onModuleInit antes de que se registre cualquier plugin o ruta en Fastify
     await this.executeLifecycleHook(lifecycleInstances, "onModuleInit");
 
-    // Registramos una ruta de health check para verificar que la API está funcionando correctamente
-    app.get("/health", async () =>
-      ApiResponse.success({
-        status: "up",
-      }),
-    );
-
     // Registramos los controladores escaneados con el prefijo global configurado (si se proporciona) para organizar mejor las rutas de la API
     const prefix = options.globalPrefix || "";
     await app.register(
