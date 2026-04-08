@@ -216,11 +216,7 @@ describe("Motor de Auto-Descubrimiento (Discovery)", () => {
       };
 
       gatewayInstance = new MockGateway();
-      const originalResolve = container.resolve.bind(container);
-      vi.spyOn(container, "resolve").mockImplementation((token) => {
-        if (token === MockGateway) return gatewayInstance;
-        return originalResolve(token);
-      });
+      container.registerInstance(MockGateway, gatewayInstance);
     });
 
     // Después de cada test, restauramos los mocks para evitar interferencias entre tests
@@ -323,12 +319,8 @@ describe("Motor de Auto-Descubrimiento (Discovery)", () => {
         parameters: {},
       };
 
-      // Mockeamos el resolve para que devuelva una instancia de este gateway vacío, y lo registramos
-      const originalResolve = container.resolve.bind(container);
-      vi.spyOn(container, "resolve").mockImplementation((token) => {
-        if (token === EmptyGateway) return new EmptyGateway() as any;
-        return originalResolve(token);
-      });
+      // Registramos el gateway vacío en el contenedor y lo pasamos al registry para que lo registre normalmente
+      container.registerInstance(EmptyGateway, new EmptyGateway());
       registerGateways(appMock, [EmptyGateway]);
 
       // Simulamos la conexión de un cliente WebSocket y capturamos los handlers registrados para cada evento
