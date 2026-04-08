@@ -121,6 +121,21 @@ function buildWsGuardHandler(guards: Constructor[]) {
   };
 }
 
+async function executeMethodGuards(
+  guards: Constructor[],
+  request: FastifyRequest,
+  connection: FastifyKitSocket,
+): Promise<boolean> {
+  // Ejecutamos los guards definidos a nivel de método.
+  // Si algún guard deniega el acceso, devolvemos false para indicar que no se debe procesar el mensaje.
+  for (let i = 0; i < guards.length; i++) { // nosonar => for tradicional es mas rapido que el for...of
+    const guardInstance = container.resolve(guards[i]);
+    const canActivate = await guardInstance.canActivate(request, connection);
+    if (!canActivate) return false;
+  }
+  return true;
+}
+
 function sendMessageResponse(
   connection: WebSocket,
   adapter: any,
@@ -173,6 +188,7 @@ async function processIncomingMessage({
   adapter,
   eventRouter,
   firehoseMethod,
+  methodGuards,
 }: {
   rawMessage: string | Buffer;
   GatewayClass: Constructor;
@@ -183,9 +199,14 @@ async function processIncomingMessage({
   adapter: any;
   eventRouter: Map<string, PropertyKey>;
   firehoseMethod: PropertyKey | null;
+  methodGuards: Map<PropertyKey, Constructor[]>;
 }) {
+  let currentPattern: string | undefined = undefined;
+
   try {
     const packet = adapter.decode(rawMessage);
+    currentPattern = packet.pattern ?? undefined;
+
     // Resolvemos el handler correspondiente al patrón del mensaje entrante.
     const handlerName = resolveHandlerName(
       packet.pattern,
@@ -202,6 +223,23 @@ async function processIncomingMessage({
         );
       }
       return;
+    }
+
+    // Si el handler tiene guards a nivel de método, los ejecutamos antes de procesar el mensaje.
+    // Si algún guard deniega el acceso, le avisamos al cliente que no tiene permisos para
+    // acceder a ese evento y detenemos la ejecución al instante.
+    const guards = methodGuards.get(handlerName);
+    if (guards && guards.length > 0) {
+      const isAllowed = await executeMethodGuards(guards, request, connection);
+      if (!isAllowed) {
+        sendMessageResponse(connection, adapter, packet.pattern, {
+          error: "Forbidden",
+          message:
+            "Acceso denegado, no tienes permiso para ejecutar esta acción.",
+          statusCode: 403,
+        });
+        return; // Detenemos la ejecución al instante
+      }
     }
 
     // Extraemos los argumentos necesarios para ejecutar el handler y lo ejecutamos
@@ -223,11 +261,22 @@ async function processIncomingMessage({
     // Enviamos la respuesta del handler de vuelta al cliente WebSocket
     sendMessageResponse(connection, adapter, packet.pattern, result);
   } catch (err: any) {
-    // En caso de error, le avisamos al cliente que hubo un error procesando el mensaje, y lo logueamos para que el desarrollador pueda investigarlo.
     if (connection.readyState === 1) {
-      connection.send(
-        `ERROR:EXECUTION_FAILED:${err.message || "Internal Server Error"}`,
-      );
+      if (err.validation || err.name === "ValidationException") {
+        sendMessageResponse(connection, adapter, currentPattern, {
+          error: "Bad Request",
+          message: "Datos inválidos o malformados.",
+          details: err.validation || err.message,
+          statusCode: 400,
+        });
+      } else {
+        // Para cualquier otro error no controlado (500)
+        sendMessageResponse(connection, adapter, currentPattern, {
+          error: "Internal Server Error",
+          message: "Error interno ejecutando el evento.",
+          statusCode: 500,
+        });
+      }
     }
     getLogger().error(
       `[FastifyKit WS] Error procesando mensaje en ${GatewayClass.name}:`,
@@ -301,6 +350,16 @@ export function registerGateways(
       }
     }
 
+    // Preparamos un mapa de guards a nivel de método
+    // para poder ejecutarlos rápidamente antes de procesar cada mensaje entrante.
+    const methodGuards = new Map<PropertyKey, Constructor[]>();
+    if (metadata.methodGuards) {
+      for (const [method, guards] of Object.entries(metadata.methodGuards)) {
+        // Solo guardamos el array si realmente tiene elementos
+        if (guards && guards.length > 0) methodGuards.set(method, guards);
+      }
+    }
+
     // Si el Gateway tiene guards a nivel de clase, construimos un handler
     // para ejecutarlos antes de procesar cualquier evento de WebSocket.
     // Si algún guard deniega el acceso, se lanzará una excepción y no se procesará el evento.
@@ -363,6 +422,7 @@ export function registerGateways(
             adapter,
             eventRouter,
             firehoseMethod,
+            methodGuards,
           });
         });
 
