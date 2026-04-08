@@ -50,12 +50,13 @@ export function Validate(schema: TSchema, argIndex: number = 0) {
         throw new Error(errorMsg);
       }
 
-      // Intentamos convertir y castear los datos al tipo esperado por el esquema.
-      // Si ocurre un error durante esta conversión, lo registramos como un error crítico,
-      // pero no lanzamos una excepción aquí porque la validación posterior aún puede detectar problemas de tipo o estructura.
+      // Convertimos tipos básicos (ej: "123" -> 123) útiles en query params/form-data.
+      // Luego aplicamos los valores por defecto definidos en el esquema (Value.Default).
+      // IMPORTANTE: NO usamos Value.Cast() aquí para evitar que TypeBox invente datos
+      // en campos requeridos faltantes. Queremos que la validación posterior falle si faltan datos.
       try {
         const converted = Value.Convert(schema, dataToValidate);
-        dataToValidate = Value.Cast(schema, converted);
+        dataToValidate = Value.Default(schema, converted);
         args[argIndex] = dataToValidate;
       } catch (err: any) {
         logger.error(

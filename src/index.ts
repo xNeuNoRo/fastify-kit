@@ -15,13 +15,10 @@ export {
   FASTIFY_INSTANCE_TOKEN,
 } from "./core/FastifyKit.js";
 export { Module } from "./core/module.decorator.js";
-export {
-  discoverControllers,
-  discoverModules,
-} from "./http/routing/discovery.js";
+export { discoverControllers, discoverModules } from "./core/discovery.js";
 export type { ModuleOptions } from "./http/decorators/types.js";
-export type { AutoDiscoverOptions } from "./http/routing/discovery.js";
-export type { Constructor } from "./http/routing/scanner.js";
+export type { AutoDiscoverOptions } from "./core/discovery.js";
+export type { Constructor } from "./http/routing/scanner/index.js";
 
 // ----------------------------------------------
 // HTTP Routing & Controllers
@@ -42,7 +39,9 @@ export {
   Cookie,
   Socket,
   WsPayload,
+  createParamDecorator,
 } from "./http/decorators/parameters.js";
+export { Serialize } from "./http/decorators/serialize.js";
 export type { MultipartFile, FileOptions } from "./http/decorators/types.js";
 
 // ----------------------------------------------
@@ -52,6 +51,16 @@ export { UseGuards } from "./http/decorators/guards.js";
 export { RateLimit } from "./http/decorators/rate-limit.js";
 export type { CanActivate } from "./http/guards/CanActivate.js";
 export type { RateLimitOptions } from "./http/decorators/types.js";
+
+// ----------------------------------------------
+// HTTP Interceptors (AOP)
+// ----------------------------------------------
+export { UseInterceptors } from "./http/decorators/interceptors.js";
+export type {
+  Interceptor,
+  ExecutionContext,
+  CallHandler,
+} from "./http/interceptors/Interceptor.js";
 
 // ----------------------------------------------
 // HTTP Responses & Exceptions
@@ -162,3 +171,50 @@ export type {
   WsAdapter,
   FastifyKitWsPacket,
 } from "./websockets/interfaces/WsAdapter.js";
+
+// ----------------------------------------------
+// WEBSOCKETS (Room Management & Broadcasting System)
+// ----------------------------------------------
+
+// Interfaces y tipos relacionados con la gestión de salas y broadcasting de WebSockets
+export type { WsEventHandlerMetadata } from "./websockets/decorators/types.js";
+export type { FastifyKitSocket } from "./websockets/interfaces/FastifyKitSocket.js";
+export type { WsRoomManager } from "./websockets/interfaces/WsRoomManager.js";
+
+// Token para que puedan inyectar su propio RedisRoomManager o similar
+export { WS_ROOM_MANAGER_TOKEN } from "./websockets/interfaces/WsRoomManager.js";
+
+// Herramientas de Broadcasting Proactivo
+export { WsBroadcaster } from "./websockets/broadcaster/WsBroadcaster.js";
+export {
+  broadcastToRoom,
+  broadcastToRooms,
+} from "./websockets/broadcaster/WsBroadcaster.js"; // Facades
+
+// ==========================================
+// CICLO DE VIDA (LIFECYCLE HOOKS)
+// ==========================================
+export type {
+  OnModuleInit,
+  OnApplicationBootstrap,
+  OnServerReady,
+  BeforeApplicationShutdown,
+  OnApplicationShutdown,
+} from "./core/interfaces/lifecycle.interface.js";
+
+// ==========================================
+// Health Checks (Terminus Pattern)
+// ==========================================
+export { HealthCheckService } from "./health/HealthCheckService.js";
+export { HealthCheckError } from "./health/HealthCheckError.js";
+export { HealthIndicator } from "./health/indicators/HealthIndicator.js";
+
+// Indicadores integrados (Built-in)
+export { MemoryHealthIndicator } from "./health/indicators/MemoryHealthIndicator.js";
+export { HttpHealthIndicator } from "./health/indicators/HttpHealthIndicator.js";
+export { PingHealthIndicator } from "./health/indicators/PingHealthIndicator.js";
+export { DiskSpaceHealthIndicator } from "./health/indicators/DiskSpaceHealthIndicator.js";
+export { EventLoopHealthIndicator } from "./health/indicators/EventLoopHealthIndicator.js";
+
+// Tipos
+export type { HealthCheckResult, HealthIndicatorResult, HealthStatus } from "./health/interfaces.js";

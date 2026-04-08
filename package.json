@@ -1,6 +1,6 @@
 {
   "name": "@neunoro/fastify-kit",
-  "version": "0.3.5",
+  "version": "0.5.0",
   "description": "Kit para el framework Fastify HTTP de alto rendimiento que utiliza Stage 3 Decorators para una experiencia de desarrollo más fluida y organizada. Proporciona una estructura modular basada en decoradores para definir controladores, proveedores y módulos, facilitando la creación de aplicaciones Fastify escalables y mantenibles.",
   "type": "module",
   "main": "dist/index.js",
@@ -43,15 +43,15 @@
     ]
   },
   "peerDependencies": {
-    "@sinclair/typebox": "^0.34.0",
-    "fastify": "^5.8.2"
+    "@sinclair/typebox": "^0.34.49",
+    "fastify": "^5.8.4"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.2.0",
     "@fastify/helmet": "^13.0.2",
     "@fastify/jwt": "^10.0.0",
-    "@fastify/multipart": "^9.4.0",
+    "@fastify/multipart": "^10.0.0",
     "@fastify/rate-limit": "^10.3.0",
     "@fastify/swagger": "^9.7.0",
     "@fastify/type-provider-typebox": "^6.1.0",
@@ -62,7 +62,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
-    "@types/node": "^22.0.0",
+    "@types/node": "^24.12.2",
     "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.39.1",
     "@typescript-eslint/parser": "^8.39.1",
@@ -77,7 +77,7 @@
     "husky": "^8.0.0",
     "lint-staged": "^16.1.5",
     "prettier": "^3.6.2",
-    "typescript": "^5.9.2",
+    "typescript": "^6.0.2",
     "vitest": "^4.1.1",
     "ws": "^8.20.0"
   }

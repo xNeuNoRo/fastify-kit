@@ -1,5 +1,5 @@
 import type { CanActivate } from "../guards/CanActivate.js";
-import type { Constructor } from "../routing/scanner.js";
+import type { Constructor } from "../routing/scanner/index.js";
 
 /**
  * @description Decorador para aplicar guards a clases o métodos en FastifyKit. Permite registrar uno o varios guards que se ejecutarán antes de acceder a la ruta protegida, ya sea a nivel de clase (aplicando los guards a todas las rutas del controlador) o a nivel de método (aplicando los guards solo a la ruta específica). Este decorador es fundamental para implementar mecanismos de autorización y control de acceso en la aplicación, asegurando que solo los usuarios o roles autorizados puedan acceder a ciertas funcionalidades o recursos.

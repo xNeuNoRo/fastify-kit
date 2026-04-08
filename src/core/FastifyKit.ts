@@ -8,13 +8,9 @@ import { fastifyKitErrorHandler } from "../http/plugins/errorHandler.js";
 import {
   registerControllers,
   type Constructor,
-} from "../http/routing/scanner.js";
-import { ApiResponse } from "../http/responses/ApiResponse.js";
-import {
-  discoverControllers,
-  discoverModules,
-  registerGateways,
-} from "../http/routing/discovery.js";
+} from "../http/routing/scanner/index.js";
+import { discoverControllers, discoverModules } from "./discovery.js";
+import { registerGateways } from "../websockets/gateway.registry.js";
 import { container } from "../container/DIContainer.js";
 import { requestContext } from "../http/context/requestContext.js";
 import type {
@@ -29,9 +25,14 @@ import type { CreateRateLimitOptions } from "@fastify/rate-limit";
 import type { FastifyCorsOptions } from "@fastify/cors";
 import type { FastifyHelmetOptions } from "@fastify/helmet";
 import type { ServerOptions as HttpsServerOptions } from "node:https";
+import type { TSchema } from "@sinclair/typebox";
+import { TypeCompiler } from "@sinclair/typebox/compiler";
+import { ConfigRegistry } from "../config/ConfigRegistry.js";
+import { Value } from "@sinclair/typebox/value";
 
 export interface FastifyKitOptions {
   module: Constructor;
+  envSchema?: TSchema;
   globalPrefix?: string;
   swagger?: {
     title: string;
@@ -58,6 +59,21 @@ export interface FastifyKitOptions {
         maxPayload?: number; // Tamaño máximo de payload en bytes para mensajes de WebSocket (opcional, por defecto 10MB)
       };
 }
+
+type LifecycleHookName =
+  | "onModuleInit"
+  | "onApplicationBootstrap"
+  | "onServerReady"
+  | "beforeApplicationShutdown"
+  | "onApplicationShutdown";
+
+const LIFECYCLE_HOOKS: LifecycleHookName[] = [
+  "onModuleInit",
+  "onApplicationBootstrap",
+  "onServerReady",
+  "beforeApplicationShutdown",
+  "onApplicationShutdown",
+];
 
 export const FASTIFY_INSTANCE_TOKEN = Symbol("FastifyInstance");
 
@@ -117,16 +133,21 @@ export class FastifyKit {
   static async create(
     options: FastifyKitOptions,
   ): Promise<FastifyInstance<any, any, any, any, TypeBoxTypeProvider>> {
+    if (options.envSchema) {
+      this.validateAndLoadEnvironment(options.envSchema);
+    }
+
     const userAjv = options.fastifyOptions?.ajv;
+    const isAjvObject = typeof userAjv === "object" && userAjv !== null;
 
     const app = fastify({
       ...options.fastifyOptions,
       ajv: {
         // Preservamos las opciones ajv del usuario (si existen)
-        ...userAjv,
+        ...(isAjvObject ? userAjv : {}),
         customOptions: {
           // Preservamos las customOptions del usuario (si existen)
-          ...userAjv?.customOptions,
+          ...(isAjvObject ? userAjv.customOptions : {}),
           strict: false, // Forzamos nuestro requerimiento crítico para TypeBox
         },
       } as FastifyServerOptions["ajv"],
@@ -143,12 +164,26 @@ export class FastifyKit {
     // Registramos los plugins esenciales
     await this.registerCorePlugins(app, options);
 
-    // Registramos una ruta de health check para verificar que la API está funcionando correctamente
-    app.get("/health", async () =>
-      ApiResponse.success({
-        status: "up",
-      }),
-    );
+    // Set para almacenar las instancias de los controladores y proveedores
+    // que implementen hooks de ciclo de vida, para luego ejecutar esos hooks en el orden correcto.
+    const lifecycleInstances = new Set<object>();
+
+    // Recorremos los controladores y providers para agregarlos al set de instancias de ciclo de vida.
+    for (const Controller of allControllers) {
+      if (this.hasLifecycleHook(Controller)) {
+        lifecycleInstances.add(container.resolve(Controller));
+      }
+    }
+    for (const provider of allProviders) {
+      if (this.hasLifecycleHook(provider.implementation)) {
+        lifecycleInstances.add(
+          container.resolve(provider.token as Constructor),
+        );
+      }
+    }
+
+    // Ejecutamos el lifecycle hook onModuleInit antes de que se registre cualquier plugin o ruta en Fastify
+    await this.executeLifecycleHook(lifecycleInstances, "onModuleInit");
 
     // Registramos los controladores escaneados con el prefijo global configurado (si se proporciona) para organizar mejor las rutas de la API
     const prefix = options.globalPrefix || "";
@@ -171,8 +206,37 @@ export class FastifyKit {
     // instanciados correctamente antes de iniciar las tareas programadas.
     this.setupScheduledTasks(app, allProviders);
 
-    app.log.info("[FastifyKit] kit inicializado correctamente!");
-    return app as any;
+    // Inicializamos el hook onApplicationBootstrap justo antes de que el servidor comience a escuchar peticiones.
+    await this.executeLifecycleHook(
+      lifecycleInstances,
+      "onApplicationBootstrap",
+    );
+
+    // Inicializamos el hook onServerReady justo después de que el servidor ya está escuchando en el puerto
+    app.addHook("onListen", async () => {
+      await this.executeLifecycleHook(lifecycleInstances, "onServerReady");
+    });
+
+    let receivedSignal: string | undefined;
+
+    // Inicializamos el hook onApplicationShutdown justo antes de que el servidor se cierre,
+    // pasando la señal recibida para que las instancias puedan realizar tareas de limpieza
+    // o sacar el nodo de un Load Balancer antes de que deje de aceptar nuevas peticiones.
+    app.addHook("onClose", async () => {
+      await this.executeLifecycleHook(
+        lifecycleInstances,
+        "onApplicationShutdown",
+        receivedSignal,
+      );
+    });
+
+    // Configuración para interceptar SIGTERM/SIGINT antes de que Fastify cierre el servidor,
+    // para ejecutar el hook beforeApplicationShutdown en ese momento.
+    this.setupGracefulShutdown(app, lifecycleInstances, (signal) => {
+      receivedSignal = signal;
+    });
+
+    return app;
   }
 
   /**
@@ -407,6 +471,62 @@ export class FastifyKit {
   }
 
   /**
+   * @description Método privado para validar las variables de entorno utilizando el esquema proporcionado por el usuario en las opciones de FastifyKit. Este método extrae solo las variables de entorno definidas en el esquema, coerciona sus valores según los tipos definidos en el esquema (ej: números, booleanos), y luego valida el entorno coercionado contra el esquema utilizando TypeBox. Si la validación falla, se extraen los errores y se muestran de manera clara en la consola, indicando qué variable no pasó la validación, cuál era el tipo esperado y cuál fue el mensaje de error. Finalmente, se aborta la inicialización del servidor para evitar que se ejecute con una configuración de entorno incorrecta. Si la validación es exitosa, las variables de entorno coercionadas y validadas se registran individualmente en el ConfigRegistry para que puedan ser accedidas de manera tipada en cualquier parte del código.
+   * @param envSchema El esquema de validación de las variables de entorno proporcionado por el usuario en las opciones de FastifyKit. Este esquema debe ser un TSchema de TypeBox que defina las variables de entorno esperadas, sus tipos y cualquier otra validación necesaria. El método utiliza este esquema para validar y coercionar las variables de entorno antes de registrar su valor en el ConfigRegistry.
+   */
+  private static validateAndLoadEnvironment(envSchema: TSchema): void {
+    // Extraemos solo las variables de entorno que están definidas en el esquema
+    const schemaKeys = Object.keys((envSchema as any).properties || {});
+    // Creamos un nuevo objeto con solo las variables de entorno relevantes para la validación y coerción
+    const extractedEnv: Record<string, unknown> = {};
+
+    // Iteramos sobre las claves definidas en el esquema
+    for (const key of schemaKeys) {
+      // Si existe la variable de entorno, la agregamos al objeto de entorno extraído
+      if (process.env[key] !== undefined) {
+        extractedEnv[key] = process.env[key];
+      }
+    }
+
+    // Coercionamos los valores de entorno extraídos según el esquema para asegurarnos de
+    // que tengan los tipos correctos (ej: números, booleanos) antes de validarlos.
+    const coercedEnv = Value.Convert(envSchema, extractedEnv);
+
+    // Compilamos el esquema
+    const compiler = TypeCompiler.Compile(envSchema);
+    // Validamos el entorno coercionado contra el esquema.
+    const isValid = compiler.Check(coercedEnv);
+
+    // Si no es valido
+    if (!isValid) {
+      // Extraemos los errores y los mostramos de manera clara en la consola
+      const errors = [...compiler.Errors(coercedEnv)];
+      console.error(
+        "[FastifyKit Boot Error] Ha fallado la validación de las variables de entorno:",
+      );
+      for (const err of errors) {
+        console.error(
+          `   - Variable: ${err.path.replace("/", "")} | Esperado: ${
+            err.schema.type
+          } | Mensaje: ${err.message}`,
+        );
+      }
+      // Evitamos inicializar el servidor hasta que se configuren debidamente
+      console.error("Abortando la inicialización del servidor por seguridad.");
+      process.exit(1);
+    }
+
+    // Registramos individualmente cada variable de entorno validada y coercionada en el
+    // ConfigRegistry para que puedan ser accedidas de manera tipada en cualquier parte
+    // Con el decorador @InjectConfig("VARIABLE") o directamente con ConfigRegistry.get("VARIABLE")
+    for (const [key, value] of Object.entries(
+      coercedEnv as Record<string, any>,
+    )) {
+      ConfigRegistry.set(key, value);
+    }
+  }
+
+  /**
    * @description Método privado recursivo para bootstrappear un módulo y sus submódulos, registrando sus controladores y proveedores en el contenedor de inyección de dependencias. Este método se encarga de evitar ciclos en el árbol de módulos utilizando un conjunto de módulos visitados, y fusiona los controladores explícitos definidos en cada módulo con los controladores descubiertos automáticamente si se ha configurado el auto-discover.
    * @param moduleClass La clase del módulo a bootstrappear. Esta clase debe estar decorada con \@Module para que la Factory pueda extraer sus opciones y metadata.
    * @param visited Un conjunto de módulos que ya han sido visitados en el proceso de bootstrap para evitar ciclos en el árbol de módulos. Se inicializa como un conjunto vacío en la llamada inicial.
@@ -415,6 +535,12 @@ export class FastifyKit {
   private static async bootstrapModule(
     moduleClass: any,
     visited = new Set(),
+    globalControllers = new Set<Constructor>(),
+    globalProvidersMap = new Map<
+      any,
+      { token: any; implementation: Constructor }
+    >(),
+    isRoot = true,
   ): Promise<{
     allControllers: Constructor[];
     allProviders: { token: any; implementation: Constructor }[];
@@ -431,26 +557,44 @@ export class FastifyKit {
       metadata.providers,
       moduleClass,
     );
-    const [controllers, allModules] = await Promise.all([
+    for (const provider of currentProviders) {
+      // Agregamos el proveedor al mapa global para evitar duplicados en submódulos
+      if (!globalProvidersMap.has(provider.token)) {
+        globalProvidersMap.set(provider.token, provider);
+      }
+    }
+    const [localControllers, allModules] = await Promise.all([
       this.collectModuleControllers(metadata),
       this.collectModuleImports(metadata),
     ]);
 
-    // Bootstrappeamos recursivamente cada submódulo para obtener sus controladores
-    // y agregarlos a la lista de controladores a registrar.
-    for (const subModule of allModules) {
-      const { allControllers: subControllers, allProviders: subProviders } =
-        await this.bootstrapModule(subModule, visited);
-      controllers.push(...subControllers);
-      currentProviders.push(...subProviders);
+    // Agregamos los controladores locales al conjunto global para evitar duplicados en submódulos
+    for (const controller of localControllers) {
+      globalControllers.add(controller);
     }
 
-    // Finalmente, retornamos todos los controladores y proveedores encontrados en
-    // este módulo y sus submódulos (evitando duplicados con Set) para que puedan ser registrados en Fastify.
-    return {
-      allControllers: Array.from(new Set(controllers)),
-      allProviders: this.deduplicateProviders(currentProviders),
-    };
+    // Bootstrappeamos recursivamente los submódulos, pasándoles las referencias globales para que puedan agregar sus controladores y proveedores sin duplicados.
+    for (const subModule of allModules) {
+      await this.bootstrapModule(
+        subModule,
+        visited,
+        globalControllers,
+        globalProvidersMap,
+        false,
+      );
+    }
+
+    // Si estamos en el módulo raíz, retornamos todos los controladores y proveedores globales encontrados en todo el árbol de módulos.
+    if (isRoot) {
+      return {
+        allControllers: Array.from(globalControllers),
+        allProviders: Array.from(globalProvidersMap.values()),
+      };
+    }
+
+    // Retorno "dummy" para las llamadas recursivas internas, ya que
+    // su trabajo real fue mutar `globalControllers` y `globalProvidersMap`.
+    return { allControllers: [], allProviders: [] };
   }
 
   /**
@@ -548,25 +692,112 @@ export class FastifyKit {
   }
 
   /**
-   * @description Función auxiliar para deduplicar los proveedores registrados en un módulo y sus submódulos, utilizando un Map basado en el token de cada proveedor para garantizar que no haya proveedores duplicados registrados en Fastify. Esto es importante para evitar conflictos y asegurar que cada token de proveedor corresponda a una única implementación en el contenedor de inyección de dependencias.
-   * @param providers El array de proveedores a deduplicar, que puede contener proveedores registrados en el módulo actual y en sus submódulos. Cada proveedor es un objeto que contiene un token y una implementación.
-   * @returns Un array de proveedores deduplicados, donde cada token de proveedor corresponde a una única implementación. Si había proveedores duplicados en el array original (es decir, proveedores con el mismo token), solo se mantendrá uno de ellos en el array resultante.
+   * @description Verifica si una clase (no instanciada) implementa al menos un hook de ciclo de vida
+   * escaneando directamente su prototipo. Evita instanciaciones innecesarias (Eager Loading).
+   * @param targetClass La clase a verificar, que puede ser un controlador o proveedor registrado en los módulos.
    */
-  private static deduplicateProviders(
-    providers: { token: any; implementation: Constructor }[],
-  ): { token: any; implementation: Constructor }[] {
-    // Deduplicamos los proveedores usando un Map basado en el "token"
-    const uniqueProvidersMap = new Map<
-      any,
-      { token: any; implementation: Constructor }
-    >();
+  private static hasLifecycleHook(targetClass: Constructor): boolean {
+    // Si no tiene prototipo quiere decir que no es una clase valida
+    if (!targetClass?.prototype) return false;
 
-    for (const provider of providers) {
-      if (!uniqueProvidersMap.has(provider.token)) {
-        uniqueProvidersMap.set(provider.token, provider);
+    // Iteramos hasta encontrar en el prototipo de la clase un metodo que coincida con el hook proporcionado
+    for (const hook of LIFECYCLE_HOOKS) {
+      if (typeof targetClass.prototype[hook] === "function") {
+        return true;
       }
     }
+    return false;
+  }
 
-    return Array.from(uniqueProvidersMap.values());
+  /**
+   * @description Función auxiliar para ejecutar los hooks de ciclo de vida (onModuleInit, onApplicationBootstrap, onServerReady, beforeApplicationShutdown, onApplicationShutdown) en las instancias que los implementen. Esta función recorre un conjunto de instancias, verifica si cada instancia tiene el hook definido como un método, y si es así, lo ejecuta pasando los argumentos necesarios. Si la ejecución de algún hook falla, se captura el error, se muestra un mensaje claro en la consola indicando qué hook falló y en qué clase, y luego se lanza el error para que pueda ser manejado por el sistema de manejo de errores global.
+   * @param instances Un conjunto de instancias de controladores o proveedores que pueden implementar los hooks de ciclo de vida. Estas instancias se revisarán para verificar si implementan alguno de los hooks definidos, y si es así, se ejecutarán.
+   * @param hookName El nombre del hook de ciclo de vida a ejecutar.
+   * @param args Los argumentos a pasar al hook.
+   */
+  private static async executeLifecycleHook(
+    instances: Set<object>,
+    hookName: LifecycleHookName,
+    ...args: unknown[]
+  ): Promise<void> {
+    // Recorremos todas las instancias para ejecutar el hook correspondiente en aquellas que lo implementen.
+    for (const instance of instances) {
+      if (
+        instance && // Verificamos que la instancia es un objeto y que tiene el hook definido como un método
+        typeof instance === "object" &&
+        hookName in instance &&
+        typeof (instance as Record<string, unknown>)[hookName] === "function"
+      ) {
+        try {
+          const method = (instance as Record<string, Function>)[hookName]; // Obtenemos el método del hook de la instancia
+          await method.apply(instance, args); // Ejecutamos el hook pasando los argumentos necesarios
+        } catch (error) {
+          console.error(
+            `[FastifyKit Lifecycle Error] Falla en ${hookName} de la clase ${instance.constructor.name}:`,
+            error,
+          );
+          throw error;
+        }
+      }
+    }
+  }
+
+  /**
+   * @description Método privado para configurar el apagado elegante (Graceful Shutdown) del servidor Fastify. Este método escucha las señales de terminación del proceso (SIGTERM, SIGINT), y cuando se reciben, ejecuta los hooks de ciclo de vida beforeApplicationShutdown en las instancias que los implementen para permitirles realizar tareas de limpieza o sacar el nodo de un Load Balancer antes de que el servidor deje de aceptar nuevas peticiones. Luego, intenta cerrar la instancia de Fastify de manera ordenada, y si ocurre algún error durante el cierre, lo captura y muestra un mensaje claro en la consola antes de forzar la salida del proceso con un código de error.
+   * @param app La instancia de Fastify en la que se configurará el manejo del apagado elegante. Se utiliza para llamar a app.close() cuando se recibe una señal de terminación, y para registrar los hooks de ciclo de vida relacionados con el apagado.
+   * @param instances Un conjunto de instancias de controladores o proveedores que pueden implementar el hook beforeApplicationShutdown. Estas instancias se revisarán para ejecutar este hook cuando se reciba una señal de terminación, permitiéndoles realizar tareas de limpieza o sacar el nodo de un Load Balancer antes de que el servidor deje de aceptar nuevas peticiones.
+   */
+  private static setupGracefulShutdown(
+    app: FastifyInstance<any, any, any, any, TypeBoxTypeProvider>,
+    instances: Set<object>,
+    onSignalReceived: (signal: string) => void,
+  ): void {
+    // Guardamos las señales que queremos escuchar para el apagado
+    const signals = ["SIGTERM", "SIGINT"] as const;
+
+    // Map para almacenar los handlers de las signals y poder removerlos si es necesario
+    const handlers = new Map<string, NodeJS.SignalsListener>();
+
+    // Iteramos en todas las señales y configuramos un listener para cada una de ellas
+    for (const signal of signals) {
+      const handler: NodeJS.SignalsListener = () => {
+        void (async () => {
+          try {
+            // Pasamos la señal recibida al callback
+            onSignalReceived(signal);
+
+            // Ejecutamos el hook beforeApplicationShutdown en las instancias que lo implementen, pasando la señal como argumento para que puedan realizar tareas de limpieza o sacar el nodo de un Load Balancer antes de que el servidor deje de aceptar nuevas peticiones.
+            await this.executeLifecycleHook(
+              instances,
+              "beforeApplicationShutdown",
+              signal,
+            );
+
+            // Finalmente cerramos la instancia de Fastify
+            await app.close();
+            // Si el cierre es exitoso, salimos del proceso con código 0
+            process.exit(0);
+          } catch (error) {
+            console.error(
+              `[FastifyKit] Error crítico durante el apagado:`,
+              error,
+            );
+            process.exit(1);
+          }
+        })();
+      };
+
+      // Guardamos el handler en el map para poder removerlo si es necesario
+      handlers.set(signal, handler);
+      // Iniciamos el proceso de apagado llamando al handler una sola vez
+      process.once(signal, handler);
+    }
+
+    // Removemos los listeners de las signals cuando la app se cierre para evitar memory leaks en caso de reinicios o cierres múltiples (mas que nada en tests)
+    app.addHook("onClose", async () => {
+      for (const [signal, handler] of handlers.entries()) {
+        process.removeListener(signal, handler);
+      }
+    });
   }
 }

@@ -67,6 +67,16 @@ class DIContainer {
   }
 
   /**
+   * @description Verifica si un contrato está explícitamente registrado en el contenedor
+   * (ya sea mediante una implementación/instancia, o porque ya fue resuelto previamente).
+   * @param contract El contrato a verificar.
+   * @returns true si el contrato está registrado en el contenedor, false de lo contrario.
+   */
+  has<T>(contract: Contract<T>): boolean {
+    return this.instances.has(contract) || this.registry.has(contract);
+  }
+
+  /**
    * @description Elimina todas las implementaciones e instancias registradas en el contenedor de inyección de dependencias,
    * dejando el contenedor vacío y listo para nuevas registraciones. Util para entornos de testing.
    */

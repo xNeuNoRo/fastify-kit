@@ -1,12 +1,15 @@
+import type { FastifyReply, FastifyRequest } from "fastify";
 import {
   WebSocketGatewayOptions,
   WsEventHandlerMetadata,
 } from "../../websockets/decorators/types.js";
 import type { CanActivate } from "../guards/CanActivate.js";
 import type { PipeTransform } from "../pipes/PipeTransform.js";
-import type { AutoDiscoverOptions } from "../routing/discovery.js";
-import type { Constructor } from "../routing/scanner.js";
+import type { AutoDiscoverOptions } from "../../core/discovery.js";
+import type { Constructor } from "../routing/scanner/index.js";
 import type { RouteDefinition } from "../routing/types.js";
+import type { Interceptor } from "../interceptors/Interceptor.js";
+import type { TSchema } from "@sinclair/typebox";
 
 /**
  * @description Tipos y interfaces para la metadata de los decoradores en FastifyKit.
@@ -26,7 +29,8 @@ export type ParameterType =
   | "file"
   | "cookie"
   | "socket"
-  | "wsPayload";
+  | "wsPayload"
+  | "custom"; // Para permitir tipos personalizados, como @User, @AuthToken, etc.
 
 /**
  * @description Interfaz que define las opciones de configuración para el manejo de archivos en los métodos decorados con @File.
@@ -66,6 +70,7 @@ export interface ParameterMetadata {
   key?: string;
   pipe?: Constructor<PipeTransform>;
   fileOptions?: FileOptions;
+  customFactory?: (request: FastifyRequest, reply: FastifyReply) => unknown;
 }
 
 /**
@@ -121,4 +126,7 @@ export type FastifyKitMetadata = DecoratorMetadata & {
   rateLimits?: Record<string | symbol, RateLimitOptions>; // Metadata para rate limiting a nivel de método
   wsGateway?: WebSocketGatewayOptions; // Metadata para gateways de WebSockets a nivel de clase
   wsEvents?: WsEventHandlerMetadata[]; // Metadata para eventos de WebSockets a nivel de método
+  classInterceptors?: Constructor<Interceptor>[]; // Interceptores a nivel de clase
+  routeInterceptors?: Record<string | symbol, Constructor<Interceptor>[]>; // Interceptores a nivel de ruta, mapeado por el nombre del método
+  responsesSchema?: Record<string | symbol, Record<number, TSchema>>; // Esquemas de respuesta a nivel de método, mapeados por el nombre del método y el código HTTP
 };
