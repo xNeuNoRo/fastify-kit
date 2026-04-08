@@ -29,7 +29,7 @@ export class HttpHealthIndicator extends HealthIndicator {
 
       return this.getStatus(key, isHealthy, {
         latency: `${latency}ms`,
-        status: response.status,
+        statusCode: response.status,
         ...(isHealthy
           ? {}
           : {
