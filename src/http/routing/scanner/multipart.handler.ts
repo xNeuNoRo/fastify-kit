@@ -1,4 +1,4 @@
-import { FastifyRequest } from "fastify";
+import type { FastifyRequest } from "fastify";
 import {
   FileTooLargeException,
   UnsupportedMediaTypeException,
@@ -103,9 +103,6 @@ export async function handleMultipartFilePart(
   });
 }
 
-/**
- * @description Pre-parsea el formulario multipart/form-data en memoria.
- */
 /**
  * @description Pre-parsea el formulario multipart/form-data en memoria.
  */

@@ -6,24 +6,18 @@ import {
 } from "../interfaces/WsRoomManager.js";
 import { MemoryRoomManager } from "./MemoryRoomManager.js";
 
-let fallbackRoomManager: WsRoomManager | null = null;
-
 /**
  * @description Factory para obtener el gestor de salas activo.
  * Intenta resolverlo desde el contenedor de dependencias (por si inyectó uno personalizado con Redis/RabbitMQ).
  * Si no hay ninguno registrado, utiliza el MemoryRoomManager por defecto.
  */
 export function getRoomManager(): WsRoomManager {
-  if (container.has(WS_ROOM_MANAGER_TOKEN)) {
-    return container.resolve<WsRoomManager>(WS_ROOM_MANAGER_TOKEN);
-  }
-
-  if (!fallbackRoomManager) {
+  if (!container.has(WS_ROOM_MANAGER_TOKEN)) {
     getLogger().debug(
       "[FastifyKit WS] Utilizando MemoryRoomManager por defecto para las salas de WebSockets.",
     );
-    fallbackRoomManager = new MemoryRoomManager();
+    container.registerClass(WS_ROOM_MANAGER_TOKEN, MemoryRoomManager);
   }
 
-  return fallbackRoomManager;
+  return container.resolve<WsRoomManager>(WS_ROOM_MANAGER_TOKEN);
 }

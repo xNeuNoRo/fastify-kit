@@ -67,22 +67,13 @@ class DIContainer {
   }
 
   /**
-   * @description Verifica si un contrato puede ser resuelto por el contenedor sin lanzar excepciones.
-   * Útil para evitar usar try/catch como control de flujo al aplicar fallbacks.
+   * @description Verifica si un contrato está explícitamente registrado en el contenedor
+   * (ya sea mediante una implementación/instancia, o porque ya fue resuelto previamente).
    * @param contract El contrato a verificar.
-   * @returns true si el contrato está registrado o es instanciable, false de lo contrario.
+   * @returns true si el contrato está registrado en el contenedor, false de lo contrario.
    */
   has<T>(contract: Contract<T>): boolean {
-    // Verificamos si el contrato ya tiene una instancia registrada
-    if (this.instances.has(contract)) {
-      return true;
-    }
-    // Verificamos si el contrato tiene una implementación registrada
-    if (this.registry.has(contract)) {
-      return true;
-    }
-    // Si el contrato es una clase concreta (no abstracta), consideramos que puede ser resuelto directamente sin registro previo
-    return typeof contract === "function";
+    return this.instances.has(contract) || this.registry.has(contract);
   }
 
   /**
