@@ -62,6 +62,9 @@ describe("Bun Native Bridge (BunWsBridge)", () => {
     const handler = BunWsBridge.handler;
     const incomingMessage = Buffer.from('{"event":"ping","data":"hello"}');
 
+    // Simulamos que el motor de Bun dispara el evento open para establecer la conexión
+    await handler.open!(mockBunSocket);
+
     // Simulamos que el motor de Bun dispara el evento message
     await handler.message(mockBunSocket, incomingMessage);
 
@@ -76,6 +79,9 @@ describe("Bun Native Bridge (BunWsBridge)", () => {
 
   it("Debería enrutar el evento 'close' al método onDisconnect para limpiar recursos", async () => {
     const handler = BunWsBridge.handler;
+
+    // Simulamos que el motor de Bun dispara el evento open para establecer la conexión
+    await handler.open!(mockBunSocket);
 
     // Simulamos que el motor de Bun dispara el evento close
     await handler.close!(mockBunSocket, 1000, "Normal Closure");
