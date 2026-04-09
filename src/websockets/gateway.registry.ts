@@ -23,11 +23,6 @@ export type Constructor<T = any> = new (...args: any[]) => T;
 const decoratorMetadataSymbol: symbol =
   (Symbol as any).metadata ?? Symbol.for("Symbol.metadata");
 
-// Detectamos si es Bun para usar el adaptador nativo ultra-optimizado,
-// o si es Node.js para usar el adaptador estándar basado en JSON.
-const isBun =
-  (globalThis as any).Bun !== undefined && process.env.NODE_ENV !== "test";
-
 function setupHeartbeatAndTeardown(app: FastifyInstance) {
   // Simple flag para evitar configurar el heartbeat más de una vez si se llama a registerGateways varias veces.
   if ((app as any)._wsHeartbeatSetup) return;
@@ -350,7 +345,9 @@ export function registerGateways(
   app: FastifyInstance,
   gateways: Constructor[],
 ) {
-  const DefaultAdapter = isBun ? BunNativeWsAdapter : JsonWsAdapter;
+  const isNativeBun =
+    (globalThis as any).Bun !== undefined && process.env.NODE_ENV !== "test";
+  const DefaultAdapter = isNativeBun ? BunNativeWsAdapter : JsonWsAdapter;
 
   for (const GatewayClass of gateways) {
     const metadata = (GatewayClass as any)[
@@ -411,7 +408,7 @@ export function registerGateways(
     // en los handlers de eventos de conexión, desconexión y mensajes.
     const roomManager = getRoomManager();
 
-    if (isBun) {
+    if (isNativeBun) {
       BunWsBridge.register(options.path, {
         adapter,
         onConnect: async (socket, request) => {
