@@ -456,13 +456,17 @@ export function registerGateways(
         },
       });
 
-      app.get(options.path, (request, reply) => {
-        // @ts-ignore
-        const success = Bun.mainServer.upgrade(request.raw, {
-          data: { path: options.path, request },
-        });
-        if (!success) reply.code(400).send("Upgrade Failed");
-      });
+      app.get(
+        options.path,
+        { ...(preHandler ? { preHandler } : {}) },
+        (request, reply) => {
+          // @ts-ignore
+          const success = Bun.mainServer.upgrade(request.raw, {
+            data: { path: options.path, request },
+          });
+          if (!success) reply.code(400).send("Upgrade Failed");
+        },
+      );
       continue;
     }
 
