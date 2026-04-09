@@ -77,6 +77,9 @@ const LIFECYCLE_HOOKS: LifecycleHookName[] = [
 
 export const FASTIFY_INSTANCE_TOKEN = Symbol("FastifyInstance");
 
+const isBun =
+  (globalThis as any).Bun !== undefined && process.env.NODE_ENV !== "test";
+
 export class FastifyKit {
   // Usamos un símbolo para almacenar la metadata de los módulos y
   // evitar conflictos con otras propiedades de la clase.
@@ -240,6 +243,42 @@ export class FastifyKit {
   }
 
   /**
+   * @description Arranca el servidor detectando el entorno.
+   * En Bun, utiliza el motor nativo para WebSockets con el Bridge.
+   */
+  static async listen(
+    app: FastifyInstance,
+    port: number,
+    host = "0.0.0.0",
+  ): Promise<void> {
+    if (isBun) {
+      const { BunWsBridge } = await import("../websockets/bun/BunWsBridge.js");
+
+      // Guardamos la instancia en Bun.mainServer para que el .upgrade() del registry funcione
+      (globalThis as any).Bun.mainServer = (globalThis as any).Bun.serve({
+        port,
+        hostname: host,
+        // Redirigimos el tráfico HTTP a Fastify usando su motor de compatibilidad
+        fetch: (req: Request) =>
+          (
+            app as unknown as {
+              routing: (request: Request) => Response | Promise<Response>;
+            }
+          ).routing(req),
+        // Inyectamos el puente de WebSockets que procesará los eventos nativos
+        websocket: BunWsBridge.handler,
+      });
+
+      app.log.info(
+        `[FastifyKit] Servidor Bun (Native Bridge) activo en puerto ${port}`,
+      );
+    } else {
+      // En Node.js, simplemente usamos el método listen de Fastify como siempre
+      await app.listen({ port, host });
+    }
+  }
+
+  /**
    * @description Método privado para registrar los plugins esenciales en la instancia de Fastify, incluyendo multipart para manejo de archivos, cookies para manejo de cookies, websockets para manejo de gateways de WebSocket, plugins personalizados para manejo de contexto de solicitud y manejo de errores, plugins de seguridad (CORS, Helmet, rate limit) según las opciones proporcionadas por el usuario, y el plugin de documentación (Swagger/Scalar) si se ha configurado la opción de Swagger.
    * @param app La instancia de Fastify en la que se registrarán los plugins esenciales. Esta instancia se va a configurar con los plugins necesarios para el funcionamiento de FastifyKit, y luego se devolverá para que el usuario pueda usarla como su servidor de API.
    * @param options Las opciones de configuración para FastifyKit, que incluyen la activación de multipart, cookies, websockets, seguridad y documentación. Estas opciones se utilizan para determinar qué plugins registrar en la instancia de Fastify y con qué configuraciones específicas.
@@ -279,7 +318,7 @@ export class FastifyKit {
 
     // Si el usuario activa websockets, registramos el plugin de websockets para manejar los gateways
     // de WebSocket definidos en los controladores y proveedores de los módulos.
-    if (options.websockets) {
+    if (options.websockets && !isBun) {
       const wsConfig =
         typeof options.websockets === "object" ? options.websockets : {};
 
