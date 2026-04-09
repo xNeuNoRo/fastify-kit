@@ -13,10 +13,8 @@ import type {
 } from "./interfaces/FastifyKitSocket.js";
 import { getRoomManager } from "./managers/room-manager.factory.js";
 import { ForbiddenException } from "../http/exceptions/SecurityExceptions.js";
-import { BunNativeWsAdapter } from "./adapters/BunNativeWsAdapter.js";
 import { WsAdapter } from "./interfaces/WsAdapter.js";
 import { WsRoomManager } from "./interfaces/WsRoomManager.js";
-import { BunWsBridge } from "./bun/BunWsBridge.js";
 
 export type Constructor<T = any> = new (...args: any[]) => T;
 
@@ -345,10 +343,6 @@ export function registerGateways(
   app: FastifyInstance,
   gateways: Constructor[],
 ) {
-  const isNativeBun =
-    (globalThis as any).Bun !== undefined && process.env.NODE_ENV !== "test";
-  const DefaultAdapter = isNativeBun ? BunNativeWsAdapter : JsonWsAdapter;
-
   for (const GatewayClass of gateways) {
     const metadata = (GatewayClass as any)[
       decoratorMetadataSymbol
@@ -367,7 +361,7 @@ export function registerGateways(
     const events = metadata.wsEvents || [];
 
     // Instanciamos el adaptador de WebSockets definido en la configuración del decorador o usamos el adaptador por defecto (JsonWsAdapter)
-    const AdapterClass = options.adapter || DefaultAdapter;
+    const AdapterClass = options.adapter || JsonWsAdapter;
     const adapter = new AdapterClass();
 
     // Mapas para almacenar los métodos de cada tipo de evento (connect, disconnect, message) y sus patrones asociados
@@ -407,65 +401,6 @@ export function registerGateways(
     // Obtenemos el gestor de salas activo para poder usarlo
     // en los handlers de eventos de conexión, desconexión y mensajes.
     const roomManager = getRoomManager();
-
-    if (isNativeBun) {
-      BunWsBridge.register(options.path, {
-        adapter,
-        onConnect: async (socket, request) => {
-          setupSocketMetadata(socket, options.path, roomManager, adapter);
-          if (onConnectMethod)
-            await executeLifecycleMethod(
-              onConnectMethod,
-              GatewayClass,
-              instance,
-              preSortedParams,
-              request,
-              socket,
-              true,
-            );
-        },
-        onDisconnect: async (socket) => {
-          await socket.leaveAll();
-          if (onDisconnectMethod)
-            await executeLifecycleMethod(
-              onDisconnectMethod,
-              GatewayClass,
-              instance,
-              preSortedParams,
-              null as any,
-              socket,
-              false,
-            );
-        },
-        process: async (socket, rawMessage, request) => {
-          await processIncomingMessage({
-            rawMessage,
-            GatewayClass,
-            instance,
-            preSortedParams,
-            request,
-            connection: socket,
-            adapter,
-            eventRouter,
-            firehoseMethod,
-            methodGuards,
-          });
-        },
-      });
-
-      app.get(
-        options.path,
-        { ...(preHandler ? { preHandler } : {}) },
-        (request, reply) => {
-          // @ts-ignore
-          const success = Bun.mainServer.upgrade(request.raw, {
-            data: { path: options.path, request },
-          });
-          if (!success) reply.code(400).send("Upgrade Failed");
-        },
-      );
-      continue;
-    }
 
     // Registramos la ruta del WebSocket en Fastify usando la configuración del decorador y el handler para gestionar las conexiones entrantes, mensajes y desconexiones
     app.get(
