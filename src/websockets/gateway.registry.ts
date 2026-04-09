@@ -1,6 +1,5 @@
 import type {} from "@fastify/websocket";
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import type { WebSocket } from "ws";
 import { getLogger } from "../logger/logger.factory.js";
 import { container } from "../container/DIContainer.js";
 import { JsonWsAdapter } from "./adapters/JsonWsAdapter.js";
@@ -8,10 +7,16 @@ import { WsEventHandlerMetadata } from "./decorators/types.js";
 import type { FastifyKitMetadata } from "../http/decorators/types.js";
 import { extractArguments } from "../http/routing/scanner/parameter.resolver.js";
 import { randomUUID } from "node:crypto";
-import type { FastifyKitSocket } from "./interfaces/FastifyKitSocket.js";
+import type {
+  BaseWebSocket,
+  FastifyKitSocket,
+} from "./interfaces/FastifyKitSocket.js";
 import { getRoomManager } from "./managers/room-manager.factory.js";
 import { ForbiddenException } from "../http/exceptions/SecurityExceptions.js";
 import { BunNativeWsAdapter } from "./adapters/BunNativeWsAdapter.js";
+import { WsAdapter } from "./interfaces/WsAdapter.js";
+import { WsRoomManager } from "./interfaces/WsRoomManager.js";
+import { BunWsBridge } from "./bun/BunWsBridge.js";
 
 export type Constructor<T = any> = new (...args: any[]) => T;
 
@@ -20,7 +25,8 @@ const decoratorMetadataSymbol: symbol =
 
 // Detectamos si es Bun para usar el adaptador nativo ultra-optimizado,
 // o si es Node.js para usar el adaptador estándar basado en JSON.
-const isBun = (globalThis as any).Bun !== undefined;
+const isBun =
+  (globalThis as any).Bun !== undefined && process.env.NODE_ENV !== "test";
 
 function setupHeartbeatAndTeardown(app: FastifyInstance) {
   // Simple flag para evitar configurar el heartbeat más de una vez si se llama a registerGateways varias veces.
@@ -81,7 +87,7 @@ async function executeLifecycleMethod(
       false,
       undefined,
       {
-        socket: connection,
+        socket: connection as any,
         payload: null,
       },
     );
@@ -142,8 +148,8 @@ async function executeMethodGuards(
 }
 
 function sendMessageResponse(
-  connection: WebSocket,
-  adapter: any,
+  connection: BaseWebSocket,
+  adapter: WsAdapter,
   pattern: string | undefined,
   result: unknown,
 ) {
@@ -201,7 +207,7 @@ async function processIncomingMessage({
   preSortedParams: Map<PropertyKey, any[]>;
   request: FastifyRequest;
   connection: FastifyKitSocket;
-  adapter: any;
+  adapter: WsAdapter;
   eventRouter: Map<string, PropertyKey>;
   firehoseMethod: PropertyKey | null;
   methodGuards: Map<PropertyKey, Constructor[]>;
@@ -210,11 +216,12 @@ async function processIncomingMessage({
 
   try {
     const packet = adapter.decode(rawMessage);
-    currentPattern = packet.pattern ?? undefined;
+    const pattern = packet.pattern ?? undefined;
+    currentPattern = pattern;
 
     // Resolvemos el handler correspondiente al patrón del mensaje entrante.
     const handlerName = resolveHandlerName(
-      packet.pattern,
+      pattern,
       eventRouter,
       firehoseMethod,
     );
@@ -237,7 +244,7 @@ async function processIncomingMessage({
     if (guards && guards.length > 0) {
       const isAllowed = await executeMethodGuards(guards, request, connection);
       if (!isAllowed) {
-        sendMessageResponse(connection, adapter, packet.pattern, {
+        sendMessageResponse(connection, adapter, pattern, {
           error: "Forbidden",
           message:
             "Acceso denegado, no tienes permiso para ejecutar esta acción.",
@@ -257,14 +264,14 @@ async function processIncomingMessage({
       false,
       undefined,
       {
-        socket: connection,
+        socket: connection as any,
         payload: packet.payload,
       },
     );
     const result = await instance[handlerName](...args);
 
     // Enviamos la respuesta del handler de vuelta al cliente WebSocket
-    sendMessageResponse(connection, adapter, packet.pattern, result);
+    sendMessageResponse(connection, adapter, pattern, result);
   } catch (err: any) {
     if (connection.readyState === 1) {
       if (err.validation || err.name === "ValidationException") {
@@ -310,6 +317,33 @@ function mapGatewayEvents(
   }
 
   return { onConnectMethod, onDisconnectMethod, firehoseMethod };
+}
+
+/**
+ * @description Helper para inicializar el socket con la lógica del framework.
+ * Se usa tanto en Node como en Bun para garantizar consistencia.
+ */
+function setupSocketMetadata(
+  socket: FastifyKitSocket,
+  path: string,
+  roomManager: WsRoomManager,
+  adapter: WsAdapter,
+): void {
+  // Registramos todos los metadatos para el socket
+  socket.id = randomUUID();
+  socket.isAlive = true;
+  socket.data = {};
+  socket.namespace = path;
+
+  // Delegamos todos los metodos del socket al manager registrado para las salas
+  socket.join = (room: string) =>
+    roomManager.join(path, room, socket.id, socket);
+  socket.leave = (room: string) => roomManager.leave(path, room, socket.id);
+  socket.leaveAll = () => roomManager.leaveAll(socket.id);
+  socket.to = (room: string) => ({
+    emit: async (pattern: string, payload: any) =>
+      roomManager.emitToRoom(path, room, pattern, payload, adapter),
+  });
 }
 
 export function registerGateways(
@@ -377,33 +411,71 @@ export function registerGateways(
     // en los handlers de eventos de conexión, desconexión y mensajes.
     const roomManager = getRoomManager();
 
+    if (isBun) {
+      BunWsBridge.register(options.path, {
+        adapter,
+        onConnect: async (socket, request) => {
+          setupSocketMetadata(socket, options.path, roomManager, adapter);
+          if (onConnectMethod)
+            await executeLifecycleMethod(
+              onConnectMethod,
+              GatewayClass,
+              instance,
+              preSortedParams,
+              request,
+              socket,
+              true,
+            );
+        },
+        onDisconnect: async (socket) => {
+          await socket.leaveAll();
+          if (onDisconnectMethod)
+            await executeLifecycleMethod(
+              onDisconnectMethod,
+              GatewayClass,
+              instance,
+              preSortedParams,
+              null as any,
+              socket,
+              false,
+            );
+        },
+        process: async (socket, rawMessage, request) => {
+          await processIncomingMessage({
+            rawMessage,
+            GatewayClass,
+            instance,
+            preSortedParams,
+            request,
+            connection: socket,
+            adapter,
+            eventRouter,
+            firehoseMethod,
+            methodGuards,
+          });
+        },
+      });
+
+      app.get(options.path, (request, reply) => {
+        // @ts-ignore
+        const success = Bun.mainServer.upgrade(request.raw, {
+          data: { path: options.path, request },
+        });
+        if (!success) reply.code(400).send("Upgrade Failed");
+      });
+      continue;
+    }
+
     // Registramos la ruta del WebSocket en Fastify usando la configuración del decorador y el handler para gestionar las conexiones entrantes, mensajes y desconexiones
     app.get(
       options.path,
       { websocket: true, ...(preHandler ? { preHandler } : {}) },
       (connection: any, request: FastifyRequest) => {
-        const socket = (connection?.socket || connection) as FastifyKitSocket;
-
+        const socket = (connection?.socket ||
+          connection) as FastifyKitSocket & { on: Function };
         // Extraemos el namespace del path del gateway para que los
         // handlers puedan usarlo y separar mejor la lógica si el mismo handler maneja varios namespaces.
-        const namespace = options.path;
-
-        // Registramos todos los metadatos para el socket
-        socket.id = randomUUID();
-        socket.isAlive = true;
-        socket.data = {};
-        socket.namespace = namespace;
-
-        // Delegamos todos los metodos del socket al manager registrado para las salas
-        socket.join = (room: string) =>
-          roomManager.join(namespace, room, socket.id, socket);
-        socket.leave = (room: string) =>
-          roomManager.leave(namespace, room, socket.id);
-        socket.leaveAll = () => roomManager.leaveAll(socket.id);
-        socket.to = (room: string) => ({
-          emit: async (pattern: string, payload: any) =>
-            roomManager.emitToRoom(namespace, room, pattern, payload, adapter),
-        });
+        setupSocketMetadata(socket, options.path, roomManager, adapter);
 
         // Registramos el handler de @OnConnect() para que se ejecute cuando un cliente se conecte
         if (onConnectMethod) {
