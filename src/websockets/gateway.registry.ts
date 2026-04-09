@@ -11,11 +11,16 @@ import { randomUUID } from "node:crypto";
 import type { FastifyKitSocket } from "./interfaces/FastifyKitSocket.js";
 import { getRoomManager } from "./managers/room-manager.factory.js";
 import { ForbiddenException } from "../http/exceptions/SecurityExceptions.js";
+import { BunNativeWsAdapter } from "./adapters/BunNativeWsAdapter.js";
 
 export type Constructor<T = any> = new (...args: any[]) => T;
 
 const decoratorMetadataSymbol: symbol =
   (Symbol as any).metadata ?? Symbol.for("Symbol.metadata");
+
+// Detectamos si es Bun para usar el adaptador nativo ultra-optimizado,
+// o si es Node.js para usar el adaptador estándar basado en JSON.
+const isBun = (globalThis as any).Bun !== undefined;
 
 function setupHeartbeatAndTeardown(app: FastifyInstance) {
   // Simple flag para evitar configurar el heartbeat más de una vez si se llama a registerGateways varias veces.
@@ -190,7 +195,7 @@ async function processIncomingMessage({
   firehoseMethod,
   methodGuards,
 }: {
-  rawMessage: string | Buffer;
+  rawMessage: string | Buffer | Uint8Array;
   GatewayClass: Constructor;
   instance: any;
   preSortedParams: Map<PropertyKey, any[]>;
@@ -311,6 +316,8 @@ export function registerGateways(
   app: FastifyInstance,
   gateways: Constructor[],
 ) {
+  const DefaultAdapter = isBun ? BunNativeWsAdapter : JsonWsAdapter;
+
   for (const GatewayClass of gateways) {
     const metadata = (GatewayClass as any)[
       decoratorMetadataSymbol
@@ -329,7 +336,7 @@ export function registerGateways(
     const events = metadata.wsEvents || [];
 
     // Instanciamos el adaptador de WebSockets definido en la configuración del decorador o usamos el adaptador por defecto (JsonWsAdapter)
-    const AdapterClass = options.adapter || JsonWsAdapter;
+    const AdapterClass = options.adapter || DefaultAdapter;
     const adapter = new AdapterClass();
 
     // Mapas para almacenar los métodos de cada tipo de evento (connect, disconnect, message) y sus patrones asociados
