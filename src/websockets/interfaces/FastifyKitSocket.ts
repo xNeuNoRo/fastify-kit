@@ -1,21 +1,17 @@
 /**
- * @description Interfaz que define los métodos mínimos que debe tener un socket
- * para ser compatible con FastifyKit, ya sea en Node.js o Bun.
+ * @description Interfaz que define la estructura de un socket en FastifyKit
  */
 export interface BaseWebSocket {
-  /** @description Estado de la conexión (OPEN, CLOSED, etc) */
   readyState: number;
-  /** @description Envía datos al cliente. Soporta strings y formatos binarios nativos. */
   send(
     data: string | Uint8Array | Buffer,
     options?: { compress?: boolean; binary?: boolean },
   ): void;
-  /** @description Cierra la conexión de forma controlada. */
   close(code?: number, reason?: string): void;
-  /** @description Cierra la conexión inmediatamente (específico de ws, opcional en Bun). */
   terminate?(): void;
-  /** @description Envía un frame de ping (gestionado automáticamente por Bun). */
   ping?(): void;
+  on(event: string, listener: (...args: any[]) => void): this;
+  once(event: string, listener: (...args: any[]) => void): this;
 }
 
 /**
