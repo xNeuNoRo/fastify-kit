@@ -1,6 +1,7 @@
 import type { ServerWebSocket, WebSocketHandler } from "bun";
 import type { BunSocketContext, BunGatewayExecutionConfig } from "./types.js";
 import type { FastifyKitSocket } from "../interfaces/FastifyKitSocket.js";
+import type { FastifyRequest } from "fastify";
 
 /**
  * @description Orquestador que conecta los eventos de red nativos de Bun (Zig)
@@ -11,6 +12,12 @@ export class BunWsBridge {
   private static readonly registry = new Map<
     string,
     BunGatewayExecutionConfig
+  >();
+
+  // Aislamiento de estado para evitar que setupSocketMetadata() borre el contexto de Bun
+  private static readonly socketMeta = new WeakMap<
+    any,
+    { config: BunGatewayExecutionConfig; request: FastifyRequest }
   >();
 
   /**
@@ -28,12 +35,20 @@ export class BunWsBridge {
     return {
       // Bun abre la conexión y nos entrega el socket con los datos que inyectamos en el upgrade
       open: async (ws: ServerWebSocket<BunSocketContext>) => {
-        const config = BunWsBridge.registry.get(ws.data.path);
-        if (config?.onConnect) {
-          // Convertimos el socket nativo de Bun a nuestra interfaz compatible
-          // TS lo permite porque BaseWebSocket es un subconjunto de ServerWebSocket
-          const kitSocket = ws as unknown as FastifyKitSocket;
-          await config.onConnect(kitSocket, ws.data.request);
+        const path = ws.data.path;
+        const request = ws.data.request;
+        const config = BunWsBridge.registry.get(path);
+
+        if (config) {
+          // Guardamos la configuración y la request en la bóveda segura del WeakMap
+          BunWsBridge.socketMeta.set(ws, { config, request });
+
+          if (config.onConnect) {
+            // Convertimos el socket nativo de Bun a nuestra interfaz compatible
+            // TS lo permite porque BaseWebSocket es un subconjunto de ServerWebSocket
+            const kitSocket = ws as unknown as FastifyKitSocket;
+            await config.onConnect(kitSocket, request);
+          }
         }
       },
 
@@ -42,19 +57,22 @@ export class BunWsBridge {
         ws: ServerWebSocket<BunSocketContext>,
         message: string | Buffer | Uint8Array,
       ) => {
-        const config = BunWsBridge.registry.get(ws.data.path);
-        if (config) {
+        // Leemos de nuestra bóveda segura, ignorando totalmente ws.data
+        const meta = BunWsBridge.socketMeta.get(ws);
+
+        if (meta) {
           const kitSocket = ws as unknown as FastifyKitSocket;
-          await config.process(kitSocket, message, ws.data.request);
+          await meta.config.process(kitSocket, message, meta.request);
         }
       },
 
       // Limpieza de recursos al cerrar la conexión
       close: async (ws: ServerWebSocket<BunSocketContext>) => {
-        const config = BunWsBridge.registry.get(ws.data.path);
-        if (config?.onDisconnect) {
+        const meta = BunWsBridge.socketMeta.get(ws);
+
+        if (meta?.config?.onDisconnect) {
           const kitSocket = ws as unknown as FastifyKitSocket;
-          await config.onDisconnect(kitSocket);
+          await meta.config.onDisconnect(kitSocket);
         }
       },
     };
