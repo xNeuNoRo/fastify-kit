@@ -251,7 +251,10 @@ export class FastifyKit {
     port: number,
     host = "0.0.0.0",
   ): Promise<void> {
-    if (isBun) {
+    const isNativeBun =
+      (globalThis as any).Bun !== undefined && process.env.NODE_ENV !== "test";
+
+    if (isNativeBun) {
       const { BunWsBridge } = await import("../websockets/bun/BunWsBridge.js");
 
       // Guardamos la instancia en Bun.mainServer para que el .upgrade() del registry funcione
