@@ -77,9 +77,6 @@ const LIFECYCLE_HOOKS: LifecycleHookName[] = [
 
 export const FASTIFY_INSTANCE_TOKEN = Symbol("FastifyInstance");
 
-const isBun =
-  (globalThis as any).Bun !== undefined && process.env.NODE_ENV !== "test";
-
 export class FastifyKit {
   // Usamos un símbolo para almacenar la metadata de los módulos y
   // evitar conflictos con otras propiedades de la clase.
@@ -282,7 +279,7 @@ export class FastifyKit {
 
     // Si el usuario activa websockets, registramos el plugin de websockets para manejar los gateways
     // de WebSocket definidos en los controladores y proveedores de los módulos.
-    if (options.websockets && !isBun) {
+    if (options.websockets) {
       const wsConfig =
         typeof options.websockets === "object" ? options.websockets : {};
 

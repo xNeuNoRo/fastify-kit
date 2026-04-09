@@ -132,7 +132,8 @@ async function executeMethodGuards(
 ): Promise<boolean> {
   // Ejecutamos los guards definidos a nivel de método.
   // Si algún guard deniega el acceso, devolvemos false para indicar que no se debe procesar el mensaje.
-  for (let i = 0; i < guards.length; i++) { // nosonar => for tradicional es mas rapido que el for...of
+  for (let i = 0; i < guards.length; i++) {
+    // nosonar => for tradicional es mas rapido que el for...of
     const guardInstance = container.resolve(guards[i]);
     const canActivate = await guardInstance.canActivate(request, connection);
     if (!canActivate) return false;
@@ -314,7 +315,6 @@ function mapGatewayEvents(
 
 /**
  * @description Helper para inicializar el socket con la lógica del framework.
- * Se usa tanto en Node como en Bun para garantizar consistencia.
  */
 function setupSocketMetadata(
   socket: FastifyKitSocket,
