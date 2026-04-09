@@ -1,6 +1,6 @@
 {
   "name": "@neunoro/fastify-kit",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "description": "Kit para el framework Fastify HTTP de alto rendimiento que utiliza Stage 3 Decorators para una experiencia de desarrollo más fluida y organizada. Proporciona una estructura modular basada en decoradores para definir controladores, proveedores y módulos, facilitando la creación de aplicaciones Fastify escalables y mantenibles.",
   "type": "module",
   "main": "dist/index.js",
