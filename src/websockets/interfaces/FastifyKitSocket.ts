@@ -1,4 +1,22 @@
-import type { WebSocket } from "ws";
+/**
+ * @description Interfaz que define los métodos mínimos que debe tener un socket
+ * para ser compatible con FastifyKit, ya sea en Node.js o Bun.
+ */
+export interface BaseWebSocket {
+  /** @description Estado de la conexión (OPEN, CLOSED, etc) */
+  readyState: number;
+  /** @description Envía datos al cliente. Soporta strings y formatos binarios nativos. */
+  send(
+    data: string | Uint8Array | Buffer,
+    options?: { compress?: boolean; binary?: boolean },
+  ): void;
+  /** @description Cierra la conexión de forma controlada. */
+  close(code?: number, reason?: string): void;
+  /** @description Cierra la conexión inmediatamente (específico de ws, opcional en Bun). */
+  terminate?(): void;
+  /** @description Envía un frame de ping (gestionado automáticamente por Bun). */
+  ping?(): void;
+}
 
 /**
  * @description Extensión de la interfaz nativa WebSocket para añadir propiedades específicas de FastifyKit.
@@ -6,7 +24,7 @@ import type { WebSocket } from "ws";
  */
 export interface FastifyKitSocket<
   TData = Record<string, any>,
-> extends WebSocket {
+> extends BaseWebSocket {
   /**
    * @description Identificador único (UUID) generado automáticamente al establecer la conexión.
    */
@@ -23,7 +41,7 @@ export interface FastifyKitSocket<
   data: TData;
 
   /**
-   * @description El namespace al que pertenece este socket, 
+   * @description El namespace al que pertenece este socket,
    * esto permite a los handlers diferenciar la lógica si manejan múltiples namespaces.
    */
   namespace: string;
