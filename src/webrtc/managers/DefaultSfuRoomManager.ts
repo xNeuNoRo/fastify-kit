@@ -99,6 +99,7 @@ export class DefaultSfuRoomManager
     // Limpiar el estado interno del gestor de salas
     this.workers = [];
     this.routers.clear();
+    this.pendingRooms.clear();
 
     this.logger.info(
       `[FastifyKit WebRTC] Gestor de salas SFU apagado completamente.`,
