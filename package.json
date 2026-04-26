@@ -44,7 +44,13 @@
   },
   "peerDependencies": {
     "@sinclair/typebox": "^0.34.49",
-    "fastify": "^5.8.4"
+    "fastify": "^5.8.4",
+    "mediasoup": "^3.19.21"
+  },
+  "peerDependenciesMeta": {
+    "mediasoup": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
@@ -58,8 +64,7 @@
     "@fastify/websocket": "^11.2.0",
     "@scalar/fastify-api-reference": "^1.49.3",
     "croner": "^10.0.1",
-    "fastify-plugin": "^5.1.0",
-    "mediasoup": "^3.19.21"
+    "fastify-plugin": "^5.1.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
