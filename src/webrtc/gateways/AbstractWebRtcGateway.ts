@@ -13,11 +13,15 @@ import type {
   AppData,
   WebRtcTransportOptions,
   WebRtcServer,
+  RtpEncodingParameters,
 } from "mediasoup/types";
+import { SfuRoomManager } from "../interfaces/SfuRoomManager.js";
 import {
-  SfuRoomManager,
-} from "../interfaces/SfuRoomManager.js";
-import { DEFAULT_TRANSPORT_OPTIONS, getIceServers } from "../constants/WebRtcConfig.js";
+  DEFAULT_TRANSPORT_OPTIONS,
+  getIceServers,
+  getScreenSharingEncodings,
+  getSimulcastEncodings,
+} from "../constants/WebRtcConfig.js";
 import { getSfuRoomManager } from "../managers/sfu-manager.factory.js";
 import { IceServer } from "../interfaces/IceServer.js";
 
@@ -32,6 +36,10 @@ export interface WebRtcTransportResponse {
     iceCandidates: IceCandidate[];
     dtlsParameters: DtlsParameters;
     iceServers: IceServer[];
+    suggestedEncodings: {
+      simulcast: RtpEncodingParameters[];
+      screenSharing: RtpEncodingParameters[];
+    };
   };
 }
 
@@ -108,6 +116,10 @@ export abstract class AbstractWebRtcGateway {
         iceCandidates: transport.iceCandidates,
         dtlsParameters: transport.dtlsParameters,
         iceServers: getIceServers(),
+        suggestedEncodings: {
+          simulcast: getSimulcastEncodings(),
+          screenSharing: getScreenSharingEncodings(),
+        },
       },
     };
   }

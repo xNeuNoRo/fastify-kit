@@ -12,6 +12,19 @@ import { ConfigRegistry } from "../../config/ConfigRegistry.js";
 import { FastifyKitWebRtcConfig } from "../../core/interfaces/webrtc.interface.js";
 
 /**
+ * @description Token para el evento de volúmenes de audio.
+ * Se dispara periódicamente indicando los productores que están hablando en una sala.
+ */
+export const WEBRTC_AUDIO_VOLUMES_EVENT = "webrtc:audio:volumes";
+export type WEBRTC_AUDIO_VOLUMES_EVENT_PAYLOAD = {
+  roomId: string;
+  volumes: {
+    producerId: string;
+    volume: number; // Volumen en dB, donde 0 es el volumen máximo y valores negativos indican niveles más bajos
+  }[];
+};
+
+/**
  * @description Lista de codecs optimizada para máxima compatibilidad.
  * Incluye soporte para VP8, H264 y sus respectivos mecanismos de retransmisión (RTX).
  */
@@ -86,6 +99,16 @@ export const DEFAULT_SIMULCAST_ENCODINGS: RtpEncodingParameters[] = [
 ];
 
 /**
+ * @description Obtiene las codificaciones de simulcast configuradas o las por defecto.
+ */
+export const getSimulcastEncodings = (): RtpEncodingParameters[] => {
+  const config = ConfigRegistry.get<FastifyKitWebRtcConfig>(
+    "webrtc_default_config",
+  );
+  return config?.simulcastEncodings || DEFAULT_SIMULCAST_ENCODINGS;
+};
+
+/**
  * @description Configuración de simulcast optimizada para compartir pantalla.
  * Dado que el contenido de la pantalla suele ser más estático y menos sensible a la latencia que el video de la cámara,
  * se puede configurar con un bitrate más alto para mejorar la calidad visual.
@@ -97,6 +120,16 @@ export const DEFAULT_SCREEN_SHARING_ENCODINGS: RtpEncodingParameters[] = [
   // los períodos de silencio, lo que ahorra ancho de banda y mejora la eficiencia en conexiones con limitaciones de ancho de banda.
   { dtx: true, maxBitrate: 1500000, scalabilityMode: "L1T3" },
 ];
+
+/**
+ * @description Obtiene las codificaciones para compartir pantalla configuradas o las por defecto.
+ */
+export const getScreenSharingEncodings = (): RtpEncodingParameters[] => {
+  const config = ConfigRegistry.get<FastifyKitWebRtcConfig>(
+    "webrtc_default_config",
+  );
+  return config?.screenSharingEncodings || DEFAULT_SCREEN_SHARING_ENCODINGS;
+};
 
 /**
  * @description Configuración de transporte WebRTC optimizada para videollamadas en tiempo real.
@@ -168,7 +201,9 @@ export const DEFAULT_ICE_SERVERS: IceServer[] = [
  * Si el usuario no definió ninguno en FastifyKit.create(), devuelve los defaults.
  */
 export const getIceServers = (): IceServer[] => {
-  const config = ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_default_config");
+  const config = ConfigRegistry.get<FastifyKitWebRtcConfig>(
+    "webrtc_default_config",
+  );
   // Si el usuario configuró servidores propios, los usamos; si no, los públicos de Google/Cloudflare
   return config?.iceServers || DEFAULT_ICE_SERVERS;
 };
@@ -187,6 +222,18 @@ export const DEFAULT_AUDIO_LEVEL_OBSERVER_OPTIONS: AudioLevelObserverOptions = {
   // Intervalo de tiempo en ms para actualizar el nivel de audio,
   // lo que permite una detección rápida de cambios en el hablante activo
   interval: 800,
+};
+
+/**
+ * @description Obtiene las opciones del observador de audio configuradas o las por defecto.
+ */
+export const getAudioLevelObserverOptions = (): AudioLevelObserverOptions => {
+  const config = ConfigRegistry.get<FastifyKitWebRtcConfig>(
+    "webrtc_default_config",
+  );
+  return (
+    config?.audioLevelObserverOptions || DEFAULT_AUDIO_LEVEL_OBSERVER_OPTIONS
+  );
 };
 
 /**

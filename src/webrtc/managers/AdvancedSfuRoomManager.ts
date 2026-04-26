@@ -17,8 +17,12 @@ import { getLogger } from "../../logger/logger.factory.js";
 import {
   DEFAULT_ROUTER_OPTIONS,
   DEFAULT_WORKER_SETTINGS,
+  getAudioLevelObserverOptions,
   getWebRtcServerOptions,
+  WEBRTC_AUDIO_VOLUMES_EVENT,
+  WEBRTC_AUDIO_VOLUMES_EVENT_PAYLOAD,
 } from "../constants/WebRtcConfig.js";
+import { getEventBus } from "../../events/eventbus.factory.js";
 
 type WorkerAppData = {
   workerIndex: number;
@@ -261,6 +265,28 @@ export class AdvancedSfuRoomManager
 
     // Creamos el router en el worker seleccionado y lo guardamos en nuestro map de routers activos
     router = await worker.createRouter(finalOptions);
+
+    // Creamos un observador de niveles de audio para esta sala y almacenarlo en su appData para uso futuro
+    const audioObserver = await router.createAudioLevelObserver(
+      getAudioLevelObserverOptions(),
+    );
+
+    // Configuramos el manejador para emitir eventos de niveles de audio a través
+    // del event bus cada vez que se detecten cambios en los volúmenes de los productores
+    audioObserver.on("volumes", (volumes) => {
+      const payload: WEBRTC_AUDIO_VOLUMES_EVENT_PAYLOAD = {
+        roomId,
+        volumes: volumes.map((v) => ({
+          producerId: v.producer.id,
+          volume: v.volume,
+        })),
+      };
+
+      getEventBus().emit(WEBRTC_AUDIO_VOLUMES_EVENT, payload);
+    });
+
+    router.appData.audioLevelObserver = audioObserver;
+
     this.routers.set(roomId, router);
 
     this.logger.info(

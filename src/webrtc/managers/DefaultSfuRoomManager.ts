@@ -16,8 +16,12 @@ import { getLogger } from "../../logger/logger.factory.js";
 import {
   DEFAULT_ROUTER_OPTIONS,
   DEFAULT_WORKER_SETTINGS,
+  getAudioLevelObserverOptions,
   getWebRtcServerOptions,
+  WEBRTC_AUDIO_VOLUMES_EVENT,
+  WEBRTC_AUDIO_VOLUMES_EVENT_PAYLOAD,
 } from "../constants/WebRtcConfig.js";
+import { getEventBus } from "../../events/eventbus.factory.js";
 
 // Tipo de datos para almacenar en los workers de mediasoup en esta impl.
 type WorkerAppData = {
@@ -189,7 +193,7 @@ export class DefaultSfuRoomManager
     // Si existe, retornarla inmediatamente
     if (router) return router;
 
-    // Si no existe, crear una nueva sala (router) en un worker óptimo
+    // Si no existe, creamos una nueva sala (router) en un worker óptimo
     const worker = this.getOptimalWorker();
 
     const finalOptions: RouterOptions = {
@@ -202,8 +206,31 @@ export class DefaultSfuRoomManager
       },
     };
 
-    // Crear el router en el worker seleccionado y almacenarlo en el diccionario
+    // Creamos el router en el worker seleccionado y almacenarlo en el diccionario
     router = await worker.createRouter(finalOptions);
+
+    // Creamos un observador de niveles de audio para esta sala
+    const audioObserver = await router.createAudioLevelObserver(
+      getAudioLevelObserverOptions(),
+    );
+
+    // Configuramos el manejador para emitir eventos de niveles de audio a través
+    // del event bus cada vez que se detecten cambios en los volúmenes de los productores
+    audioObserver.on("volumes", (volumes) => {
+      const payload: WEBRTC_AUDIO_VOLUMES_EVENT_PAYLOAD = {
+        roomId,
+        volumes: volumes.map((v) => ({
+          producerId: v.producer.id,
+          volume: v.volume,
+        })),
+      };
+
+      getEventBus().emit(WEBRTC_AUDIO_VOLUMES_EVENT, payload);
+    });
+
+    // Almacenamos el observador en el appData del router para que esté disponible para su uso futuro
+    router.appData.audioLevelObserver = audioObserver;
+
     this.routers.set(roomId, router);
 
     this.logger.info(

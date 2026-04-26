@@ -1,3 +1,4 @@
+import { AudioLevelObserverOptions, RtpEncodingParameters } from "mediasoup/types";
 import { IceServer } from "../../webrtc/interfaces/IceServer.js";
 
 /**
@@ -17,4 +18,10 @@ export interface FastifyKitWebRtcConfig {
   port?: number;
   /** Configuración de los servidores ICE */
   iceServers?: IceServer[];
+  /** Configuración de las codificaciones de simulcast */
+  simulcastEncodings?: RtpEncodingParameters[];
+  /** Configuración de las codificaciones para compartir pantalla */
+  screenSharingEncodings?: RtpEncodingParameters[];
+  /** Configuración del observador de niveles de audio */
+  audioLevelObserverOptions?: AudioLevelObserverOptions;
 }
