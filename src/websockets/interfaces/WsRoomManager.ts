@@ -62,5 +62,6 @@ export interface WsRoomManager {
     pattern: string,
     payload: any,
     adapter: WsAdapter,
+    excludeSockets?: string[]
   ): Promise<void>;
 }

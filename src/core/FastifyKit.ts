@@ -1,3 +1,4 @@
+import ajvFormats from "ajv-formats";
 import { Cron } from "croner";
 import fastify, {
   type FastifyInstance,
@@ -29,6 +30,7 @@ import type { TSchema } from "@sinclair/typebox";
 import { TypeCompiler } from "@sinclair/typebox/compiler";
 import { ConfigRegistry } from "../config/ConfigRegistry.js";
 import { Value } from "@sinclair/typebox/value";
+import { FastifyKitWebRtcConfig } from "./interfaces/webrtc.interface.js";
 
 export interface FastifyKitOptions {
   module: Constructor;
@@ -58,6 +60,8 @@ export interface FastifyKitOptions {
     | {
         maxPayload?: number; // Tamaño máximo de payload en bytes para mensajes de WebSocket (opcional, por defecto 10MB)
       };
+
+  webrtc?: boolean | FastifyKitWebRtcConfig;
 }
 
 type LifecycleHookName =
@@ -150,6 +154,9 @@ export class FastifyKit {
           ...(isAjvObject ? userAjv.customOptions : {}),
           strict: false, // Forzamos nuestro requerimiento crítico para TypeBox
         },
+        plugins: [
+          [(ajvFormats as any).default ?? ajvFormats, { mode: "fast" }],
+        ] as unknown as any[],
       } as FastifyServerOptions["ajv"],
     }).withTypeProvider<TypeBoxTypeProvider>();
 
@@ -160,6 +167,61 @@ export class FastifyKit {
     const { allControllers, allProviders } = await this.bootstrapModule(
       options.module,
     );
+
+    if (options.webrtc) {
+      // Forzamos la activación del plugin de WebSockets si el usuario ha activado la opción de WebRTC,
+      // ya que el módulo de WebRTC depende de los gateways de WebSocket para funcionar correctamente.
+      options.websockets ||= true;
+
+      const webrtcConfig =
+        typeof options.webrtc === "object" ? options.webrtc : {};
+
+      // Guardamos la configuración de WebRTC en el ConfigRegistry
+      ConfigRegistry.set("webrtc_user_config", webrtcConfig);
+
+      const { SFU_ROOM_MANAGER_TOKEN } =
+        await import("../webrtc/interfaces/SfuRoomManager.js");
+      const { AdvancedSfuRoomManager } =
+        await import("../webrtc/managers/AdvancedSfuRoomManager.js");
+
+      // Si el usuario no ha registrado un Manager para las salas de SFU,
+      // registramos el Manager por defecto para WebRTC (AdvancedSfuRoomManager)
+      if (!container.has(SFU_ROOM_MANAGER_TOKEN)) {
+        // Registramos el Manager por defecto para WebRTC
+        container.registerClass(SFU_ROOM_MANAGER_TOKEN, AdvancedSfuRoomManager);
+
+        // Registramos el Manager por defecto para WebRTC como un provider normal
+        // para que pueda ser inyectado en cualquier parte de la aplicación utilizando su token de inyección de dependencias.
+        if (!allProviders.some((p) => p.token === SFU_ROOM_MANAGER_TOKEN)) {
+          allProviders.push({
+            token: SFU_ROOM_MANAGER_TOKEN,
+            implementation: AdvancedSfuRoomManager,
+          });
+        }
+      }
+
+      // Si el usuario ha activado la opción de useDefaultGateway,
+      // inyectamos automáticamente el DefaultWebRtcGateway en el contenedor
+      // de inyección de dependencias y lo registramos como un WebSocket Gateway
+      // para que el usuario pueda usarlo sin tener que definirlo ni registrarlo manualmente.
+      if (webrtcConfig.useDefaultGateway) {
+        // Usamos importación dinámica (Lazy Load) para no cargar Mediasoup si WebRTC está apagado
+        const { DefaultWebRtcGateway } =
+          await import("../webrtc/gateways/DefaultWebRtcGateway.js");
+
+        // Lo registramos en el DI Container
+        container.registerClass(DefaultWebRtcGateway, DefaultWebRtcGateway);
+
+        // Registramos el Gateway por defecto para WebRTC
+        // como un WebSocket Gateway utilizando su token de inyección de dependencias.
+        if (!allProviders.some((p) => p.token === DefaultWebRtcGateway)) {
+          allProviders.push({
+            token: DefaultWebRtcGateway,
+            implementation: DefaultWebRtcGateway,
+          });
+        }
+      }
+    }
 
     // Registramos los plugins esenciales
     await this.registerCorePlugins(app, options);
