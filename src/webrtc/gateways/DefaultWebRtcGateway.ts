@@ -25,11 +25,15 @@ import type {
   MediaKind,
   AppData,
 } from "mediasoup/types";
+import { WsBroadcaster } from "../../websockets/broadcaster/WsBroadcaster.js";
+import { Inject } from "../../container/inject.decorator.js";
+import { getRoomManager } from "../../websockets/managers/room-manager.factory.js";
 
 /**
  * @description Estructura de memoria para rastrear los recursos de Mediasoup de un usuario específico.
  */
 interface SfuClientState {
+  roomId?: string;
   transports: Map<string, WebRtcTransport>;
   producers: Map<string, Producer>;
   consumers: Map<string, Consumer>;
@@ -41,6 +45,29 @@ interface SfuClientState {
 @WebSocketGateway("/webrtc")
 export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
   private readonly logger = getLogger();
+  private readonly namespace = "/webrtc";
+
+  @Inject(WsBroadcaster)
+  private readonly broadcaster!: WsBroadcaster;
+
+  /**
+   * @description Sincroniza el socket con el WsRoomManager del framework.
+   */
+  private joinWsRoom(socket: FastifyKitSocket, roomId: string): void {
+    const state = this.getState(socket);
+
+    // Si el socket ya estaba en otra sala, lo sacamos primero
+    if (state.roomId && state.roomId !== roomId) {
+      getRoomManager().leave(this.namespace, state.roomId, socket.id);
+    }
+
+    state.roomId = roomId;
+    getRoomManager().join(this.namespace, roomId, socket.id, socket);
+
+    this.logger.info(
+      `[WebRtcGateway] Socket ${socket.id} unido a la sala de señalización: ${roomId}`,
+    );
+  }
 
   /**
    * @description Helper para inicializar y obtener el estado SFU aislado de este socket.
@@ -64,9 +91,17 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
   // -----------------------------------------------
 
   @SubscribeMessage("getRouterRtpCapabilities")
-  @UseParams(WsPayload())
-  public async onGetRouterCapabilities(payload: { roomId: string }) {
+  @UseParams(Socket(), WsPayload())
+  public async onGetRouterCapabilities(
+    socket: FastifyKitSocket,
+    payload: { roomId: string },
+  ) {
     if (!payload.roomId) throw new Error("El id de la sala es requerido");
+
+    // Unimos el socket a la sala de señalización para
+    // que pueda recibir eventos relacionados con esa sala (ej. nuevos productores)
+    this.joinWsRoom(socket, payload.roomId);
+
     return await this.getRouterCapabilities(payload.roomId);
   }
 
@@ -82,6 +117,9 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
   ) {
     // Obtenemos el estado del cliente para almacenar el transporte creado
     const state = this.getState(socket);
+
+    // Aseguramos que esté en la sala (por si no llamó a getRouterRtpCapabilities)
+    this.joinWsRoom(socket, payload.roomId);
 
     const { transport, params } = await this.createWebRtcTransport({
       roomId: payload.roomId,
@@ -126,6 +164,7 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
   public async onProduce(
     socket: FastifyKitSocket,
     payload: {
+      roomId: string;
       transportId: string;
       kind: MediaKind;
       rtpParameters: RtpParameters;
@@ -152,6 +191,23 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
     this.logger.info(
       `[FastifyKit WebRtcGateway] Productor [${producer.kind}] creado: ${producer.id} para el Socket: ${socket.id}`,
     );
+
+    // Notificamos a los demás miembros de la sala que hay un nuevo productor disponible para consumir
+    if (state.roomId) {
+      await this.broadcaster.emitToRoom(
+        this.namespace,
+        state.roomId,
+        "newProducer",
+        {
+          socketId: socket.id,
+          producerId: producer.id,
+          kind: producer.kind,
+          appData: producer.appData,
+        },
+        // Excluimos el socket que acaba de producir para evitar que reciba su propio evento
+        [socket.id],
+      );
+    }
     return { id: producer.id };
   }
 
@@ -215,6 +271,22 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
     // Guardamos el productor de datos en el estado del cliente usando su id como clave
     state.dataProducers.set(dataProducer.id, dataProducer);
 
+    // Notificamos a los demás miembros de la sala que hay un nuevo productor de datos disponible para consumir
+    if (state.roomId) {
+      await this.broadcaster.emitToRoom(
+        this.namespace,
+        state.roomId,
+        "newDataProducer",
+        {
+          socketId: socket.id,
+          dataProducerId: dataProducer.id,
+          appData: dataProducer.appData,
+        },
+        // Excluimos el socket que acaba de producir para evitar que reciba su propio evento
+        [socket.id],
+      );
+    }
+
     // Retornamos el id del productor de datos para que el cliente pueda referenciarlo al crear consumidores de datos
     return { id: dataProducer.id };
   }
@@ -259,6 +331,18 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
     if (!socket.data.sfu) return;
 
     const state = socket.data.sfu;
+
+    // Notificamos a los demás miembros de la sala que este socket
+    // se ha desconectado y que deben limpiar los recursos asociados (producers, consumers, etc)
+    if (state.roomId) {
+      await this.broadcaster.emitToRoom(
+        this.namespace,
+        state.roomId,
+        "peerClosed",
+        { socketId: socket.id },
+        [socket.id],
+      );
+    }
 
     // Cerramos todos los productores de medios que automaticamente mediasoup cerrara todos los producers y consumers asociados a esos transports
     for (const transport of state.transports.values()) {
