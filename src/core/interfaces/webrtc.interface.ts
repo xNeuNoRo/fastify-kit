@@ -1,8 +1,8 @@
-import {
+import type {
   AudioLevelObserverOptions,
   RtpEncodingParameters,
 } from "mediasoup/types";
-import { IceServer } from "../../webrtc/interfaces/IceServer.js";
+import type { IceServer } from "../../webrtc/interfaces/IceServer.js";
 
 /**
  * @description Interfaz de configuración para el módulo de WebRTC en FastifyKit.

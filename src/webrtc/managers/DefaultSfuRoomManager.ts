@@ -1,6 +1,6 @@
 import os from "node:os";
 import { createWorker as createMediasoupWorker } from "mediasoup";
-import {
+import type {
   Worker as MediasoupWorker,
   Router,
   RouterOptions,
