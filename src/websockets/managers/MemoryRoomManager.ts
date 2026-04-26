@@ -42,13 +42,7 @@ export class MemoryRoomManager implements WsRoomManager {
     this.socketRooms.get(socketId)!.add(roomKey);
   }
 
-  async leave(
-    namespace: string,
-    room: string,
-    socketId: string,
-  ): Promise<void> {
-    const roomKey = this.getRoomKey(namespace, room);
-
+  private removeSocketFromRoomByKey(roomKey: string, socketId: string): void {
     // Si la sala existe
     if (this.rooms.has(roomKey)) {
       // Removemos el socket de la sala
@@ -60,6 +54,17 @@ export class MemoryRoomManager implements WsRoomManager {
         this.rooms.delete(roomKey);
       }
     }
+  }
+
+  async leave(
+    namespace: string,
+    room: string,
+    socketId: string,
+  ): Promise<void> {
+    const roomKey = this.getRoomKey(namespace, room);
+
+    // Removemos el socket de la sala
+    this.removeSocketFromRoomByKey(roomKey, socketId);
 
     // Lo sacamos del historial del socket
     if (this.socketRooms.has(socketId)) {
@@ -77,19 +82,17 @@ export class MemoryRoomManager implements WsRoomManager {
 
   async leaveAll(socketId: string): Promise<void> {
     const rooms = this.socketRooms.get(socketId);
+    // Si el socket no tiene salas en su historial, no hay nada que hacer
+    if (!rooms) return;
 
-    // Si hay salas en el historial, iteramos y lo removemos de cada una
-    if (rooms) {
-      // Usamos Array.from para evitar mutar el Set mientras iteramos sobre él
-      for (const roomKey of Array.from(rooms)) {
-        // Separamos el string para recuperar el namespace y la sala original
-        const separadorIndex = roomKey.indexOf(":");
-        const ns = roomKey.substring(0, separadorIndex);
-        const r = roomKey.substring(separadorIndex + 1);
-
-        await this.leave(ns, r, socketId);
-      }
+    // Iteramos por todas las salas a las que el socket pertenece y lo removemos
+    for (const roomKey of rooms) {
+      this.removeSocketFromRoomByKey(roomKey, socketId);
     }
+
+    // Como estamos sacando el socket de TODAS partes, en lugar de borrar una por una,
+    // simplemente eliminamos su historial completo para liberar memoria
+    this.socketRooms.delete(socketId);
   }
 
   async getSocketsInRoom(
