@@ -58,7 +58,10 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
   /**
    * @description Sincroniza el socket con el WsRoomManager del framework.
    */
-  private async joinWsRoom(socket: FastifyKitSocket, roomId: string): Promise<void> {
+  private async joinWsRoom(
+    socket: FastifyKitSocket,
+    roomId: string,
+  ): Promise<void> {
     const state = this.getState(socket);
 
     // Si el socket ya estaba en otra sala, lo sacamos primero
@@ -299,6 +302,31 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
       kind: consumer.kind,
       rtpParameters: consumer.rtpParameters,
     };
+  }
+
+  @SubscribeMessage("resumeConsumer")
+  @UseParams(Socket(), WsPayload())
+  public async onResumeConsumer(
+    socket: FastifyKitSocket,
+    payload: { consumerId: string },
+  ) {
+    const state = this.getState(socket);
+
+    // Buscamos el consumidor en el estado aislado de este cliente
+    const consumer = state.consumers.get(payload.consumerId);
+
+    if (!consumer) {
+      throw new Error(`Consumidor con ID ${payload.consumerId} no encontrado.`);
+    }
+
+    // Reanudamos el flujo de medios desde el servidor hacia el cliente
+    await consumer.resume();
+
+    this.logger.debug(
+      `[FastifyKit WebRtcGateway] Consumidor reanudado: ${consumer.id} para el Socket: ${socket.id}`,
+    );
+
+    return { resumed: true };
   }
 
   // -----------------------------------------------
