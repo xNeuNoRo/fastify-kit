@@ -212,6 +212,23 @@ export type { IceServer } from "./webrtc/interfaces/IceServer.js";
 // Exportamos todas las constantes de configuración (Opciones por defecto)
 export * from "./webrtc/constants/WebRtcConfig.js";
 
+// --- Eventos y Payloads de WebRTC ---
+export {
+  WEBRTC_ROOM_CREATED_EVENT,
+  WEBRTC_ROOM_CLOSED_EVENT,
+  WEBRTC_AUDIO_VOLUMES_EVENT,
+  WEBRTC_WORKER_LOAD_EVENT,
+  WEBRTC_MEDIA_SCORE_EVENT,
+} from "./webrtc/constants/WebRtcEvents.js";
+
+export type {
+  WEBRTC_ROOM_CREATED_PAYLOAD,
+  WEBRTC_ROOM_CLOSED_PAYLOAD,
+  WEBRTC_AUDIO_VOLUMES_PAYLOAD,
+  WEBRTC_WORKER_LOAD_PAYLOAD,
+  WEBRTC_MEDIA_SCORE_PAYLOAD,
+} from "./webrtc/constants/WebRtcEvents.js";
+
 // ==========================================
 // CICLO DE VIDA (LIFECYCLE HOOKS)
 // ==========================================
