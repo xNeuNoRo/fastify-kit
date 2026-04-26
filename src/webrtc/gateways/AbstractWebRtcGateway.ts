@@ -20,6 +20,7 @@ import {
 } from "../interfaces/SfuRoomManager.js";
 import { Inject } from "../../container/inject.decorator.js";
 import { DEFAULT_TRANSPORT_OPTIONS } from "../constants/WebRtcConfig.js";
+import { getSfuRoomManager } from "../managers/sfu-manager.factory.js";
 
 /**
  * @description Interfaz que define la estructura de la respuesta al crear un transporte WebRTC en el gateway, incluyendo el transporte creado y los parámetros necesarios para establecer la conexión WebRTC.
@@ -41,8 +42,13 @@ export interface WebRtcTransportResponse {
  * con un SfuRoomManager para manejar las salas SFU y sus recursos asociados.
  */
 export abstract class AbstractWebRtcGateway {
-  @Inject(SFU_ROOM_MANAGER_TOKEN)
-  protected readonly roomManager!: SfuRoomManager;
+  /**
+   * @description Obtiene el manager de salas SFU. Utiliza el factory para garantizar
+   * que siempre exista una instancia válida (Inyección perezosa / Lazy Loading).
+   */
+  protected get roomManager(): SfuRoomManager {
+    return getSfuRoomManager();
+  }
 
   /**
    * @description Obtiene las capacidades RTP de una sala SFU específica, identificada por su ID.
