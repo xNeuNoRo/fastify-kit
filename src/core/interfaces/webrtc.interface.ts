@@ -1,3 +1,5 @@
+import { IceServer } from "../../webrtc/interfaces/IceServer.js";
+
 /**
  * @description Interfaz de configuración para el módulo de WebRTC en FastifyKit.
  * Permite configurar opciones como el puerto de escucha, IP pública, y si se debe usar un gateway por defecto.
@@ -13,4 +15,6 @@ export interface FastifyKitWebRtcConfig {
   announcedIp?: string;
   /** Puerto multiplexado para WebRtcServer (Default: 44444) */
   port?: number;
+  /** Configuración de los servidores ICE */
+  iceServers?: IceServer[];
 }

@@ -17,8 +17,9 @@ import type {
 import {
   SfuRoomManager,
 } from "../interfaces/SfuRoomManager.js";
-import { DEFAULT_TRANSPORT_OPTIONS } from "../constants/WebRtcConfig.js";
+import { DEFAULT_TRANSPORT_OPTIONS, getIceServers } from "../constants/WebRtcConfig.js";
 import { getSfuRoomManager } from "../managers/sfu-manager.factory.js";
+import { IceServer } from "../interfaces/IceServer.js";
 
 /**
  * @description Interfaz que define la estructura de la respuesta al crear un transporte WebRTC en el gateway, incluyendo el transporte creado y los parámetros necesarios para establecer la conexión WebRTC.
@@ -30,6 +31,7 @@ export interface WebRtcTransportResponse {
     iceParameters: IceParameters;
     iceCandidates: IceCandidate[];
     dtlsParameters: DtlsParameters;
+    iceServers: IceServer[];
   };
 }
 
@@ -105,6 +107,7 @@ export abstract class AbstractWebRtcGateway {
         iceParameters: transport.iceParameters,
         iceCandidates: transport.iceCandidates,
         dtlsParameters: transport.dtlsParameters,
+        iceServers: getIceServers(),
       },
     };
   }

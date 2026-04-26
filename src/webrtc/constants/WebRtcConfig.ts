@@ -164,6 +164,16 @@ export const DEFAULT_ICE_SERVERS: IceServer[] = [
 ];
 
 /**
+ * @description Obtiene la lista de servidores ICE configurados.
+ * Si el usuario no definió ninguno en FastifyKit.create(), devuelve los defaults.
+ */
+export const getIceServers = (): IceServer[] => {
+  const config = ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_default_config");
+  // Si el usuario configuró servidores propios, los usamos; si no, los públicos de Google/Cloudflare
+  return config?.iceServers || DEFAULT_ICE_SERVERS;
+};
+
+/**
  * @description Configuración para el observador de niveles de audio.
  * Permite al SFU detectar quién está hablando sin decodificar el audio.
  */
