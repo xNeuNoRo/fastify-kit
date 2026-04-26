@@ -111,6 +111,7 @@ export class MemoryRoomManager implements WsRoomManager {
     pattern: string,
     payload: any,
     adapter: WsAdapter,
+    excludeSockets?: string[],
   ): Promise<void> {
     // Obtenemos los sockets conectados a la sala en el namespace correcto
     const sockets = await this.getSocketsInRoom(namespace, room);
@@ -122,6 +123,11 @@ export class MemoryRoomManager implements WsRoomManager {
 
     // Enviamos el mensaje a cada socket conectado a la sala
     for (const socket of sockets) {
+      // Saltamos los sockets que están en la lista de exclusión
+      if (excludeSockets?.includes(socket.id)) {
+        continue;
+      }
+
       // Verificamos que el socket esté abierto antes de enviar el mensaje para evitar errores
       if (socket.readyState === 1) {
         socket.send(encodedMessage);
