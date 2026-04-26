@@ -194,6 +194,7 @@ export {
 // ----------------------------------------------
 // WEBRTC (SFU Media Server)
 // ----------------------------------------------
+export type { FastifyKitWebRtcConfig } from "./core/interfaces/webrtc.interface.js";
 export {
   AbstractWebRtcGateway,
   type WebRtcTransportResponse,
@@ -207,7 +208,6 @@ export { AdvancedSfuRoomManager } from "./webrtc/managers/AdvancedSfuRoomManager
 export { SFU_ROOM_MANAGER_TOKEN } from "./webrtc/interfaces/SfuRoomManager.js";
 export type { SfuRoomManager } from "./webrtc/interfaces/SfuRoomManager.js";
 export type { IceServer } from "./webrtc/interfaces/IceServer.js";
-export type { FastifyKitWebRtcConfig } from "./core/interfaces/webrtc.interface.js";
 
 // Exportamos todas las constantes de configuración (Opciones por defecto)
 export * from "./webrtc/constants/WebRtcConfig.js";
