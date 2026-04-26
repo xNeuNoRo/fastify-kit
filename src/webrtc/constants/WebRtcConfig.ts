@@ -14,6 +14,8 @@ import { FastifyKitWebRtcConfig } from "../../core/interfaces/webrtc.interface.j
 /**
  * @description Token para el evento de volúmenes de audio.
  * Se dispara periódicamente indicando los productores que están hablando en una sala.
+ * (Solo esta implementado en los managers DEFAULT, si usas un manager personalizado, 
+ * debes emitirlo tú mismo desde el audioLevelObserver)
  */
 export const WEBRTC_AUDIO_VOLUMES_EVENT = "webrtc:audio:volumes";
 export type WEBRTC_AUDIO_VOLUMES_EVENT_PAYLOAD = {
