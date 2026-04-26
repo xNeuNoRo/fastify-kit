@@ -57,6 +57,8 @@ export class AdvancedSfuRoomManager
     number,
     { timestamp: number; cpuTime: number }
   >();
+  // Map para llevar un seguimiento de qué salas están alojadas en cada worker (para métricas y balanceo)
+  private readonly workerRoomBundles = new Map<number, Set<string>>();
   // Porcentaje de CPU a partir del cual consideramos que el sistema está saturado
   private readonly SATURATION_THRESHOLD =
     ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_user_config")
@@ -127,6 +129,9 @@ export class AdvancedSfuRoomManager
         },
       });
 
+      // Inicializamos su seguimiento de salas en un Set vacío para que pueda empezar a recibir salas
+      this.workerRoomBundles.set(worker.pid, new Set());
+
       worker.on("died", () => this.handleWorkerDeath(worker, index));
 
       const webRtcServer = await worker.createWebRtcServer(
@@ -163,11 +168,15 @@ export class AdvancedSfuRoomManager
     // Purgamos todas las metricas del worker muerto
     this.workerLoads.delete(deadWorker.pid);
     this.previousSnapshot.delete(deadWorker.pid);
+    this.workerRoomBundles.delete(deadWorker.pid);
 
     try {
       // Levantamos un reemplazo para mantener la capacidad del sistema
       const newWorker = await this.createWorker(index);
       this.workers.push(newWorker);
+
+      // Inicializamos su seguimiento de salas en un Set vacío para que pueda empezar a recibir salas
+      this.workerRoomBundles.set(newWorker.pid, new Set());
 
       // Inicializamos su carga en 0 para que pueda empezar a recibir salas
       this.workerLoads.set(newWorker.pid, 0);
@@ -234,9 +243,7 @@ export class AdvancedSfuRoomManager
         pid: worker.pid,
         cpuUsage: this.workerLoads.get(worker.pid) || 0,
         // Contamos cuántos routers de nuestra lista están en este worker
-        activeRooms: Array.from(this.routers.values()).filter(
-          (r) => r.appData.workerPid === worker.pid,
-        ).length,
+        activeRooms: this.workerRoomBundles.get(worker.pid)?.size || 0,
       })),
     };
     this.eventBus.emit(WEBRTC_WORKER_LOAD_EVENT, payload);
@@ -368,6 +375,10 @@ export class AdvancedSfuRoomManager
 
         this.routers.set(roomId, newRouter);
 
+        // Guardamos el ID de la sala en el Set del worker correspondiente
+        // para llevar un seguimiento de qué salas están alojadas en cada worker
+        this.workerRoomBundles.get(worker.pid)?.add(roomId);
+
         this.logger.info(
           `[FastifyKit WebRTC] Sala [${roomId}] creada en el worker PID ${worker.pid} (Carga CPU: ${currentLoad}%)`,
         );
@@ -381,6 +392,11 @@ export class AdvancedSfuRoomManager
               routerId: newRouter.id,
             },
           );
+
+          // Al cerrar el worker, eliminamos la sala de nuestro map de routers activos
+          const workerPid = newRouter.appData.workerPid;
+          this.workerRoomBundles.get(workerPid as number)?.delete(roomId);
+
           this.eventBus.emit(WEBRTC_ROOM_CLOSED_EVENT, { roomId });
           this.routers.delete(roomId);
         });
@@ -428,6 +444,11 @@ export class AdvancedSfuRoomManager
     const router = this.routers.get(roomId);
     if (router) {
       router.close();
+
+      // Al cerrar la sala manualmente, la eliminamos de nuestro map de routers activos
+      const workerPid = router.appData.workerPid;
+      this.workerRoomBundles.get(workerPid as number)?.delete(roomId);
+
       this.eventBus.emit(WEBRTC_ROOM_CLOSED_EVENT, { roomId });
       this.routers.delete(roomId);
     }
