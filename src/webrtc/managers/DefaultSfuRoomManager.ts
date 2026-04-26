@@ -76,7 +76,7 @@ export class DefaultSfuRoomManager
     // Cerrar cada worker de mediasoup de forma ordenada
     for (const worker of this.workers) {
       try {
-        await worker.close();
+        worker.close();
       } catch (error) {
         this.logger.error(
           `[FastifyKit WebRTC] Error al cerrar worker de mediasoup: ${error}`,
