@@ -105,6 +105,10 @@ describe("WebRTC Integration End-to-End Slice", () => {
       trace: vi.fn(),
       fatal: vi.fn(),
     });
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "debug").mockImplementation(() => {});
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
 
     // Pre-instanciamos y arrancamos el Manager para que tenga workers
     manager = new AdvancedSfuRoomManager();
