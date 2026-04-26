@@ -175,6 +175,27 @@ export class FastifyKit {
       // Guardamos la configuración de WebRTC en el ConfigRegistry
       ConfigRegistry.set("webrtc_user_config", webrtcConfig);
 
+      const { SFU_ROOM_MANAGER_TOKEN } =
+        await import("../webrtc/interfaces/SfuRoomManager.js");
+      const { AdvancedSfuRoomManager } =
+        await import("../webrtc/managers/AdvancedSfuRoomManager.js");
+
+      // Si el usuario no ha registrado un Manager para las salas de SFU,
+      // registramos el Manager por defecto para WebRTC (AdvancedSfuRoomManager)
+      if (!container.has(SFU_ROOM_MANAGER_TOKEN)) {
+        // Registramos el Manager por defecto para WebRTC
+        container.registerClass(SFU_ROOM_MANAGER_TOKEN, AdvancedSfuRoomManager);
+
+        // Registramos el Manager por defecto para WebRTC como un provider normal
+        // para que pueda ser inyectado en cualquier parte de la aplicación utilizando su token de inyección de dependencias.
+        if (!allProviders.some((p) => p.token === SFU_ROOM_MANAGER_TOKEN)) {
+          allProviders.push({
+            token: SFU_ROOM_MANAGER_TOKEN,
+            implementation: AdvancedSfuRoomManager,
+          });
+        }
+      }
+
       // Si el usuario ha activado la opción de useDefaultGateway,
       // inyectamos automáticamente el DefaultWebRtcGateway en el contenedor
       // de inyección de dependencias y lo registramos como un WebSocket Gateway
@@ -183,10 +204,6 @@ export class FastifyKit {
         // Usamos importación dinámica (Lazy Load) para no cargar Mediasoup si WebRTC está apagado
         const { DefaultWebRtcGateway } =
           await import("../webrtc/gateways/DefaultWebRtcGateway.js");
-        const { SFU_ROOM_MANAGER_TOKEN } =
-          await import("../webrtc/interfaces/SfuRoomManager.js");
-        const { AdvancedSfuRoomManager } =
-          await import("../webrtc/managers/AdvancedSfuRoomManager.js");
 
         // Lo registramos en el DI Container
         container.registerClass(DefaultWebRtcGateway, DefaultWebRtcGateway);
@@ -198,25 +215,6 @@ export class FastifyKit {
             token: DefaultWebRtcGateway,
             implementation: DefaultWebRtcGateway,
           });
-        }
-
-        // Si el usuario no ha registrado un Manager para las salas de SFU,
-        // registramos el Manager por defecto para WebRTC (AdvancedSfuRoomManager)
-        if (!container.has(SFU_ROOM_MANAGER_TOKEN)) {
-          // Registramos el Manager por defecto para WebRTC
-          container.registerClass(
-            SFU_ROOM_MANAGER_TOKEN,
-            AdvancedSfuRoomManager,
-          );
-
-          // Registramos el Manager por defecto para WebRTC como un provider normal
-          // para que pueda ser inyectado en cualquier parte de la aplicación utilizando su token de inyección de dependencias.
-          if (!allProviders.some((p) => p.token === SFU_ROOM_MANAGER_TOKEN)) {
-            allProviders.push({
-              token: SFU_ROOM_MANAGER_TOKEN,
-              implementation: AdvancedSfuRoomManager,
-            });
-          }
         }
       }
     }
