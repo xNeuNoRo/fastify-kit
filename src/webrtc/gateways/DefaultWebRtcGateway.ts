@@ -123,11 +123,20 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
     // Obtenemos el estado del cliente para almacenar el transporte creado
     const state = this.getState(socket);
 
-    // Aseguramos que esté en la sala (por si no llamó a getRouterRtpCapabilities)
-    this.joinWsRoom(socket, payload.roomId);
+    // Validaciones para evitar que un cliente cree transportes sin estar en una sala
+    // o intente crear transportes para otra sala diferente a la que está unido
+    if (!state.roomId)
+      throw new Error(
+        "Operación no autorizada: El cliente no está unido a ninguna sala SFU.",
+      );
+
+    if (payload.roomId !== state.roomId)
+      throw new Error(
+        "Acceso denegado: El id de la sala proporcionado no coincide con tu sala actual.",
+      );
 
     const { transport, params } = await this.createWebRtcTransport({
-      roomId: payload.roomId,
+      roomId: state.roomId, // Usamos el dato del servidor una vez hayamos validado
       appData: payload.appData,
     });
 
@@ -178,6 +187,19 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
   ) {
     // obtenemos el transporte del estado del cliente
     const state = this.getState(socket);
+
+    // Validaciones para evitar que un cliente produzca sin estar en una sala
+    // o intente producir para otra sala diferente a la que está unido
+    if (!state.roomId)
+      throw new Error(
+        "Operación no autorizada: El cliente no está unido a ninguna sala SFU.",
+      );
+
+    if (payload.roomId !== state.roomId)
+      throw new Error(
+        "Acceso denegado: El id de la sala proporcionado no coincide con tu sala actual.",
+      );
+
     // obtenemos el transporte del estado del cliente usando el id enviado en el payload
     const transport = state.transports.get(payload.transportId);
     // Validamos que el transporte exista antes de intentar producir
@@ -214,21 +236,19 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
     );
 
     // Notificamos a los demás miembros de la sala que hay un nuevo productor disponible para consumir
-    if (state.roomId) {
-      await this.broadcaster.emitToRoom(
-        this.namespace,
-        state.roomId,
-        "newProducer",
-        {
-          socketId: socket.id,
-          producerId: producer.id,
-          kind: producer.kind,
-          appData: producer.appData,
-        },
-        // Excluimos el socket que acaba de producir para evitar que reciba su propio evento
-        [socket.id],
-      );
-    }
+    await this.broadcaster.emitToRoom(
+      this.namespace,
+      state.roomId,
+      "newProducer",
+      {
+        socketId: socket.id,
+        producerId: producer.id,
+        kind: producer.kind,
+        appData: producer.appData,
+      },
+      // Excluimos el socket que acaba de producir para evitar que reciba su propio evento
+      [socket.id],
+    );
     return { id: producer.id };
   }
 
@@ -245,12 +265,24 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
     },
   ) {
     const state = this.getState(socket);
+
+    // Validaciones para evitar fallos de seguridad
+    if (!state.roomId)
+      throw new Error(
+        "Operación no autorizada: El cliente no está unido a ninguna sala SFU.",
+      );
+
+    if (payload.roomId !== state.roomId)
+      throw new Error(
+        "Acceso denegado: El id de la sala proporcionado no coincide con tu sala actual.",
+      );
+
     const transport = state.transports.get(payload.transportId);
     if (!transport) throw new Error("Transporte de consumo no encontrado");
 
     // Creamos el consumidor usando el método de la clase base, pasando los parámetros necesarios
     const consumer = await this.createConsumer(
-      payload.roomId,
+      state.roomId, // Usamos el dato del servidor una vez hayamos validado
       transport,
       payload.producerId,
       payload.rtpCapabilities,
@@ -280,6 +312,10 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
     payload: { transportId: string; appData?: AppData },
   ) {
     const state = this.getState(socket);
+    if (!state.roomId)
+      throw new Error(
+        "Operación no autorizada: No estás unido a ninguna sala.",
+      );
     const transport = state.transports.get(payload.transportId);
     if (!transport) throw new Error("Transporte no encontrado");
 
@@ -319,6 +355,10 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
     payload: { transportId: string; dataProducerId: string; appData?: AppData },
   ) {
     const state = this.getState(socket);
+    if (!state.roomId)
+      throw new Error(
+        "Operación no autorizada: No estás unido a ninguna sala.",
+      );
     const transport = state.transports.get(payload.transportId);
     if (!transport) throw new Error("Transporte no encontrado");
 
