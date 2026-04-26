@@ -16,8 +16,8 @@ import type { SfuRoomManager } from "../interfaces/SfuRoomManager.js";
 import { getLogger } from "../../logger/logger.factory.js";
 import {
   DEFAULT_ROUTER_OPTIONS,
-  DEFAULT_WEBRTC_SERVER_OPTIONS,
   DEFAULT_WORKER_SETTINGS,
+  getWebRtcServerOptions,
 } from "../constants/WebRtcConfig.js";
 
 type WorkerAppData = {
@@ -109,7 +109,7 @@ export class AdvancedSfuRoomManager
       worker.on("died", () => this.handleWorkerDeath(worker, index));
 
       const webRtcServer = await worker.createWebRtcServer(
-        DEFAULT_WEBRTC_SERVER_OPTIONS,
+        getWebRtcServerOptions(),
       );
       worker.appData.webRtcServer = webRtcServer;
 

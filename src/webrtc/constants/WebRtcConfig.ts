@@ -8,6 +8,8 @@ import {
   RouterOptions,
 } from "mediasoup/types";
 import { IceServer } from "../interfaces/IceServer.js";
+import { ConfigRegistry } from "../../config/ConfigRegistry.js";
+import { FastifyKitWebRtcConfig } from "../../core/interfaces/webrtc.interface.js";
 
 /**
  * @description Lista de codecs optimizada para máxima compatibilidad.
@@ -118,24 +120,34 @@ export const DEFAULT_TRANSPORT_OPTIONS: Partial<WebRtcTransportOptions> = {
 /**
  * @description Configuración del Servidor WebRTC para compartir puertos.
  * announcedIp debe ser la IP pública real del servidor para que el handshake ICE funcione.
- * En este DEFAULT se usa "127.0.0.1" para mantener el código limpio y sin dependencias
- * de .env, pero en producción debe ser la IP pública del servidor.
+ * Estos valores se pueden sobrescribir dinámicamente a través del ConfigRegistry,
+ * lo que permite una configuración flexible en diferentes entornos de despliegue sin necesidad de recompilar el código.
  */
-export const DEFAULT_WEBRTC_SERVER_OPTIONS: WebRtcServerOptions = {
-  listenInfos: [
-    {
-      protocol: "udp",
-      ip: "0.0.0.0",
-      announcedIp: "127.0.0.1",
-      port: 44444,
-    },
-    {
-      protocol: "tcp",
-      ip: "0.0.0.0",
-      announcedIp: "127.0.0.1",
-      port: 44444,
-    },
-  ],
+export const getWebRtcServerOptions = (): WebRtcServerOptions => {
+  const config =
+    ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_default_config") || {};
+
+  // Valores dinámicos con fallback a los defaults de siempre
+  const listenIp = config.listenIp || "0.0.0.0";
+  const announcedIp = config.announcedIp || "127.0.0.1";
+  const port = config.port || 44444;
+
+  return {
+    listenInfos: [
+      {
+        protocol: "udp",
+        ip: listenIp,
+        announcedAddress: announcedIp,
+        port,
+      },
+      {
+        protocol: "tcp",
+        ip: listenIp,
+        announcedAddress: announcedIp,
+        port,
+      },
+    ],
+  };
 };
 
 /**
