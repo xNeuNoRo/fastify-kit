@@ -58,6 +58,21 @@ export interface FastifyKitOptions {
     | {
         maxPayload?: number; // Tamaño máximo de payload en bytes para mensajes de WebSocket (opcional, por defecto 10MB)
       };
+
+  webrtc?:
+    | boolean
+    | {
+        /** * Si es true, el framework inyectará y habilitará automáticamente el
+         * DefaultWebRtcGateway sin que el usuario tenga que definirlo ni registrarlo manualmente
+         */
+        useDefaultGateway?: boolean;
+        /** IP donde escuchará el servidor UDP/TCP de medios (Default: "0.0.0.0") */
+        listenIp?: string;
+        /** IP Pública que se enviará a los clientes para que puedan conectarse en producción */
+        announcedIp?: string;
+        /** Puerto multiplexado para WebRtcServer (Default: 44444) */
+        port?: number;
+      };
 }
 
 type LifecycleHookName =
@@ -160,6 +175,40 @@ export class FastifyKit {
     const { allControllers, allProviders } = await this.bootstrapModule(
       options.module,
     );
+
+    if (options.webrtc) {
+      // Forzamos la activación del plugin de WebSockets si el usuario ha activado la opción de WebRTC,
+      // ya que el módulo de WebRTC depende de los gateways de WebSocket para funcionar correctamente.
+      options.websockets = true;
+
+      const webrtcConfig =
+        typeof options.webrtc === "object" ? options.webrtc : {};
+
+      // Guardamos la configuración de WebRTC en el ConfigRegistry
+      ConfigRegistry.set("webrtc_default_config", webrtcConfig);
+
+      // Si el usuario ha activado la opción de useDefaultGateway,
+      // inyectamos automáticamente el DefaultWebRtcGateway en el contenedor
+      // de inyección de dependencias y lo registramos como un WebSocket Gateway
+      // para que el usuario pueda usarlo sin tener que definirlo ni registrarlo manualmente.
+      if (webrtcConfig.useDefaultGateway) {
+        // Usamos importación dinámica (Lazy Load) para no cargar Mediasoup si WebRTC está apagado
+        const { DefaultWebRtcGateway } =
+          await import("../webrtc/gateways/DefaultWebRtcGateway.js");
+
+        // Lo registramos en el DI Container
+        container.registerClass(DefaultWebRtcGateway, DefaultWebRtcGateway);
+
+        // Lo inyectamos en la lista de proveedores para que FastifyKit lo procese
+        // en el ciclo de vida y lo registre como WebSocket Gateway.
+        if (!allProviders.some((p) => p.token === DefaultWebRtcGateway)) {
+          allProviders.push({
+            token: DefaultWebRtcGateway,
+            implementation: DefaultWebRtcGateway,
+          });
+        }
+      }
+    }
 
     // Registramos los plugins esenciales
     await this.registerCorePlugins(app, options);
