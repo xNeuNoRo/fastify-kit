@@ -183,16 +183,32 @@ export class FastifyKit {
         // Usamos importación dinámica (Lazy Load) para no cargar Mediasoup si WebRTC está apagado
         const { DefaultWebRtcGateway } =
           await import("../webrtc/gateways/DefaultWebRtcGateway.js");
+        const { SFU_ROOM_MANAGER_TOKEN } =
+          await import("../webrtc/interfaces/SfuRoomManager.js");
+        const { AdvancedSfuRoomManager } =
+          await import("../webrtc/managers/AdvancedSfuRoomManager.js");
 
         // Lo registramos en el DI Container
         container.registerClass(DefaultWebRtcGateway, DefaultWebRtcGateway);
 
-        // Lo inyectamos en la lista de proveedores para que FastifyKit lo procese
-        // en el ciclo de vida y lo registre como WebSocket Gateway.
+        // Registramos el Manager por defecto para WebRTC
+        container.registerClass(SFU_ROOM_MANAGER_TOKEN, AdvancedSfuRoomManager);
+
+        // Registramos el Gateway por defecto para WebRTC
+        // como un WebSocket Gateway utilizando su token de inyección de dependencias.
         if (!allProviders.some((p) => p.token === DefaultWebRtcGateway)) {
           allProviders.push({
             token: DefaultWebRtcGateway,
             implementation: DefaultWebRtcGateway,
+          });
+        }
+
+        // Registramos el Manager por defecto para WebRTC como un provider normal
+        // para que pueda ser inyectado en cualquier parte de la aplicación utilizando su token de inyección de dependencias.
+        if (!allProviders.some((p) => p.token === SFU_ROOM_MANAGER_TOKEN)) {
+          allProviders.push({
+            token: SFU_ROOM_MANAGER_TOKEN,
+            implementation: AdvancedSfuRoomManager,
           });
         }
       }
