@@ -12,21 +12,6 @@ import { ConfigRegistry } from "../../config/ConfigRegistry.js";
 import { FastifyKitWebRtcConfig } from "../../core/interfaces/webrtc.interface.js";
 
 /**
- * @description Token para el evento de volúmenes de audio.
- * Se dispara periódicamente indicando los productores que están hablando en una sala.
- * (Solo esta implementado en los managers DEFAULT, si usas un manager personalizado, 
- * debes emitirlo tú mismo desde el audioLevelObserver)
- */
-export const WEBRTC_AUDIO_VOLUMES_EVENT = "webrtc:audio:volumes";
-export type WEBRTC_AUDIO_VOLUMES_EVENT_PAYLOAD = {
-  roomId: string;
-  volumes: {
-    producerId: string;
-    volume: number; // Volumen en dB, donde 0 es el volumen máximo y valores negativos indican niveles más bajos
-  }[];
-};
-
-/**
  * @description Lista de codecs optimizada para máxima compatibilidad.
  * Incluye soporte para VP8, H264 y sus respectivos mecanismos de retransmisión (RTX).
  */

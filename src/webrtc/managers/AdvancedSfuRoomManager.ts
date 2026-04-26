@@ -19,9 +19,15 @@ import {
   DEFAULT_WORKER_SETTINGS,
   getAudioLevelObserverOptions,
   getWebRtcServerOptions,
-  WEBRTC_AUDIO_VOLUMES_EVENT,
-  WEBRTC_AUDIO_VOLUMES_EVENT_PAYLOAD,
 } from "../constants/WebRtcConfig.js";
+import {
+  WEBRTC_AUDIO_VOLUMES_EVENT,
+  WEBRTC_AUDIO_VOLUMES_PAYLOAD,
+  WEBRTC_ROOM_CLOSED_EVENT,
+  WEBRTC_ROOM_CREATED_EVENT,
+  WEBRTC_WORKER_LOAD_EVENT,
+  WEBRTC_WORKER_LOAD_PAYLOAD,
+} from "../constants/WebRtcEvents.js";
 import { getEventBus } from "../../events/eventbus.factory.js";
 
 type WorkerAppData = {
@@ -37,6 +43,7 @@ export class AdvancedSfuRoomManager
   private workers: MediasoupWorker<WorkerAppData>[] = [];
   private readonly routers = new Map<string, Router>();
   private readonly logger = getLogger();
+  private readonly eventBus = getEventBus();
 
   // Map para llevar un seguimiento de la carga de cada worker (número de routers activos)
   private readonly workerLoads = new Map<number, number>();
@@ -210,6 +217,19 @@ export class AdvancedSfuRoomManager
         );
       }
     }
+
+    // Emitimos un evento con la carga actual de cada worker para que pueda ser consumido por otros componentes del sistema
+    const payload: WEBRTC_WORKER_LOAD_PAYLOAD = {
+      workers: this.workers.map((worker) => ({
+        pid: worker.pid,
+        cpuUsage: this.workerLoads.get(worker.pid) || 0,
+        // Contamos cuántos routers de nuestra lista están en este worker
+        activeRooms: Array.from(this.routers.values()).filter(
+          (r) => r.appData.workerPid === worker.pid,
+        ).length,
+      })),
+    };
+    this.eventBus.emit(WEBRTC_WORKER_LOAD_EVENT, payload);
   }
 
   /**
@@ -260,11 +280,19 @@ export class AdvancedSfuRoomManager
         ...DEFAULT_ROUTER_OPTIONS.appData,
         ...(options?.appData || {}),
         webRtcServer: worker.appData.webRtcServer,
+        workerPid: worker.pid,
       },
     };
 
     // Creamos el router en el worker seleccionado y lo guardamos en nuestro map de routers activos
     router = await worker.createRouter(finalOptions);
+
+    // Emitimos un evento indicando que se ha creado una nueva sala SFU,
+    // incluyendo el ID de la sala y el PID del worker que la aloja
+    this.eventBus.emit(WEBRTC_ROOM_CREATED_EVENT, {
+      roomId,
+      workerPid: worker.pid,
+    });
 
     // Creamos un observador de niveles de audio para esta sala y almacenarlo en su appData para uso futuro
     const audioObserver = await router.createAudioLevelObserver(
@@ -274,7 +302,7 @@ export class AdvancedSfuRoomManager
     // Configuramos el manejador para emitir eventos de niveles de audio a través
     // del event bus cada vez que se detecten cambios en los volúmenes de los productores
     audioObserver.on("volumes", (volumes) => {
-      const payload: WEBRTC_AUDIO_VOLUMES_EVENT_PAYLOAD = {
+      const payload: WEBRTC_AUDIO_VOLUMES_PAYLOAD = {
         roomId,
         volumes: volumes.map((v) => ({
           producerId: v.producer.id,
@@ -282,7 +310,7 @@ export class AdvancedSfuRoomManager
         })),
       };
 
-      getEventBus().emit(WEBRTC_AUDIO_VOLUMES_EVENT, payload);
+      this.eventBus.emit(WEBRTC_AUDIO_VOLUMES_EVENT, payload);
     });
 
     router.appData.audioLevelObserver = audioObserver;
@@ -293,7 +321,18 @@ export class AdvancedSfuRoomManager
       `[FastifyKit WebRTC] Sala [${roomId}] creada en el worker PID ${worker.pid} (Carga CPU: ${currentLoad}%)`,
     );
 
-    router.on("workerclose", () => this.routers.delete(roomId));
+    router.on("workerclose", () => {
+      this.logger.warn(
+        `[FastifyKit WebRTC] El worker PID ${worker.pid} que alojaba la sala "${roomId}" se ha cerrado. Eliminando sala del gestor...`,
+        {
+          roomId,
+          workerPid: worker.pid,
+          routerId: router.id,
+        },
+      );
+      this.eventBus.emit(WEBRTC_ROOM_CLOSED_EVENT, { roomId });
+      this.routers.delete(roomId);
+    });
     return router;
   }
 
@@ -327,6 +366,7 @@ export class AdvancedSfuRoomManager
     const router = this.routers.get(roomId);
     if (router) {
       router.close();
+      this.eventBus.emit(WEBRTC_ROOM_CLOSED_EVENT, { roomId });
       this.routers.delete(roomId);
     }
   }

@@ -28,6 +28,11 @@ import type {
 import { WsBroadcaster } from "../../websockets/broadcaster/WsBroadcaster.js";
 import { Inject } from "../../container/inject.decorator.js";
 import { getRoomManager } from "../../websockets/managers/room-manager.factory.js";
+import { getEventBus } from "../../events/eventbus.factory.js";
+import {
+  WEBRTC_MEDIA_SCORE_EVENT,
+  WEBRTC_MEDIA_SCORE_PAYLOAD,
+} from "../constants/WebRtcEvents.js";
 
 /**
  * @description Estructura de memoria para rastrear los recursos de Mediasoup de un usuario específico.
@@ -185,6 +190,22 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
       payload.rtpParameters,
       payload.appData,
     );
+
+    // Escuchamos el evento de score que emite mediasoup cada vez que hay una actualización en la calidad de la conexión de medios
+    producer.on("score", (score) => {
+      // Mediasoup entrega un array de scores, tomamos el del stream principal
+      const currentScore = score[0]?.score || 0;
+
+      const scorePayload: WEBRTC_MEDIA_SCORE_PAYLOAD = {
+        roomId: state.roomId!,
+        producerId: producer.id,
+        socketId: socket.id,
+        score: currentScore,
+      };
+
+      getEventBus().emit(WEBRTC_MEDIA_SCORE_EVENT, scorePayload);
+    });
+
     // Guardamos el productor en el estado del cliente usando su id como clave
     state.producers.set(producer.id, producer);
 

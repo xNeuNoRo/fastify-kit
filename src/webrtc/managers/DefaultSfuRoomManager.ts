@@ -18,9 +18,13 @@ import {
   DEFAULT_WORKER_SETTINGS,
   getAudioLevelObserverOptions,
   getWebRtcServerOptions,
-  WEBRTC_AUDIO_VOLUMES_EVENT,
-  WEBRTC_AUDIO_VOLUMES_EVENT_PAYLOAD,
 } from "../constants/WebRtcConfig.js";
+import {
+  WEBRTC_AUDIO_VOLUMES_EVENT,
+  WEBRTC_AUDIO_VOLUMES_PAYLOAD,
+  WEBRTC_ROOM_CLOSED_EVENT,
+  WEBRTC_ROOM_CREATED_EVENT,
+} from "../constants/WebRtcEvents.js";
 import { getEventBus } from "../../events/eventbus.factory.js";
 
 // Tipo de datos para almacenar en los workers de mediasoup en esta impl.
@@ -41,6 +45,8 @@ export class DefaultSfuRoomManager
   private readonly routers = new Map<string, Router>();
   // Logger para depuración
   private readonly logger = getLogger();
+  // Event bus para emitir eventos del sistema de WebRTC a otras partes de la aplicación
+  private readonly eventBus = getEventBus();
 
   /**
    * @description Maneja la lógica de arranque de la aplicación, creando un pool de workers de mediasoup basado en
@@ -203,11 +209,19 @@ export class DefaultSfuRoomManager
         ...DEFAULT_ROUTER_OPTIONS.appData,
         ...(options?.appData || {}),
         webRtcServer: worker.appData.webRtcServer,
+        workerPid: worker.pid,
       },
     };
 
     // Creamos el router en el worker seleccionado y almacenarlo en el diccionario
     router = await worker.createRouter(finalOptions);
+
+    // Emitimos un evento indicando que se ha creado una nueva sala SFU,
+    // incluyendo el ID de la sala y el PID del worker que la aloja
+    this.eventBus.emit(WEBRTC_ROOM_CREATED_EVENT, {
+      roomId,
+      workerPid: worker.pid,
+    });
 
     // Creamos un observador de niveles de audio para esta sala
     const audioObserver = await router.createAudioLevelObserver(
@@ -217,7 +231,7 @@ export class DefaultSfuRoomManager
     // Configuramos el manejador para emitir eventos de niveles de audio a través
     // del event bus cada vez que se detecten cambios en los volúmenes de los productores
     audioObserver.on("volumes", (volumes) => {
-      const payload: WEBRTC_AUDIO_VOLUMES_EVENT_PAYLOAD = {
+      const payload: WEBRTC_AUDIO_VOLUMES_PAYLOAD = {
         roomId,
         volumes: volumes.map((v) => ({
           producerId: v.producer.id,
@@ -225,7 +239,7 @@ export class DefaultSfuRoomManager
         })),
       };
 
-      getEventBus().emit(WEBRTC_AUDIO_VOLUMES_EVENT, payload);
+      this.eventBus.emit(WEBRTC_AUDIO_VOLUMES_EVENT, payload);
     });
 
     // Almacenamos el observador en el appData del router para que esté disponible para su uso futuro
@@ -252,6 +266,7 @@ export class DefaultSfuRoomManager
           routerId: router.id,
         },
       );
+      this.eventBus.emit(WEBRTC_ROOM_CLOSED_EVENT, { roomId });
       this.routers.delete(roomId);
     });
 
@@ -292,11 +307,8 @@ export class DefaultSfuRoomManager
     const router = this.routers.get(roomId);
     if (router) {
       router.close();
+      this.eventBus.emit(WEBRTC_ROOM_CLOSED_EVENT, { roomId });
       this.routers.delete(roomId);
-      this.logger.info(
-        `[FastifyKit WebRTC] Sala "${roomId}" eliminada manualmente.`,
-        { roomId },
-      );
     }
   }
 
