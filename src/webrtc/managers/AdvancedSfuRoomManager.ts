@@ -228,9 +228,18 @@ export class AdvancedSfuRoomManager
           // Calculamos la carga del worker como el porcentaje de CPU utilizado en el intervalo de tiempo
           const deltaCpu = currentCpuTime - prev.cpuTime;
           const deltaWall = now - prev.timestamp;
-          const cpuUsagePercent = (deltaCpu / deltaWall) * 100;
-          // Actualizamos la carga del worker en el map
-          this.workerLoads.set(worker.pid, cpuUsagePercent);
+
+          // Si el delta de tiempo es mayor a 0, calculamos el porcentaje de CPU utilizado en este intervalo
+          if (deltaWall > 0) {
+            // El cálculo de uso de CPU se basa en la fórmula: (deltaCpu / deltaWall) * 100 para obtener un porcentaje
+            const rawCpuUsage = (deltaCpu / deltaWall) * 100;
+
+            // Aseguramos que el porcentaje de CPU esté entre 0% y 100% para evitar valores erróneos
+            const cpuUsagePercent = Math.max(0, Math.min(100, rawCpuUsage));
+
+            // Actualizamos la carga del worker en el map
+            this.workerLoads.set(worker.pid, cpuUsagePercent);
+          }
         }
 
         // Guardamos el snapshot actual para la próxima comparación
