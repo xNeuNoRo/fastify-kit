@@ -178,6 +178,18 @@ describe("Gateway por defecto para WebRTC (DefaultWebRtcGateway)", () => {
   });
 
   describe("Transportes", () => {
+    // Antes de cada test de transportes, nos aseguramos de que el socket tenga una sala mock asignada
+    beforeEach(() => {
+      mockSocket.data.sfu = {
+        roomId: "room-test",
+        transports: new Map(),
+        producers: new Map(),
+        consumers: new Map(),
+        dataProducers: new Map(),
+        dataConsumers: new Map(),
+      };
+    });
+
     it("Debería crear un transporte y guardarlo en la memoria del socket", async () => {
       const result = await gateway.onCreateTransport(mockSocket, {
         roomId: "room-test",
@@ -191,9 +203,7 @@ describe("Gateway por defecto para WebRTC (DefaultWebRtcGateway)", () => {
     });
 
     it("Debería conectar un transporte existente", async () => {
-      mockSocket.data.sfu = {
-        transports: new Map([["trans-1", mockTransport]]),
-      } as any;
+      mockSocket.data.sfu!.transports.set("trans-1", mockTransport as any);
 
       const result = await gateway.onConnectTransport(mockSocket, {
         transportId: "trans-1",
