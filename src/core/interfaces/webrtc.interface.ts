@@ -22,6 +22,8 @@ export interface FastifyKitWebRtcConfig {
     min: number;
     max: number;
   };
+  /** Umbral de saturación del sistema (en porcentaje de CPU) para emitir el evento de saturación */
+  saturationThreshold?: number;
   /** Configuración de los servidores ICE */
   iceServers?: IceServer[];
   /** Configuración de las codificaciones de simulcast */

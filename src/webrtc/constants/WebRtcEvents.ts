@@ -63,3 +63,17 @@ export type WEBRTC_MEDIA_SCORE_PAYLOAD = {
    */
   score: number;
 };
+
+/**
+ * @description Token para el evento de saturación del sistema WebRTC.
+ * Se dispara cuando la carga de un worker de mediasoup supera un umbral definido,
+ * lo que puede indicar que el sistema está saturado y no debería aceptar nuevas salas o conexiones hasta que la carga disminuya.
+ * (Solo esta implementado en el manager AdvancedSfuRoomManager, si usas un manager personalizado,
+ * debes emitirlo tú mismo)
+ */
+export const WEBRTC_SYSTEM_SATURATED_EVENT = "webrtc:system:saturated";
+export type WEBRTC_SYSTEM_SATURATED_PAYLOAD = {
+  pid: number;
+  load: number;
+  timestamp: number;
+};

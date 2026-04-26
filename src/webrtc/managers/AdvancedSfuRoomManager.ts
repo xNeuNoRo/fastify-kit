@@ -25,10 +25,14 @@ import {
   WEBRTC_AUDIO_VOLUMES_PAYLOAD,
   WEBRTC_ROOM_CLOSED_EVENT,
   WEBRTC_ROOM_CREATED_EVENT,
+  WEBRTC_SYSTEM_SATURATED_EVENT,
+  WEBRTC_SYSTEM_SATURATED_PAYLOAD,
   WEBRTC_WORKER_LOAD_EVENT,
   WEBRTC_WORKER_LOAD_PAYLOAD,
 } from "../constants/WebRtcEvents.js";
 import { getEventBus } from "../../events/eventbus.factory.js";
+import { ConfigRegistry } from "../../config/ConfigRegistry.js";
+import { FastifyKitWebRtcConfig } from "../../core/interfaces/webrtc.interface.js";
 
 type WorkerAppData = {
   workerIndex: number;
@@ -53,6 +57,10 @@ export class AdvancedSfuRoomManager
     number,
     { timestamp: number; cpuTime: number }
   >();
+  // Porcentaje de CPU a partir del cual consideramos que el sistema está saturado
+  private readonly SATURATION_THRESHOLD =
+    ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_user_config")
+      ?.saturationThreshold || 90;
 
   /**
    * @description Inicializa el gestor avanzado de salas SFU creando un pool de workers de mediasoup
@@ -245,11 +253,37 @@ export class AdvancedSfuRoomManager
     if (this.workers.length === 0)
       throw new Error("No hay workers disponibles.");
 
-    return this.workers.reduce((prev, curr) => {
+    const optimalWorker = this.workers.reduce((prev, curr) => {
       const prevLoad = this.workerLoads.get(prev.pid) ?? 0;
       const currLoad = this.workerLoads.get(curr.pid) ?? 0;
       return prevLoad <= currLoad ? prev : curr;
     }, this.workers[0]);
+
+    // Obtenemos la carga actual del worker óptimo para loguearla al crear una nueva sala
+    const optimalLoad = this.workerLoads.get(optimalWorker.pid) ?? 0;
+
+    if (optimalLoad >= this.SATURATION_THRESHOLD) {
+      this.logger.warn(
+        `[FastifyKit WebRTC] ⚠️ SATURACIÓN CRÍTICA DETECTADA: El worker con menor carga (PID ${optimalWorker.pid}) está al ${optimalLoad.toFixed(2)}% de CPU.`,
+        {
+          pid: optimalWorker.pid,
+          currentLoad: optimalLoad,
+          threshold: this.SATURATION_THRESHOLD,
+          activeRooms: this.routers.size,
+        },
+      );
+
+      // Emitimos un evento indicando que el sistema está saturado para que otros
+      // componentes puedan reaccionar (ej. denegar nuevas salas, alertar, etc.)
+      const payload: WEBRTC_SYSTEM_SATURATED_PAYLOAD = {
+        pid: optimalWorker.pid,
+        load: optimalLoad,
+        timestamp: Date.now(),
+      };
+      this.eventBus.emit(WEBRTC_SYSTEM_SATURATED_EVENT, payload);
+    }
+
+    return optimalWorker;
   }
 
   // ----------------------------------------------------------------
