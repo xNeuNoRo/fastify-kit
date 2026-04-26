@@ -173,7 +173,7 @@ export class FastifyKit {
         typeof options.webrtc === "object" ? options.webrtc : {};
 
       // Guardamos la configuración de WebRTC en el ConfigRegistry
-      ConfigRegistry.set("webrtc_default_config", webrtcConfig);
+      ConfigRegistry.set("webrtc_user_config", webrtcConfig);
 
       // Si el usuario ha activado la opción de useDefaultGateway,
       // inyectamos automáticamente el DefaultWebRtcGateway en el contenedor

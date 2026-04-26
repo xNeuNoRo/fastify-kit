@@ -89,9 +89,8 @@ export const DEFAULT_SIMULCAST_ENCODINGS: RtpEncodingParameters[] = [
  * @description Obtiene las codificaciones de simulcast configuradas o las por defecto.
  */
 export const getSimulcastEncodings = (): RtpEncodingParameters[] => {
-  const config = ConfigRegistry.get<FastifyKitWebRtcConfig>(
-    "webrtc_default_config",
-  );
+  const config =
+    ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_user_config");
   return config?.simulcastEncodings || DEFAULT_SIMULCAST_ENCODINGS;
 };
 
@@ -112,9 +111,8 @@ export const DEFAULT_SCREEN_SHARING_ENCODINGS: RtpEncodingParameters[] = [
  * @description Obtiene las codificaciones para compartir pantalla configuradas o las por defecto.
  */
 export const getScreenSharingEncodings = (): RtpEncodingParameters[] => {
-  const config = ConfigRegistry.get<FastifyKitWebRtcConfig>(
-    "webrtc_default_config",
-  );
+  const config =
+    ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_user_config");
   return config?.screenSharingEncodings || DEFAULT_SCREEN_SHARING_ENCODINGS;
 };
 
@@ -145,12 +143,15 @@ export const DEFAULT_TRANSPORT_OPTIONS: Partial<WebRtcTransportOptions> = {
  */
 export const getWebRtcServerOptions = (): WebRtcServerOptions => {
   const config =
-    ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_default_config") || {};
+    ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_user_config") || {};
 
   // Valores dinámicos con fallback a los defaults de siempre
   const listenIp = config.listenIp || "0.0.0.0";
   const announcedIp = config.announcedIp || "127.0.0.1";
-  const port = config.port || 44444;
+  const portRange = config.portRange || {
+    min: 40000,
+    max: 40099,
+  };
 
   return {
     listenInfos: [
@@ -158,13 +159,13 @@ export const getWebRtcServerOptions = (): WebRtcServerOptions => {
         protocol: "udp",
         ip: listenIp,
         announcedAddress: announcedIp,
-        port,
+        portRange,
       },
       {
         protocol: "tcp",
         ip: listenIp,
         announcedAddress: announcedIp,
-        port,
+        portRange,
       },
     ],
   };
@@ -188,9 +189,8 @@ export const DEFAULT_ICE_SERVERS: IceServer[] = [
  * Si el usuario no definió ninguno en FastifyKit.create(), devuelve los defaults.
  */
 export const getIceServers = (): IceServer[] => {
-  const config = ConfigRegistry.get<FastifyKitWebRtcConfig>(
-    "webrtc_default_config",
-  );
+  const config =
+    ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_user_config");
   // Si el usuario configuró servidores propios, los usamos; si no, los públicos de Google/Cloudflare
   return config?.iceServers || DEFAULT_ICE_SERVERS;
 };
@@ -215,9 +215,8 @@ export const DEFAULT_AUDIO_LEVEL_OBSERVER_OPTIONS: AudioLevelObserverOptions = {
  * @description Obtiene las opciones del observador de audio configuradas o las por defecto.
  */
 export const getAudioLevelObserverOptions = (): AudioLevelObserverOptions => {
-  const config = ConfigRegistry.get<FastifyKitWebRtcConfig>(
-    "webrtc_default_config",
-  );
+  const config =
+    ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_user_config");
   return (
     config?.audioLevelObserverOptions || DEFAULT_AUDIO_LEVEL_OBSERVER_OPTIONS
   );
@@ -227,8 +226,6 @@ export const getAudioLevelObserverOptions = (): AudioLevelObserverOptions => {
  * @description Configuración del Worker de mediasoup optimizada para un entorno de producción.
  */
 export const DEFAULT_WORKER_SETTINGS: WorkerSettings = {
-  rtcMinPort: 10000, // Puerto mínimo para las conexiones WebRTC
-  rtcMaxPort: 10100, // Puerto máximo para las conexiones WebRTC
   logLevel: "warn", // Nivel de registro para el worker
   logTags: [
     "info", // Etiqueta de registro para información general sobre el funcionamiento del worker

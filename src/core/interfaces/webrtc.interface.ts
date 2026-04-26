@@ -1,4 +1,7 @@
-import { AudioLevelObserverOptions, RtpEncodingParameters } from "mediasoup/types";
+import {
+  AudioLevelObserverOptions,
+  RtpEncodingParameters,
+} from "mediasoup/types";
 import { IceServer } from "../../webrtc/interfaces/IceServer.js";
 
 /**
@@ -14,8 +17,11 @@ export interface FastifyKitWebRtcConfig {
   listenIp?: string;
   /** IP Pública que se enviará a los clientes para que puedan conectarse en producción */
   announcedIp?: string;
-  /** Puerto multiplexado para WebRtcServer (Default: 44444) */
-  port?: number;
+  /** Rango de puertos UDP para las conexiones RTP (Default: 40000-40099) */
+  portRange?: {
+    min: number;
+    max: number;
+  };
   /** Configuración de los servidores ICE */
   iceServers?: IceServer[];
   /** Configuración de las codificaciones de simulcast */
