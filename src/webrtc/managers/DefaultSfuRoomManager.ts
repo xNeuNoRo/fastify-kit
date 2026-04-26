@@ -77,9 +77,6 @@ export class DefaultSfuRoomManager
     for (const worker of this.workers) {
       try {
         await worker.close();
-        this.logger.info(
-          `[FastifyKit WebRTC] Worker de mediasoup cerrado exitosamente.`,
-        );
       } catch (error) {
         this.logger.error(
           `[FastifyKit WebRTC] Error al cerrar worker de mediasoup: ${error}`,
