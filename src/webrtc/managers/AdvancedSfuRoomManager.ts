@@ -255,6 +255,7 @@ export class AdvancedSfuRoomManager
       appData: {
         ...DEFAULT_ROUTER_OPTIONS.appData,
         ...(options?.appData || {}),
+        webRtcServer: worker.appData.webRtcServer,
       },
     };
 
