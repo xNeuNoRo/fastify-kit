@@ -108,6 +108,18 @@ export class AdvancedSfuRoomManager
         );
       }
     }
+
+    // Limpiar el estado interno del gestor para asegurar un cierre limpio
+    this.workers = [];
+    this.routers.clear();
+    this.pendingRooms.clear();
+    this.workerLoads.clear();
+    this.previousSnapshot.clear();
+    this.workerRoomBundles.clear();
+
+    this.logger.info(
+      `[FastifyKit WebRTC] Estado interno del gestor avanzado limpiado completamente.`,
+    );
   }
 
   /**
