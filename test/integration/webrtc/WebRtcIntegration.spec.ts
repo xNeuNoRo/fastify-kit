@@ -124,7 +124,7 @@ describe("WebRTC Integration End-to-End Slice", () => {
         useDefaultGateway: true,
         listenIp: "127.0.0.1",
         announcedIp: "192.168.1.100",
-        port: 50000,
+        portRange: { min: 40000, max: 40010 },
       },
     });
 
