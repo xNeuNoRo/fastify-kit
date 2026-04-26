@@ -1,3 +1,4 @@
+import ajvFormats from "ajv-formats";
 import { Cron } from "croner";
 import fastify, {
   type FastifyInstance,
@@ -153,6 +154,9 @@ export class FastifyKit {
           ...(isAjvObject ? userAjv.customOptions : {}),
           strict: false, // Forzamos nuestro requerimiento crítico para TypeBox
         },
+        plugins: [
+          [(ajvFormats as any).default ?? ajvFormats, { mode: "fast" }],
+        ] as unknown as any[],
       } as FastifyServerOptions["ajv"],
     }).withTypeProvider<TypeBoxTypeProvider>();
 
