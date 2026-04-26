@@ -54,11 +54,12 @@ export class WsBroadcaster {
     pattern: string,
     payload: any,
     excludeSockets?: string[],
+    customAdapter?: WsAdapter,
   ): Promise<void> {
     // Usamos Promise.all para emitir a todas las salas en paralelo
     await Promise.all(
       rooms.map((room) =>
-        this.emitToRoom(namespace, room, pattern, payload, excludeSockets),
+        this.emitToRoom(namespace, room, pattern, payload, excludeSockets, customAdapter),
       ),
     );
   }
@@ -77,6 +78,7 @@ export async function broadcastToRoom(
   pattern: string,
   payload: any,
   excludeSockets?: string[],
+  customAdapter?: WsAdapter,
 ) {
   const broadcaster = container.resolve(WsBroadcaster);
   await broadcaster.emitToRoom(
@@ -85,6 +87,7 @@ export async function broadcastToRoom(
     pattern,
     payload,
     excludeSockets,
+    customAdapter,
   );
 }
 
@@ -101,6 +104,7 @@ export async function broadcastToRooms(
   pattern: string,
   payload: any,
   excludeSockets?: string[],
+  customAdapter?: WsAdapter,
 ) {
   const broadcaster = container.resolve(WsBroadcaster);
   await broadcaster.emitToRooms(
@@ -109,5 +113,6 @@ export async function broadcastToRooms(
     pattern,
     payload,
     excludeSockets,
+    customAdapter,
   );
 }
