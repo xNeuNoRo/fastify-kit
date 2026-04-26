@@ -25,12 +25,20 @@ export class WsBroadcaster {
     room: string,
     pattern: string,
     payload: any,
+    excludeSockets?: string[],
     customAdapter?: WsAdapter,
   ): Promise<void> {
     const roomManager = getRoomManager();
     const adapter = customAdapter || this.defaultAdapter;
 
-    await roomManager.emitToRoom(namespace, room, pattern, payload, adapter);
+    await roomManager.emitToRoom(
+      namespace,
+      room,
+      pattern,
+      payload,
+      adapter,
+      excludeSockets,
+    );
   }
 
   /**
@@ -45,10 +53,13 @@ export class WsBroadcaster {
     rooms: string[],
     pattern: string,
     payload: any,
+    excludeSockets?: string[],
   ): Promise<void> {
     // Usamos Promise.all para emitir a todas las salas en paralelo
     await Promise.all(
-      rooms.map((room) => this.emitToRoom(namespace, room, pattern, payload)),
+      rooms.map((room) =>
+        this.emitToRoom(namespace, room, pattern, payload, excludeSockets),
+      ),
     );
   }
 }
@@ -65,9 +76,16 @@ export async function broadcastToRoom(
   room: string,
   pattern: string,
   payload: any,
+  excludeSockets?: string[],
 ) {
   const broadcaster = container.resolve(WsBroadcaster);
-  await broadcaster.emitToRoom(namespace, room, pattern, payload);
+  await broadcaster.emitToRoom(
+    namespace,
+    room,
+    pattern,
+    payload,
+    excludeSockets,
+  );
 }
 
 /**
@@ -82,7 +100,14 @@ export async function broadcastToRooms(
   rooms: string[],
   pattern: string,
   payload: any,
+  excludeSockets?: string[],
 ) {
   const broadcaster = container.resolve(WsBroadcaster);
-  await broadcaster.emitToRooms(namespace, rooms, pattern, payload);
+  await broadcaster.emitToRooms(
+    namespace,
+    rooms,
+    pattern,
+    payload,
+    excludeSockets,
+  );
 }
