@@ -181,6 +181,9 @@ export type { WsEventHandlerMetadata } from "./websockets/decorators/types.js";
 export type { FastifyKitSocket } from "./websockets/interfaces/FastifyKitSocket.js";
 export type { WsRoomManager } from "./websockets/interfaces/WsRoomManager.js";
 
+// Implementaciones de Room Managers integrados (Built-in)
+export { MemoryRoomManager } from "./websockets/managers/MemoryRoomManager.js";
+
 // Token para que puedan inyectar su propio RedisRoomManager o similar
 export { WS_ROOM_MANAGER_TOKEN } from "./websockets/interfaces/WsRoomManager.js";
 
@@ -219,6 +222,7 @@ export {
   WEBRTC_AUDIO_VOLUMES_EVENT,
   WEBRTC_WORKER_LOAD_EVENT,
   WEBRTC_MEDIA_SCORE_EVENT,
+  WEBRTC_SYSTEM_SATURATED_EVENT,
 } from "./webrtc/constants/WebRtcEvents.js";
 
 export type {
@@ -227,6 +231,7 @@ export type {
   WEBRTC_AUDIO_VOLUMES_PAYLOAD,
   WEBRTC_WORKER_LOAD_PAYLOAD,
   WEBRTC_MEDIA_SCORE_PAYLOAD,
+  WEBRTC_SYSTEM_SATURATED_PAYLOAD,
 } from "./webrtc/constants/WebRtcEvents.js";
 
 // ==========================================
@@ -253,6 +258,7 @@ export { HttpHealthIndicator } from "./health/indicators/HttpHealthIndicator.js"
 export { PingHealthIndicator } from "./health/indicators/PingHealthIndicator.js";
 export { DiskSpaceHealthIndicator } from "./health/indicators/DiskSpaceHealthIndicator.js";
 export { EventLoopHealthIndicator } from "./health/indicators/EventLoopHealthIndicator.js";
+export { WebRtcHealthIndicator } from "./health/indicators/WebRtcHealthIndicator.js";
 
 // Tipos
 export type {
