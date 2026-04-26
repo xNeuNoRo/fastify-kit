@@ -58,16 +58,16 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
   /**
    * @description Sincroniza el socket con el WsRoomManager del framework.
    */
-  private joinWsRoom(socket: FastifyKitSocket, roomId: string): void {
+  private async joinWsRoom(socket: FastifyKitSocket, roomId: string): Promise<void> {
     const state = this.getState(socket);
 
     // Si el socket ya estaba en otra sala, lo sacamos primero
     if (state.roomId && state.roomId !== roomId) {
-      getRoomManager().leave(this.namespace, state.roomId, socket.id);
+      await getRoomManager().leave(this.namespace, state.roomId, socket.id);
     }
 
     state.roomId = roomId;
-    getRoomManager().join(this.namespace, roomId, socket.id, socket);
+    await getRoomManager().join(this.namespace, roomId, socket.id, socket);
 
     this.logger.info(
       `[WebRtcGateway] Socket ${socket.id} unido a la sala de señalización: ${roomId}`,
@@ -105,7 +105,7 @@ export class DefaultWebRtcGateway extends AbstractWebRtcGateway {
 
     // Unimos el socket a la sala de señalización para
     // que pueda recibir eventos relacionados con esa sala (ej. nuevos productores)
-    this.joinWsRoom(socket, payload.roomId);
+    await this.joinWsRoom(socket, payload.roomId);
 
     return await this.getRouterCapabilities(payload.roomId);
   }
