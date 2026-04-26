@@ -59,7 +59,14 @@ export class WsBroadcaster {
     // Usamos Promise.all para emitir a todas las salas en paralelo
     await Promise.all(
       rooms.map((room) =>
-        this.emitToRoom(namespace, room, pattern, payload, excludeSockets, customAdapter),
+        this.emitToRoom(
+          namespace,
+          room,
+          pattern,
+          payload,
+          excludeSockets,
+          customAdapter,
+        ),
       ),
     );
   }
