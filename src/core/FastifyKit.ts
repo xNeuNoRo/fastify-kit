@@ -167,7 +167,7 @@ export class FastifyKit {
     if (options.webrtc) {
       // Forzamos la activación del plugin de WebSockets si el usuario ha activado la opción de WebRTC,
       // ya que el módulo de WebRTC depende de los gateways de WebSocket para funcionar correctamente.
-      options.websockets = true;
+      options.websockets ||= true;
 
       const webrtcConfig =
         typeof options.webrtc === "object" ? options.webrtc : {};
@@ -200,7 +200,7 @@ export class FastifyKit {
           });
         }
 
-        // Si el usuario no ha registrado un Manager para las salas de SFU, 
+        // Si el usuario no ha registrado un Manager para las salas de SFU,
         // registramos el Manager por defecto para WebRTC (AdvancedSfuRoomManager)
         if (!container.has(SFU_ROOM_MANAGER_TOKEN)) {
           // Registramos el Manager por defecto para WebRTC
