@@ -176,8 +176,16 @@ export class DefaultSfuRoomManager
   private getOptimalWorker(): MediasoupWorker<WorkerAppData> {
     if (this.workers.length === 0)
       throw new Error("No hay workers de WebRTC disponibles.");
+
+    // Nos aseguramos de que el índice esté siempre dentro del rango del array de workers,
+    // incluso si algunos han muerto y el array se ha reducido
+    this.nextWorkerIndex = this.nextWorkerIndex % this.workers.length;
+
     const worker = this.workers[this.nextWorkerIndex];
+
+    // Avanzamos el puntero para la siguiente llamada
     this.nextWorkerIndex = (this.nextWorkerIndex + 1) % this.workers.length;
+
     return worker;
   }
 
