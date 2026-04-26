@@ -7,7 +7,7 @@ import {
   AudioLevelObserverOptions,
   RouterOptions,
 } from "mediasoup/types";
-import { IceServer } from "../types/index.js";
+import { IceServer } from "../interfaces/IceServer.js";
 
 /**
  * @description Lista de codecs optimizada para máxima compatibilidad.
