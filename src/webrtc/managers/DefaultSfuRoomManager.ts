@@ -47,6 +47,8 @@ export class DefaultSfuRoomManager
   private readonly logger = getLogger();
   // Event bus para emitir eventos del sistema de WebRTC a otras partes de la aplicación
   private readonly eventBus = getEventBus();
+  // Diccionario para manejar la creación concurrente de salas y evitar race conditions
+  private readonly pendingRooms = new Map<string, Promise<Router>>();
 
   /**
    * @description Maneja la lógica de arranque de la aplicación, creando un pool de workers de mediasoup basado en
@@ -199,78 +201,102 @@ export class DefaultSfuRoomManager
     // Si existe, retornarla inmediatamente
     if (router) return router;
 
-    // Si no existe, creamos una nueva sala (router) en un worker óptimo
-    const worker = this.getOptimalWorker();
+    // Si no existe, verificar si ya hay una promesa de creación en curso para esta sala (para evitar race conditions)
+    const pendingPromise = this.pendingRooms.get(roomId);
 
-    const finalOptions: RouterOptions = {
-      ...DEFAULT_ROUTER_OPTIONS,
-      ...options,
-      appData: {
-        ...DEFAULT_ROUTER_OPTIONS.appData,
-        ...(options?.appData || {}),
-        webRtcServer: worker.appData.webRtcServer,
-        workerPid: worker.pid,
-      },
-    };
+    // Si hay una promesa pendiente, significa que otra solicitud ya está creando
+    // esta sala, así que esperamos a que se resuelva y retornamos el resultado
+    if (pendingPromise) {
+      this.logger.debug(
+        `[FastifyKit WebRTC] La sala "${roomId}" está en proceso de creación. Esperando...`,
+      );
+      return pendingPromise;
+    }
 
-    // Creamos el router en el worker seleccionado y almacenarlo en el diccionario
-    router = await worker.createRouter(finalOptions);
+    const createRoomPromise = async () => {
+      try {
+        // Si no existe, creamos una nueva sala (router) en un worker óptimo
+        const worker = this.getOptimalWorker();
 
-    // Emitimos un evento indicando que se ha creado una nueva sala SFU,
-    // incluyendo el ID de la sala y el PID del worker que la aloja
-    this.eventBus.emit(WEBRTC_ROOM_CREATED_EVENT, {
-      roomId,
-      workerPid: worker.pid,
-    });
+        const finalOptions: RouterOptions = {
+          ...DEFAULT_ROUTER_OPTIONS,
+          ...options,
+          appData: {
+            ...DEFAULT_ROUTER_OPTIONS.appData,
+            ...(options?.appData || {}),
+            webRtcServer: worker.appData.webRtcServer,
+            workerPid: worker.pid,
+          },
+        };
 
-    // Creamos un observador de niveles de audio para esta sala
-    const audioObserver = await router.createAudioLevelObserver(
-      getAudioLevelObserverOptions(),
-    );
+        // Creamos el router en el worker seleccionado y almacenarlo en el diccionario
+        const newRouter = await worker.createRouter(finalOptions);
 
-    // Configuramos el manejador para emitir eventos de niveles de audio a través
-    // del event bus cada vez que se detecten cambios en los volúmenes de los productores
-    audioObserver.on("volumes", (volumes) => {
-      const payload: WEBRTC_AUDIO_VOLUMES_PAYLOAD = {
-        roomId,
-        volumes: volumes.map((v) => ({
-          producerId: v.producer.id,
-          volume: v.volume,
-        })),
-      };
-
-      this.eventBus.emit(WEBRTC_AUDIO_VOLUMES_EVENT, payload);
-    });
-
-    // Almacenamos el observador en el appData del router para que esté disponible para su uso futuro
-    router.appData.audioLevelObserver = audioObserver;
-
-    this.routers.set(roomId, router);
-
-    this.logger.info(
-      `[FastifyKit WebRTC] Sala "${roomId}" creada en worker PID ${worker.pid}`,
-      {
-        roomId,
-        workerPid: worker.pid,
-        routerId: router.id,
-        finalOptions,
-      },
-    );
-
-    router.on("workerclose", () => {
-      this.logger.warn(
-        `[FastifyKit WebRTC] El worker PID ${worker.pid} que alojaba la sala "${roomId}" se ha cerrado. Eliminando sala del gestor...`,
-        {
+        // Emitimos un evento indicando que se ha creado una nueva sala SFU,
+        // incluyendo el ID de la sala y el PID del worker que la aloja
+        this.eventBus.emit(WEBRTC_ROOM_CREATED_EVENT, {
           roomId,
           workerPid: worker.pid,
-          routerId: router.id,
-        },
-      );
-      this.eventBus.emit(WEBRTC_ROOM_CLOSED_EVENT, { roomId });
-      this.routers.delete(roomId);
-    });
+        });
 
-    return router;
+        // Creamos un observador de niveles de audio para esta sala
+        const audioObserver = await newRouter.createAudioLevelObserver(
+          getAudioLevelObserverOptions(),
+        );
+
+        // Configuramos el manejador para emitir eventos de niveles de audio a través
+        // del event bus cada vez que se detecten cambios en los volúmenes de los productores
+        audioObserver.on("volumes", (volumes) => {
+          const payload: WEBRTC_AUDIO_VOLUMES_PAYLOAD = {
+            roomId,
+            volumes: volumes.map((v) => ({
+              producerId: v.producer.id,
+              volume: v.volume,
+            })),
+          };
+
+          this.eventBus.emit(WEBRTC_AUDIO_VOLUMES_EVENT, payload);
+        });
+
+        // Almacenamos el observador en el appData del router para que esté disponible para su uso futuro
+        newRouter.appData.audioLevelObserver = audioObserver;
+
+        this.routers.set(roomId, newRouter);
+
+        this.logger.info(
+          `[FastifyKit WebRTC] Sala "${roomId}" creada en worker PID ${worker.pid}`,
+          {
+            roomId,
+            workerPid: worker.pid,
+            routerId: newRouter.id,
+            finalOptions,
+          },
+        );
+
+        newRouter.on("workerclose", () => {
+          this.logger.warn(
+            `[FastifyKit WebRTC] El worker PID ${worker.pid} que alojaba la sala "${roomId}" se ha cerrado. Eliminando sala del gestor...`,
+            {
+              roomId,
+              workerPid: worker.pid,
+              routerId: newRouter.id,
+            },
+          );
+          this.eventBus.emit(WEBRTC_ROOM_CLOSED_EVENT, { roomId });
+          this.routers.delete(roomId);
+        });
+
+        return newRouter;
+      } finally {
+        // Una vez que se resuelva la creación de la sala, eliminamos la promesa pendiente para ese roomId
+        this.pendingRooms.delete(roomId);
+      }
+    };
+
+    // Iniciamos la promesa, la guardamos en el pending map y la retornamos
+    const roomPromise = createRoomPromise();
+    this.pendingRooms.set(roomId, roomPromise);
+    return roomPromise;
   }
 
   /**
