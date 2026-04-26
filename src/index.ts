@@ -191,6 +191,26 @@ export {
   broadcastToRooms,
 } from "./websockets/broadcaster/WsBroadcaster.js"; // Facades
 
+// ----------------------------------------------
+// WEBRTC (SFU Media Server)
+// ----------------------------------------------
+export {
+  AbstractWebRtcGateway,
+  type WebRtcTransportResponse,
+} from "./webrtc/gateways/AbstractWebRtcGateway.js";
+export { DefaultWebRtcGateway } from "./webrtc/gateways/DefaultWebRtcGateway.js";
+
+export { getSfuRoomManager } from "./webrtc/managers/sfu-manager.factory.js";
+export { DefaultSfuRoomManager } from "./webrtc/managers/DefaultSfuRoomManager.js";
+export { AdvancedSfuRoomManager } from "./webrtc/managers/AdvancedSfuRoomManager.js";
+
+export { SFU_ROOM_MANAGER_TOKEN } from "./webrtc/interfaces/SfuRoomManager.js";
+export type { SfuRoomManager } from "./webrtc/interfaces/SfuRoomManager.js";
+export type { IceServer } from "./webrtc/interfaces/IceServer.js";
+
+// Exportamos todas las constantes de configuración (Opciones por defecto)
+export * from "./webrtc/constants/WebRtcConfig.js";
+
 // ==========================================
 // CICLO DE VIDA (LIFECYCLE HOOKS)
 // ==========================================
@@ -217,4 +237,8 @@ export { DiskSpaceHealthIndicator } from "./health/indicators/DiskSpaceHealthInd
 export { EventLoopHealthIndicator } from "./health/indicators/EventLoopHealthIndicator.js";
 
 // Tipos
-export type { HealthCheckResult, HealthIndicatorResult, HealthStatus } from "./health/interfaces.js";
+export type {
+  HealthCheckResult,
+  HealthIndicatorResult,
+  HealthStatus,
+} from "./health/interfaces.js";

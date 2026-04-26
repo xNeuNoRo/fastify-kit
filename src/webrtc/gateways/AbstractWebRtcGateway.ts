@@ -15,10 +15,8 @@ import type {
   WebRtcServer,
 } from "mediasoup/types";
 import {
-  SFU_ROOM_MANAGER_TOKEN,
   SfuRoomManager,
 } from "../interfaces/SfuRoomManager.js";
-import { Inject } from "../../container/inject.decorator.js";
 import { DEFAULT_TRANSPORT_OPTIONS } from "../constants/WebRtcConfig.js";
 import { getSfuRoomManager } from "../managers/sfu-manager.factory.js";
 
