@@ -120,6 +120,13 @@ export class MemoryRoomManager implements WsRoomManager {
     const sockets = await this.getSocketsInRoom(namespace, room);
     if (sockets.length === 0) return;
 
+    // Creamos un Set de exclusión para optimizar la búsqueda
+    // si se proporcionó una lista de sockets a excluir
+    const exclusionSet =
+      excludeSockets && excludeSockets.length > 0
+        ? new Set(excludeSockets)
+        : null;
+
     // Codificamos el mensaje usando el adaptador
     // para asegurarnos de que el formato es correcto
     const encodedMessage = adapter.encode(pattern, payload);
@@ -127,7 +134,7 @@ export class MemoryRoomManager implements WsRoomManager {
     // Enviamos el mensaje a cada socket conectado a la sala
     for (const socket of sockets) {
       // Saltamos los sockets que están en la lista de exclusión
-      if (excludeSockets?.includes(socket.id)) {
+      if (exclusionSet?.has(socket.id)) {
         continue;
       }
 
