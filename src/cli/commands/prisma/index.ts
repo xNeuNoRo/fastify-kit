@@ -37,7 +37,7 @@ export function registerPrismaCommands(program: Command) {
           modelsDir: options.dir,
           outputFile: options.out,
         });
-      } catch (error) {
+      } catch {
         process.exit(1);
       }
     });
