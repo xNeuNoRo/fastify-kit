@@ -36,7 +36,7 @@ export async function getRunnerCommand(
     case "pnpm":
       return `pnpm dlx ${command}`;
     case "yarn":
-      return `yarn ${command}`;
+      return `yarn dlx ${command}`;
     default:
       return `npx ${command}`;
   }
