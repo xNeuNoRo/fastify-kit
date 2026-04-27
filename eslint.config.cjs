@@ -16,6 +16,7 @@ module.exports = [
       "*.cjs",
       "*.mjs",
       "*.js",
+      "bin/fk.js",
     ],
   },
 

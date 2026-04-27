@@ -3,6 +3,10 @@
   "version": "0.6.7",
   "description": "Kit para el framework Fastify HTTP de alto rendimiento que utiliza Stage 3 Decorators para una experiencia de desarrollo más fluida y organizada. Proporciona una estructura modular basada en decoradores para definir controladores, proveedores y módulos, facilitando la creación de aplicaciones Fastify escalables y mantenibles.",
   "type": "module",
+  "bin": {
+    "fk": "./bin/fk.js",
+    "fastify-kit": "./bin/fk.js"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "author": {
@@ -59,8 +63,6 @@
     }
   },
   "dependencies": {
-    "ajv": "^8.20.0",
-    "ajv-formats": "^3.0.1",
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.2.0",
     "@fastify/helmet": "^13.0.2",
@@ -71,8 +73,15 @@
     "@fastify/type-provider-typebox": "^6.1.0",
     "@fastify/websocket": "^11.2.0",
     "@scalar/fastify-api-reference": "^1.52.6",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "chokidar": "^5.0.0",
+    "commander": "^14.0.3",
     "croner": "^10.0.1",
-    "fastify-plugin": "^5.1.0"
+    "fastify-plugin": "^5.1.0",
+    "glob": "^13.0.6",
+    "ora": "^9.4.0",
+    "picocolors": "^1.1.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
@@ -94,6 +103,7 @@
     "prettier": "^3.6.2",
     "typescript": "^6.0.2",
     "vitest": "^4.1.1",
-    "ws": "^8.20.0"
+    "ws": "^8.20.0",
+    "mediasoup": "^3.19.21"
   }
 }
