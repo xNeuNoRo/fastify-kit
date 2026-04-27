@@ -31,7 +31,16 @@ export async function runPrismaWatch(options: PrismaSyncOptions = {}) {
     console.log(
       `${pc.gray("[FK CLI]")} ${pc.yellow(" [MODIFICADO] ")} ${pc.gray(type)}: ${path}`,
     );
-    await runPrismaSync(options);
+
+    try {
+      await runPrismaSync(options);
+    } catch {
+      console.log(
+        pc.yellow(
+          `${pc.gray("[FK CLI]")} El watcher sigue activo. Corrige el error en tus modelos y guarda para reintentar.\n`,
+        ),
+      );
+    }
   };
 
   // Configuramos los eventos que queremos escuchar

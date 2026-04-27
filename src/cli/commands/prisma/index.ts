@@ -31,11 +31,15 @@ export function registerPrismaCommands(program: Command) {
       "prisma/schema.prisma",
     )
     .action(async (options) => {
-      await runPrismaSync({
-        baseFile: options.base,
-        modelsDir: options.dir,
-        outputFile: options.out,
-      });
+      try {
+        await runPrismaSync({
+          baseFile: options.base,
+          modelsDir: options.dir,
+          outputFile: options.out,
+        });
+      } catch (error) {
+        process.exit(1);
+      }
     });
 
   // Subcomando => fk prisma watch
@@ -55,10 +59,14 @@ export function registerPrismaCommands(program: Command) {
       "prisma/schema.prisma",
     )
     .action(async (options) => {
-      await runPrismaWatch({
-        baseFile: options.base,
-        modelsDir: options.dir,
-        outputFile: options.out,
-      });
+      try {
+        await runPrismaWatch({
+          baseFile: options.base,
+          modelsDir: options.dir,
+          outputFile: options.out,
+        });
+      } catch (error) {
+        process.exit(1);
+      }
     });
 }

@@ -42,7 +42,7 @@ export async function runPrismaSync(options: PrismaSyncOptions = {}) {
             `💡 Tip: Crea este archivo o especifica otra ruta con el flag --base <ruta>`,
           ),
       );
-      process.exit(1);
+      throw e;
     }
 
     // Glob requiere forward slashes (/), incluso en Windows, asi que normalizamos
@@ -108,6 +108,6 @@ export async function runPrismaSync(options: PrismaSyncOptions = {}) {
           (error instanceof Error ? error.message : String(error)),
       ),
     );
-    process.exit(1);
+    throw error;
   }
 }
