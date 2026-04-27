@@ -36,13 +36,9 @@ export async function runPrismaSync(options: PrismaSyncOptions = {}) {
     try {
       baseContent = await fs.readFile(basePath, "utf-8");
     } catch (e) {
-      spinner.fail(
-        pc.red(`No se encontró el esquema base en: ${basePath}\n`) +
-          pc.yellow(
-            `💡 Tip: Crea este archivo o especifica otra ruta con el flag --base <ruta>`,
-          ),
+      throw new Error(
+        `No se encontró el esquema base en: ${basePath}\n💡 Tip: Crea este archivo o especifica otra ruta con el flag --base <ruta>`,
       );
-      throw e;
     }
 
     // Glob requiere forward slashes (/), incluso en Windows, asi que normalizamos
