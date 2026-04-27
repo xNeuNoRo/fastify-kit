@@ -51,15 +51,19 @@ export async function ensureGitIgnore(
 
   try {
     const content = await fs.readFile(gitignorePath, "utf-8");
+    const existingLines = content.split("\n").map((line) => line.trim());
 
-    if (!content.includes(normalizedEntry)) {
+    if (!existingLines.includes(normalizedEntry)) {
       await fs.appendFile(
         gitignorePath,
         `\n# ${comment}\n${normalizedEntry}\n`,
       );
     }
   } catch (e) {
-    // Si falla la lectura, asumimos que no existe y lo creamos en el CWD
-    await fs.writeFile(gitignorePath, `# ${comment}\n${normalizedEntry}\n`);
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+      await fs.writeFile(gitignorePath, `# ${comment}\n${normalizedEntry}\n`);
+    } else {
+      throw e;
+    }
   }
 }
