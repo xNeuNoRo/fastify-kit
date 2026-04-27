@@ -26,12 +26,23 @@ export async function runPrismaWatch(options: PrismaSyncOptions = {}) {
     ),
   );
 
-  // Definimos qué hacer cuando algo cambie
-  const handleChange = async (path: string, type: string) => {
-    console.log(
-      `${pc.gray("[FK CLI]")} ${pc.yellow(" [MODIFICADO] ")} ${pc.gray(type)}: ${path}`,
-    );
+  // Manejamos los eventos de cambio con un debounce para evitar múltiples ejecuciones seguidas
+  let timeoutId: NodeJS.Timeout | null = null;
+  let isSyncing = false;
+  let pendingSync = false;
 
+  // Función para ejecutar la sincronización con control de concurrencia
+  const executeSync = async () => {
+    // Si ya estamos sincronizando, marcamos que hay una sincronización pendiente y salimos
+    if (isSyncing) {
+      pendingSync = true;
+      return;
+    }
+
+    // Marcamos que estamos sincronizando para evitar ejecuciones concurrentes
+    isSyncing = true;
+
+    // Ejecutamos la sincronización y manejamos errores para que el watcher siga activo
     try {
       await runPrismaSync(options);
     } catch {
@@ -40,10 +51,30 @@ export async function runPrismaWatch(options: PrismaSyncOptions = {}) {
           `${pc.gray("[FK CLI]")} El watcher sigue activo. Corrige el error en tus modelos y guarda para reintentar.\n`,
         ),
       );
+    } finally {
+      // Marcamos que ya no estamos sincronizando
+      isSyncing = false;
+      // Si durante la sincronización se marcó que hay una sincronización pendiente, la ejecutamos inmediatamente
+      if (pendingSync) {
+        pendingSync = false;
+        executeSync();
+      }
     }
   };
 
-  // Configuramos los eventos que queremos escuchar
+  // Función para manejar los eventos de cambio con debounce
+  const handleChange = (path: string, type: string) => {
+    console.log(
+      `${pc.gray("[FK CLI]")} ${pc.yellow(" [MODIFICADO] ")} ${pc.gray(type)}: ${path}`,
+    );
+
+    // Si ya hay un timeout pendiente, lo limpiamos para reiniciar el conteo
+    if (timeoutId) clearTimeout(timeoutId);
+
+    // Establecemos un nuevo timeout para ejecutar la sincronización después de 300ms sin cambios adicionales
+    timeoutId = setTimeout(executeSync, 300);
+  };
+
   watcher
     .on("add", (path) => handleChange(path, "Archivo creado"))
     .on("change", (path) => handleChange(path, "Archivo editado"))
