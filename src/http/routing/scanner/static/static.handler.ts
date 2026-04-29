@@ -6,6 +6,7 @@ import { ForbiddenException } from "../../../exceptions/SecurityExceptions.js";
 import { StaticFile } from "../../../responses/StaticFile.js";
 import type { StaticAssetsOptions } from "../../../interfaces/static.interface.js";
 import { renderDirectoryHtml } from "./static.template.js";
+import { NotFoundException } from "../../../exceptions/ResourceExceptions.js";
 
 /**
  * @description Maneja la respuesta de un archivo estático, aplicando opciones como fallback y descarga forzada.
@@ -57,10 +58,13 @@ export async function registerStaticAssetsPlugin(
   ) => Promise<void>,
   decorateReply: boolean = false,
 ) {
+  // Normalizamos el prefijo para asegurar que siempre termine con una barra y no tenga barras repetidas
+  const targetPrefix = prefix ? `/${prefix}/`.replaceAll(/\/+/g, "/") : "/";
+
   // Configuración base para fastify-static, mapeando opciones personalizadas a las nativas
   const fastifyNativeOptions: FastifyStaticOptions = {
     root: staticOptions.root,
-    prefix: prefix ? `/${prefix}/` : "/",
+    prefix: decorateReply ? targetPrefix : "/", // Si es modo Scanner, el prefijo se maneja a nivel de scope
     decorateReply, // Determina si inyecta reply.sendFile globalmente o no
     schemaHide: staticOptions.hideFromDocs ?? true,
   };
@@ -147,33 +151,49 @@ export async function registerStaticAssetsPlugin(
   }
 
   // Modo Scanner (Encapsulado por controlador para evitar colisiones)
-  await app.register(async (scopedInstance) => {
-    // Si se proporciona un guard personalizado, lo aplicamos como preHandler a este scope específico
-    if (guardHandler) {
-      scopedInstance.addHook("preHandler", guardHandler);
-    }
+  await app.register(
+    async (scopedInstance) => {
+      // Si se proporciona un guard personalizado, lo aplicamos como preHandler a este scope específico
+      if (guardHandler) {
+        scopedInstance.addHook("preHandler", guardHandler);
+      }
 
-    // Protección Anti-Hotlinking => Si se configuran referers válidos,
-    // añadimos un hook para validar cada petición
-    if (staticOptions.validReferers && staticOptions.validReferers.length > 0) {
-      scopedInstance.addHook("onRequest", async (req, reply) => {
-        const referer = req.headers.referer;
-        if (
-          referer &&
-          !staticOptions.validReferers!.some((ref) => referer.startsWith(ref))
-        ) {
-          reply
-            .status(403)
-            .send(
-              new ForbiddenException(
-                "No tienes permiso para acceder a este recurso.",
-              ),
-            );
-        }
+      // Protección Anti-Hotlinking => Si se configuran referers válidos,
+      // añadimos un hook para validar cada petición
+      if (
+        staticOptions.validReferers &&
+        staticOptions.validReferers.length > 0
+      ) {
+        scopedInstance.addHook("onRequest", async (req, reply) => {
+          const referer = req.headers.referer;
+          if (
+            referer &&
+            !staticOptions.validReferers!.some((ref) => referer.startsWith(ref))
+          ) {
+            reply
+              .status(403)
+              .send(
+                new ForbiddenException(
+                  "No tienes permiso para acceder a este recurso.",
+                ),
+              );
+          }
+        });
+      }
+
+      // Handler personalizado para rutas no encontradas dentro de este scope,
+      // devolviendo un JSON con formato de error consistente
+      scopedInstance.setNotFoundHandler((_request, reply) => {
+        reply
+          .status(404)
+          .send(
+            new NotFoundException("El recurso estático solicitado no existe."),
+          );
       });
-    }
 
-    // Finalmente, registramos el plugin de archivos estáticos dentro de este scope específico
-    scopedInstance.register(fastifyStatic, fastifyNativeOptions);
-  });
+      // Finalmente, registramos el plugin de archivos estáticos dentro de este scope específico
+      scopedInstance.register(fastifyStatic, fastifyNativeOptions);
+    },
+    { prefix: targetPrefix }, // Prefijo aplicado a este scope para evitar colisiones con otros controladores o rutas
+  );
 }
