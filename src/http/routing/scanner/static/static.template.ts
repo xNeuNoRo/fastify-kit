@@ -1,3 +1,5 @@
+import type { ListDir, ListFile } from "@fastify/static";
+
 /**
  * @description Formatea bytes a una unidad legible (KB, MB, GB)
  */
@@ -52,7 +54,7 @@ function sanitizeHref(url: string): string {
  * @description Renderiza una interfaz HTML moderna para el listado de directorios de archivos estáticos.
  * Es consumida por @fastify/static cuando format es 'html'.
  */
-export function renderDirectoryHtml(dirs: any[], files: any[]): string {
+export function renderDirectoryHtml(dirs: ListDir[], files: ListFile[]): string {
   // Generamos el HTML para los directorios
   const dirsHtml = dirs
     .map((dir) => {
