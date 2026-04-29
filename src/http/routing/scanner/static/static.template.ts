@@ -18,7 +18,7 @@ function formatSize(bytes?: number): string {
  * @description Formatea un timestamp a fecha local legible
  */
 function formatDate(timestamp?: number | string | Date): string {
-  if (!timestamp) return "--";
+  if (timestamp == null) return "--";
   const d = new Date(timestamp);
   return d.toLocaleDateString("es-ES", {
     year: "numeric",
