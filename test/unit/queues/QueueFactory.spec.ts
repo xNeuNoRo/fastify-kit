@@ -11,6 +11,8 @@ describe("QueueFactory (getQueueAdapter)", () => {
   beforeEach(() => {
     // Restauramos todos los mocks antes de cada test para garantizar aislamiento total
     vi.restoreAllMocks();
+    // Evitamos que los logs de error o warning ensucien la salida de los tests
+    vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   it("Debería registrar e inyectar DefaultInProcessAdapter si no hay configuración explícita", () => {
