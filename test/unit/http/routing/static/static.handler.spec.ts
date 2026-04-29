@@ -121,7 +121,11 @@ describe("Handler orquestador de los archivos estaticos", () => {
         register: vi.fn(async (cb) => {
           if (typeof cb === "function") {
             await cb(
-              { addHook: vi.fn(), register: vi.fn() } as any,
+              {
+                addHook: vi.fn(),
+                register: vi.fn(),
+                setNotFoundHandler: vi.fn(),
+              } as any,
               {},
               () => {},
             );
