@@ -28,7 +28,7 @@ export function Processor(name: string, type: QueueType = "cpu") {
 
     const metadata = context.metadata as FastifyKitMetadata;
 
-    if (metadata.queue && metadata.queue.name !== name) {
+    if (metadata.queue) {
       throw new Error(
         `La clase ${context.name} ya esta asignada a la cola ${metadata.queue.name}. No puedes asignar múltiples colas a la misma clase. Si necesitas manejar múltiples colas, considera crear clases separadas para cada una.`,
       );
