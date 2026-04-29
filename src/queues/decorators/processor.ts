@@ -1,5 +1,5 @@
 import { FastifyKitMetadata } from "../../http/decorators/types.js";
-import { QueueType } from "../interfaces/QueueOptions.js";
+import { QueueType } from "../interfaces/queue-options.js";
 
 /**
  * @description Decorador para marcar una clase como procesadora de una cola específica.

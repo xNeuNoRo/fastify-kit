@@ -11,7 +11,7 @@ import type { RouteDefinition } from "../routing/types.js";
 import type { Interceptor } from "../interceptors/Interceptor.js";
 import type { TSchema } from "@sinclair/typebox";
 import type { StaticAssetsOptions } from "../interfaces/static.interface.js";
-import { QueueProcessorMetadata } from "../../queues/interfaces/QueueOptions.js";
+import { QueueProcessorMetadata } from "../../queues/interfaces/queue-options.js";
 
 /**
  * @description Tipos y interfaces para la metadata de los decoradores en FastifyKit.
