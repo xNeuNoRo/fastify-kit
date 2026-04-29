@@ -45,6 +45,16 @@ export { Serialize } from "./http/decorators/serialize.js";
 export type { MultipartFile, FileOptions } from "./http/decorators/types.js";
 
 // ----------------------------------------------
+// HTTP Static Assets
+// ----------------------------------------------
+export { StaticAssets } from "./http/decorators/static.js";
+export { StaticFile } from "./http/responses/StaticFile.js";
+export type {
+  StaticAssetsOptions,
+  StaticFileOptions,
+} from "./http/interfaces/static.interface.js";
+
+// ----------------------------------------------
 // HTTP Security & Guards
 // ----------------------------------------------
 export { UseGuards } from "./http/decorators/guards.js";

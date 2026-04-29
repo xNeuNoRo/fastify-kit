@@ -11,6 +11,11 @@ import type {
   Interceptor,
 } from "../../interceptors/Interceptor.js";
 import { executeInterceptors } from "../../interceptors/interceptor.executor.js";
+import { StaticFile } from "../../responses/StaticFile.js";
+import {
+  handleStaticFileResponse,
+  registerStaticAssetsPlugin,
+} from "./static/static.handler.js";
 
 export type Constructor<T = any> = new (...args: any[]) => T;
 
@@ -64,12 +69,16 @@ function buildGuardHandler(guards: Constructor[]) {
 /**
  * @description Formatea la respuesta devuelta por el método del controlador.
  */
-function formatResponse(result: any, reply: FastifyReply) {
+async function formatResponse(result: any, reply: FastifyReply) {
   if (reply.sent) return;
 
   if (result === reply) return;
 
   if (result instanceof ApiResponse) return result;
+
+  if (result instanceof StaticFile) {
+    return await handleStaticFileResponse(result, reply);
+  }
 
   return ApiResponse.success(result);
 }
@@ -77,7 +86,7 @@ function formatResponse(result: any, reply: FastifyReply) {
 /**
  * @description Escanea y registra todos los controladores en la instancia de Fastify.
  */
-export function registerControllers(
+export async function registerControllers(
   app: FastifyInstance,
   controllers: Constructor[],
 ) {
@@ -108,6 +117,21 @@ export function registerControllers(
     const classGuards = metadata.classGuards || [];
     // Obtenemos los interceptors definidos a nivel de clase para este controlador desde la metadata
     const classInterceptors = metadata.classInterceptors || [];
+
+    // Si se han configurado archivos estáticos para este controlador, 
+    // registramos el plugin de archivos estáticos en la instancia de Fastify aplicando 
+    // las opciones configuradas y un guard personalizado que combina los guards definidos 
+    // a nivel de clase para proteger las rutas de archivos estáticos.
+    if (metadata.staticAssets) {
+      const guardHandler = buildGuardHandler(classGuards);
+      // Fastify encola el app.register internamente, por lo que no necesitamos await aquí
+      await registerStaticAssetsPlugin(
+        app,
+        metadata.staticAssets,
+        prefix,
+        guardHandler,
+      );
+    }
 
     // Iteramos sobre cada ruta definida en el controlador y la registramos en Fastify
     for (const route of routes) {
@@ -224,7 +248,7 @@ export function registerControllers(
           }
 
           // Formateamos la respuesta devuelta por el método del controlador para enviarla al cliente utilizando la función formatResponse, que se encarga de verificar si el controlador ya ha enviado una respuesta o si el resultado devuelto es una instancia de ApiResponse, y formatea la respuesta de manera consistente.
-          return formatResponse(result, reply);
+          return await formatResponse(result, reply);
         },
       );
     }

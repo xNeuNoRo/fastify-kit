@@ -27,10 +27,11 @@ import type { FastifyCorsOptions } from "@fastify/cors";
 import type { FastifyHelmetOptions } from "@fastify/helmet";
 import type { ServerOptions as HttpsServerOptions } from "node:https";
 import type { TSchema } from "@sinclair/typebox";
+import type { StaticAssetsOptions } from "../http/interfaces/static.interface.js";
+import type { FastifyKitWebRtcConfig } from "./interfaces/webrtc.interface.js";
 import { TypeCompiler } from "@sinclair/typebox/compiler";
 import { ConfigRegistry } from "../config/ConfigRegistry.js";
 import { Value } from "@sinclair/typebox/value";
-import { FastifyKitWebRtcConfig } from "./interfaces/webrtc.interface.js";
 
 export interface FastifyKitOptions {
   module: Constructor;
@@ -60,8 +61,10 @@ export interface FastifyKitOptions {
     | {
         maxPayload?: number; // Tamaño máximo de payload en bytes para mensajes de WebSocket (opcional, por defecto 10MB)
       };
-
+  // Activar o desactivar el soporte para WebRTC
   webrtc?: boolean | FastifyKitWebRtcConfig;
+  // Configuración para servir archivos estáticos
+  staticAssets?: string | StaticAssetsOptions;
 }
 
 type LifecycleHookName =
@@ -251,7 +254,7 @@ export class FastifyKit {
     const prefix = options.globalPrefix || "";
     await app.register(
       async (instance) => {
-        registerControllers(instance, allControllers);
+        await registerControllers(instance, allControllers);
       },
       { prefix },
     );
@@ -349,6 +352,39 @@ export class FastifyKit {
         options: {
           maxPayload: wsConfig.maxPayload ?? 10 * 1024 * 1024, // Por defecto, 10MB
         },
+      });
+    }
+
+    // Si el usuario ha configurado la opción de staticAssets, registramos el plugin de archivos estáticos.
+    if (options.staticAssets) {
+      const staticConfig =
+        typeof options.staticAssets === "string"
+          ? { root: options.staticAssets }
+          : options.staticAssets;
+
+      // Usamos 'public' como prefix por defecto si no viene uno en la configuracion
+      const globalPrefix = staticConfig.prefix || "public";
+
+      // Importamos dinamicamente el handler de archivos estáticos
+      // para no cargarlo si el usuario no ha configurado la opción de staticAssets
+      const { registerStaticAssetsPlugin } =
+        await import("../http/routing/scanner/static/static.handler.js");
+
+      // Registramos el plugin globalmente pasando 'true' al final para decorateReply
+      await registerStaticAssetsPlugin(
+        app,
+        staticConfig,
+        globalPrefix,
+        undefined,
+        true,
+      );
+    } else {
+      // Registramos "silenciosamente" para habilitar reply.sendFile en toda la app
+      // aunque el dev no configure una carpeta global.
+      await app.register(import("@fastify/static"), {
+        root: process.cwd(), // Requerido por la librería aunque no se sirva
+        prefix: "/fk-static-internal",
+        serve: false, // Solo inyecta el decorador, no expone archivos
       });
     }
 

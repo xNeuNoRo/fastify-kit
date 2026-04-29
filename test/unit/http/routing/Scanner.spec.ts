@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { container } from "../../../../src/container/DIContainer.js";
 import { ForbiddenException } from "../../../../src/http/exceptions/index.js";
 import { ApiResponse } from "../../../../src/http/responses/ApiResponse.js";
+import { StaticFile } from "../../../../src/http/responses/StaticFile.js";
 import { registerControllers } from "../../../../src/http/routing/scanner/index.js";
 import { LOGGER_TOKEN } from "../../../../src/logger/LoggerContract.js";
 
@@ -68,19 +69,19 @@ describe("Motor de Enrutamiento (Scanner)", () => {
   });
 
   describe("Registro de Controladores", () => {
-    it("Debería advertir si un controlador no tiene rutas definidas", () => {
+    it("Debería advertir si un controlador no tiene rutas definidas", async () => {
       class EmptyController {
         dummy = true;
       }
       // No le ponemos decoradores, por ende no tiene metadata de rutas
 
-      registerControllers(mockApp, [EmptyController]);
+      await registerControllers(mockApp, [EmptyController]);
 
       // Deberia haber llamado a logger.warn al menos una vez indicando que no se encontraron rutas
       expect(loggerMock.warn).toHaveBeenCalledTimes(1);
     });
 
-    it("Debería construir rutas correctamente con prefijos y versiones", () => {
+    it("Debería construir rutas correctamente con prefijos y versiones", async () => {
       const metadataSymbol = Symbol.metadata;
       class TestController {
         dummy = true;
@@ -95,7 +96,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
         ],
       };
 
-      registerControllers(mockApp, [TestController]);
+      await registerControllers(mockApp, [TestController]);
 
       // Verificamos que llamó a app.get() con la ruta normalizada: /v1/users/profile
       expect(mockApp.get).toHaveBeenCalledWith(
@@ -105,7 +106,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
       );
     });
 
-    it("Debería registrar correctamente el Schema y la configuración de RateLimit en las opciones de Fastify", () => {
+    it("Debería registrar correctamente el Schema y la configuración de RateLimit en las opciones de Fastify", async () => {
       // Para este test, simulamos un controlador con una ruta que tiene un schema y una configuración de rate limit.
       const metadataSymbol = Symbol.metadata;
       class ConfiguredController {
@@ -129,7 +130,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
         rateLimits: { configMethod: myRateLimit },
       };
 
-      registerControllers(mockApp, [ConfiguredController]);
+      await registerControllers(mockApp, [ConfiguredController]);
 
       const options = mockApp.post.mock.calls[0][1];
 
@@ -163,7 +164,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
         classGuards: [AuthGuard],
       };
 
-      registerControllers(mockApp, [SecureController]);
+      await registerControllers(mockApp, [SecureController]);
 
       // Extraemos el preHandler registrado en Fastify
       const options = mockApp.get.mock.calls[0][1];
@@ -201,7 +202,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
         classGuards: [PassGuard],
       };
 
-      registerControllers(mockApp, [SuccessSecureController]);
+      await registerControllers(mockApp, [SuccessSecureController]);
 
       const options = mockApp.get.mock.calls[0][1];
       const preHandler = options.preHandler;
@@ -210,7 +211,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
       await expect(preHandler({}, {})).resolves.toBeUndefined();
     });
 
-    it("No debería inyectar preHandler si no hay Guards definidos", () => {
+    it("No debería inyectar preHandler si no hay Guards definidos", async () => {
       const metadataSymbol = Symbol.metadata;
       class NoGuardController {
         dummy = true;
@@ -221,7 +222,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
         routes: [{ method: "get", path: "/free", handlerName: "free" }],
       };
 
-      registerControllers(mockApp, [NoGuardController]);
+      await registerControllers(mockApp, [NoGuardController]);
 
       const options = mockApp.get.mock.calls[0][1];
       // Si no hay guards, preHandler no debe existir para evitar overhead de Fastify
@@ -255,7 +256,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
         },
       };
 
-      registerControllers(mockApp, [ParamController]);
+      await registerControllers(mockApp, [ParamController]);
 
       // Obtenemos el handler principal que registra el scanner
       const handler = mockApp.get.mock.calls[0][2];
@@ -288,7 +289,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
         parameters: {}, // Sin parámetros
       };
 
-      registerControllers(mockApp, [LegacyController]);
+      await registerControllers(mockApp, [LegacyController]);
 
       // Obtenemos el handler principal que registra el scanner
       const handler = mockApp.get.mock.calls[0][2];
@@ -331,7 +332,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
         },
       };
 
-      registerControllers(mockApp, [MultiParamController]);
+      await registerControllers(mockApp, [MultiParamController]);
 
       // Obtenemos el handler principal que registra el scanner
       const handler = mockApp.post.mock.calls[0][2];
@@ -378,7 +379,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
         parameters: { upload: [{ index: 0, type: "file", key: "avatar" }] },
       };
 
-      registerControllers(mockApp, [FileController]);
+      await registerControllers(mockApp, [FileController]);
       const handler = mockApp.post.mock.calls[0][2];
 
       // Simulamos un Request normal (sin isMultipart o que devuelve false)
@@ -412,7 +413,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
         },
       };
 
-      registerControllers(mockApp, [MimeController]);
+      await registerControllers(mockApp, [MimeController]);
       const handler = mockApp.post.mock.calls[0][2];
 
       // Simulamos que el usuario manda un PDF en lugar de un PNG
@@ -453,7 +454,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
         },
       };
 
-      registerControllers(mockApp, [BufferController]);
+      await registerControllers(mockApp, [BufferController]);
       const handler = mockApp.post.mock.calls[0][2];
 
       // Mock de archivo válido en modo buffer
@@ -510,7 +511,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
         },
       };
 
-      registerControllers(mockApp, [SizeController]);
+      await registerControllers(mockApp, [SizeController]);
       const handler = mockApp.post.mock.calls[0][2];
 
       // Fastify lanza este error específico cuando el stream excede el tamaño en caliente
@@ -546,7 +547,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
         parameters: { get: [{ index: 0, type: "cookie", key: "token" }] },
       };
 
-      registerControllers(mockApp, [BadCookieController]);
+      await registerControllers(mockApp, [BadCookieController]);
       const handler = mockApp.get.mock.calls[0][2];
 
       // Simulamos un Request SIN el plugin registrado (request.cookies es undefined)
@@ -573,7 +574,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
         },
       };
 
-      registerControllers(mockApp, [GoodCookieController]);
+      await registerControllers(mockApp, [GoodCookieController]);
       const handler = mockApp.get.mock.calls[0][2];
 
       // Simulamos un Request CON el plugin de Fastify activo
@@ -607,7 +608,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
         routes: [{ method: "get", path: "/manual", handlerName: "manual" }],
       };
 
-      registerControllers(mockApp, [ReplyController]);
+      await registerControllers(mockApp, [ReplyController]);
 
       // Obtenemos el handler principal que registra el scanner
       const handler = mockApp.get.mock.calls[0][2];
@@ -637,7 +638,7 @@ describe("Motor de Enrutamiento (Scanner)", () => {
       };
 
       // Al registrar el controlador, obtenemos el handler principal que el scanner registra en Fastify
-      registerControllers(mockApp, [CustomController]);
+      await registerControllers(mockApp, [CustomController]);
 
       // Obtenemos el handler principal que registra el scanner
       const handler = mockApp.get.mock.calls[0][2];
@@ -647,6 +648,37 @@ describe("Motor de Enrutamiento (Scanner)", () => {
 
       // Si el controlador ya devuelve un ApiResponse, formatResponse no debe envolverlo nuevamente, sino retornarlo tal cual
       expect(result).toBe(myResponse);
+    });
+
+    it("Debería delegar a handleStaticFileResponse si el controlador retorna un StaticFile", async () => {
+      const metadataSymbol = Symbol.metadata;
+      const myFile = new StaticFile("test.png", { root: "/public" });
+
+      class FileController {
+        async download() {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          return myFile;
+        }
+      }
+
+      (FileController as any)[metadataSymbol] = {
+        routes: [{ method: "get", path: "/file", handlerName: "download" }],
+      };
+
+      await registerControllers(mockApp, [FileController]);
+      const handler = mockApp.get.mock.calls[0][2];
+
+      // Simulamos los mocks necesarios para el reply de Fastify
+      const mockReply = {
+        sent: false,
+        sendFile: vi.fn(),
+        header: vi.fn(),
+      } as any;
+
+      await handler({}, mockReply);
+
+      // Si el formato detectó el StaticFile, debió llamar a sendFile
+      expect(mockReply.sendFile).toHaveBeenCalledWith("test.png", "/public");
     });
   });
 });
