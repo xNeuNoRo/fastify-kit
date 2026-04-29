@@ -11,6 +11,11 @@ import type {
   Interceptor,
 } from "../../interceptors/Interceptor.js";
 import { executeInterceptors } from "../../interceptors/interceptor.executor.js";
+import { StaticFile } from "../../responses/StaticFile.js";
+import {
+  handleStaticFileResponse,
+  registerStaticAssetsPlugin,
+} from "./static/static.handler.js";
 
 export type Constructor<T = any> = new (...args: any[]) => T;
 
@@ -71,6 +76,10 @@ function formatResponse(result: any, reply: FastifyReply) {
 
   if (result instanceof ApiResponse) return result;
 
+  if (result instanceof StaticFile) {
+    return handleStaticFileResponse(result, reply);
+  }
+
   return ApiResponse.success(result);
 }
 
@@ -108,6 +117,21 @@ export function registerControllers(
     const classGuards = metadata.classGuards || [];
     // Obtenemos los interceptors definidos a nivel de clase para este controlador desde la metadata
     const classInterceptors = metadata.classInterceptors || [];
+
+    // Si se han configurado archivos estáticos para este controlador, 
+    // registramos el plugin de archivos estáticos en la instancia de Fastify aplicando 
+    // las opciones configuradas y un guard personalizado que combina los guards definidos 
+    // a nivel de clase para proteger las rutas de archivos estáticos.
+    if (metadata.staticAssets) {
+      const guardHandler = buildGuardHandler(classGuards);
+      // Fastify encola el app.register internamente, por lo que no necesitamos await aquí
+      registerStaticAssetsPlugin(
+        app,
+        metadata.staticAssets,
+        prefix,
+        guardHandler,
+      );
+    }
 
     // Iteramos sobre cada ruta definida en el controlador y la registramos en Fastify
     for (const route of routes) {
