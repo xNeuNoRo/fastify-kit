@@ -1,4 +1,11 @@
 /**
+ * @description Token de inyección de dependencias para el adaptador de colas.
+ * Cualquier motor de colas que se integre con FastifyKit debe ser registrado
+ * en el contenedor de inyección de dependencias utilizando este token.
+ */
+export const QUEUE_ADAPTER_TOKEN = Symbol("QUEUE_ADAPTER");
+
+/**
  * @description Interfaz que define como se debe comportar cualquier motor de colas que se integre con FastifyKit.
  * (Ejemplos de motores de colas podrían ser BullMQ, Workers locales, RabbitMQ, etc.).
  */
