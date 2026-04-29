@@ -10,7 +10,7 @@ import type { Constructor } from "../routing/scanner/index.js";
 import type { RouteDefinition } from "../routing/types.js";
 import type { Interceptor } from "../interceptors/Interceptor.js";
 import type { TSchema } from "@sinclair/typebox";
-import { StaticAssetsOptions } from "../interfaces/static.interface.js";
+import type { StaticAssetsOptions } from "../interfaces/static.interface.js";
 
 /**
  * @description Tipos y interfaces para la metadata de los decoradores en FastifyKit.

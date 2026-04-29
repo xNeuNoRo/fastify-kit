@@ -1,7 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import fastifyStatic, { SetHeadersResponse, type FastifyStaticOptions } from "@fastify/static";
+import fastifyStatic, {
+  SetHeadersResponse,
+  type FastifyStaticOptions,
+} from "@fastify/static";
 import { ForbiddenException } from "../../../exceptions/SecurityExceptions.js";
 import { StaticFile } from "../../../responses/StaticFile.js";
 import type { StaticAssetsOptions } from "../../../interfaces/static.interface.js";
@@ -28,10 +31,16 @@ export function handleStaticFileResponse(
 
   // Si se configura como descarga forzada, inyectamos el header correspondiente.
   if (result.options.attachment) {
-    const downloadName = result.options.customName || targetFile;
+    const rawName = result.options.customName || targetFile;
+
+    // Sanitizamos el nombre para evitar problemas con caracteres especiales o intentos de inyección.
+    const sanitizedName = rawName
+      .replaceAll(/[\r\n]/g, "")
+      .replaceAll('"', String.raw`\"`);
+
     reply.header(
       "Content-Disposition",
-      `attachment; filename="${downloadName}"`,
+      `attachment; filename="${sanitizedName}"`,
     );
   }
 
@@ -142,7 +151,11 @@ export async function registerStaticAssetsPlugin(
     staticOptions.headers ||
     staticOptions.cache === "none"
   ) {
-    fastifyNativeOptions.setHeaders = (res: SetHeadersResponse, _path: string, _stat: any) => {
+    fastifyNativeOptions.setHeaders = (
+      res: SetHeadersResponse,
+      _path: string,
+      _stat: any,
+    ) => {
       if (staticOptions.cache === "none") {
         res.setHeader("Cache-Control", "no-store");
       }
