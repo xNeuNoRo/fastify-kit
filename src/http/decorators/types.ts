@@ -131,4 +131,5 @@ export type FastifyKitMetadata = DecoratorMetadata & {
   routeInterceptors?: Record<string | symbol, Constructor<Interceptor>[]>; // Interceptores a nivel de ruta, mapeado por el nombre del método
   responsesSchema?: Record<string | symbol, Record<number, TSchema>>; // Esquemas de respuesta a nivel de método, mapeados por el nombre del método y el código HTTP
   staticAssets?: StaticAssetsOptions; // Opciones para servir archivos estáticos a nivel de clase
+  queueName?: string; // Para controladores que manejan colas, el nombre de la cola que deben usar
 };
