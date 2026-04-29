@@ -362,13 +362,13 @@ export class FastifyKit {
           ? { root: options.staticAssets }
           : options.staticAssets;
 
+      // Usamos 'public' como prefix por defecto si no viene uno en la configuracion
+      const globalPrefix = staticConfig.prefix || "public";
+
       // Importamos dinamicamente el handler de archivos estáticos
       // para no cargarlo si el usuario no ha configurado la opción de staticAssets
       const { registerStaticAssetsPlugin } =
         await import("../http/routing/scanner/static/static.handler.js");
-
-      // Usamos 'public' como prefix por defecto si no viene uno en la configuracion
-      const globalPrefix = (staticConfig as any).prefix || "public";
 
       // Registramos el plugin globalmente pasando 'true' al final para decorateReply
       await registerStaticAssetsPlugin(

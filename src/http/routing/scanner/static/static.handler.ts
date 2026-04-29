@@ -58,8 +58,11 @@ export async function registerStaticAssetsPlugin(
   ) => Promise<void>,
   decorateReply: boolean = false,
 ) {
+  // Determinamos el prefijo final, dando prioridad a la opción específica del decorador sobre el valor global
+  const finalPrefix = staticOptions.prefix ?? prefix;
+
   // Normalizamos el prefijo para asegurar que siempre termine con una barra y no tenga barras repetidas
-  const targetPrefix = prefix ? `/${prefix}/`.replaceAll(/\/+/g, "/") : "/";
+  const targetPrefix = finalPrefix ? `/${finalPrefix}/`.replaceAll(/\/+/g, "/") : "/";
 
   // Configuración base para fastify-static, mapeando opciones personalizadas a las nativas
   const fastifyNativeOptions: FastifyStaticOptions = {

@@ -10,6 +10,13 @@ export interface StaticAssetsOptions {
   root: string;
 
   /**
+   * Prefijo de la URL para servir los archivos.
+   * En controladores, por defecto usa el prefijo del @Controller.
+   * En configuración global, por defecto es 'public'.
+   */
+  prefix?: string;
+
+  /**
    * Configuración de caché para el navegador.
    * - 'aggressive': 1 año (365d) e inmutable. Ideal para archivos con hash en el nombre.
    * - 'standard': 1 mes (30d). Balance ideal para la mayoría de los assets.
