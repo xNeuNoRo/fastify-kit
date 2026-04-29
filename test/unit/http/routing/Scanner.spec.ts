@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { container } from "../../../../src/container/DIContainer.js";
 import { ForbiddenException } from "../../../../src/http/exceptions/index.js";
 import { ApiResponse } from "../../../../src/http/responses/ApiResponse.js";
+import { StaticFile } from "../../../../src/http/responses/StaticFile.js";
 import { registerControllers } from "../../../../src/http/routing/scanner/index.js";
 import { LOGGER_TOKEN } from "../../../../src/logger/LoggerContract.js";
 
@@ -647,6 +648,37 @@ describe("Motor de Enrutamiento (Scanner)", () => {
 
       // Si el controlador ya devuelve un ApiResponse, formatResponse no debe envolverlo nuevamente, sino retornarlo tal cual
       expect(result).toBe(myResponse);
+    });
+
+    it("Debería delegar a handleStaticFileResponse si el controlador retorna un StaticFile", async () => {
+      const metadataSymbol = Symbol.metadata;
+      const myFile = new StaticFile("test.png", { root: "/public" });
+
+      class FileController {
+        async download() {
+          await Promise.resolve(); // Simulamos una operación asíncrona
+          return myFile;
+        }
+      }
+
+      (FileController as any)[metadataSymbol] = {
+        routes: [{ method: "get", path: "/file", handlerName: "download" }],
+      };
+
+      registerControllers(mockApp, [FileController]);
+      const handler = mockApp.get.mock.calls[0][2];
+
+      // Simulamos los mocks necesarios para el reply de Fastify
+      const mockReply = {
+        sent: false,
+        sendFile: vi.fn(),
+        header: vi.fn(),
+      } as any;
+
+      await handler({}, mockReply);
+
+      // Si el formato detectó el StaticFile, debió llamar a sendFile
+      expect(mockReply.sendFile).toHaveBeenCalledWith("test.png", "/public");
     });
   });
 });
