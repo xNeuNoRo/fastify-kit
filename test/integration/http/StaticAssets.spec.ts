@@ -91,6 +91,7 @@ describe("Integracion Archivos Estaticos (Static Assets)", () => {
       module: StaticTestModule,
       staticAssets: {
         root: GLOBAL_DIR,
+        prefix: "cdn",
         cache: "aggressive",
         listDirectory: true,
         index: false,
@@ -109,7 +110,7 @@ describe("Integracion Archivos Estaticos (Static Assets)", () => {
     it("Deberia servir archivos de la carpeta global bajo el prefijo configurado", async () => {
       const response = await app.inject({
         method: "GET",
-        url: "/public/style.css",
+        url: "/cdn/style.css",
       });
 
       expect(response.statusCode).toBe(200);
@@ -122,7 +123,7 @@ describe("Integracion Archivos Estaticos (Static Assets)", () => {
     it("Deberia retornar el listado del directorio (JSON) si listDirectory es true y no hay index", async () => {
       const response = await app.inject({
         method: "GET",
-        url: "/public/",
+        url: "/cdn/",
       });
 
       expect(response.statusCode).toBe(200);
