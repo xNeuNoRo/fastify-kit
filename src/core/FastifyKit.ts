@@ -32,6 +32,7 @@ import type { FastifyKitWebRtcConfig } from "./interfaces/webrtc.interface.js";
 import { TypeCompiler } from "@sinclair/typebox/compiler";
 import { ConfigRegistry } from "../config/ConfigRegistry.js";
 import { Value } from "@sinclair/typebox/value";
+import { QueueOptions } from "./interfaces/queue.interface.js";
 
 export interface FastifyKitOptions {
   module: Constructor;
@@ -65,6 +66,8 @@ export interface FastifyKitOptions {
   webrtc?: boolean | FastifyKitWebRtcConfig;
   // Configuración para servir archivos estáticos
   staticAssets?: string | StaticAssetsOptions;
+  // Configuracion para el motor de BackgroundJobs (Integrado en el framework)
+  queue?: QueueOptions;
 }
 
 type LifecycleHookName =
