@@ -62,7 +62,9 @@ export async function registerStaticAssetsPlugin(
   const finalPrefix = staticOptions.prefix ?? prefix;
 
   // Normalizamos el prefijo para asegurar que siempre termine con una barra y no tenga barras repetidas
-  const targetPrefix = finalPrefix ? `/${finalPrefix}/`.replaceAll(/\/+/g, "/") : "/";
+  const targetPrefix = finalPrefix
+    ? `/${finalPrefix}/`.replaceAll(/\/+/g, "/")
+    : "/";
 
   // Configuración base para fastify-static, mapeando opciones personalizadas a las nativas
   const fastifyNativeOptions: FastifyStaticOptions = {
@@ -135,8 +137,15 @@ export async function registerStaticAssetsPlugin(
   }
 
   // Mapeo de headers custom y descargas forzadas
-  if (staticOptions.forceDownload || staticOptions.headers) {
+  if (
+    staticOptions.forceDownload ||
+    staticOptions.headers ||
+    staticOptions.cache === "none"
+  ) {
     fastifyNativeOptions.setHeaders = (res: any) => {
+      if (staticOptions.cache === "none") {
+        res.setHeader("Cache-Control", "no-store");
+      }
       if (staticOptions.forceDownload) {
         res.setHeader("Content-Disposition", "attachment");
       }
