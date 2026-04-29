@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import fastifyStatic, { type FastifyStaticOptions } from "@fastify/static";
+import fastifyStatic, { SetHeadersResponse, type FastifyStaticOptions } from "@fastify/static";
 import { ForbiddenException } from "../../../exceptions/SecurityExceptions.js";
 import { StaticFile } from "../../../responses/StaticFile.js";
 import type { StaticAssetsOptions } from "../../../interfaces/static.interface.js";
@@ -142,7 +142,7 @@ export async function registerStaticAssetsPlugin(
     staticOptions.headers ||
     staticOptions.cache === "none"
   ) {
-    fastifyNativeOptions.setHeaders = (res: any) => {
+    fastifyNativeOptions.setHeaders = (res: SetHeadersResponse, _path: string, _stat: any) => {
       if (staticOptions.cache === "none") {
         res.setHeader("Cache-Control", "no-store");
       }
