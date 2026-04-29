@@ -182,13 +182,9 @@ export async function registerStaticAssetsPlugin(
             referer &&
             !staticOptions.validReferers!.some((ref) => referer.startsWith(ref))
           ) {
-            reply
-              .status(403)
-              .send(
-                new ForbiddenException(
-                  "No tienes permiso para acceder a este recurso.",
-                ),
-              );
+            throw new ForbiddenException(
+              "No tienes permiso para acceder a este recurso.",
+            );
           }
         });
       }
