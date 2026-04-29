@@ -280,6 +280,10 @@ export class FastifyKit {
       }
     }
 
+    // Guardamos la configuración del motor de BackgroundJobs en el ConfigRegistry
+    const queueConfig = options.queue || {};
+    ConfigRegistry.set("queue_user_config", queueConfig);
+
     // Registramos los plugins esenciales
     await this.registerCorePlugins(app, options);
 
