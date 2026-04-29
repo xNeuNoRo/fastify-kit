@@ -69,7 +69,7 @@ function buildGuardHandler(guards: Constructor[]) {
 /**
  * @description Formatea la respuesta devuelta por el método del controlador.
  */
-function formatResponse(result: any, reply: FastifyReply) {
+async function formatResponse(result: any, reply: FastifyReply) {
   if (reply.sent) return;
 
   if (result === reply) return;
@@ -77,7 +77,7 @@ function formatResponse(result: any, reply: FastifyReply) {
   if (result instanceof ApiResponse) return result;
 
   if (result instanceof StaticFile) {
-    return handleStaticFileResponse(result, reply);
+    return await handleStaticFileResponse(result, reply);
   }
 
   return ApiResponse.success(result);
@@ -248,7 +248,7 @@ export async function registerControllers(
           }
 
           // Formateamos la respuesta devuelta por el método del controlador para enviarla al cliente utilizando la función formatResponse, que se encarga de verificar si el controlador ya ha enviado una respuesta o si el resultado devuelto es una instancia de ApiResponse, y formatea la respuesta de manera consistente.
-          return formatResponse(result, reply);
+          return await formatResponse(result, reply);
         },
       );
     }

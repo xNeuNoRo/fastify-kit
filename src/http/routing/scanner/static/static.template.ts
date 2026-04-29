@@ -34,27 +34,28 @@ function formatDate(timestamp?: number | string | Date): string {
  */
 function escapeHtml(unsafe: string): string {
   return (unsafe ?? "")
-    .replaceAll('&', "&amp;")
-    .replaceAll('<', "&lt;")
-    .replaceAll('>', "&gt;")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
-    .replaceAll('\'', "&#039;");
+    .replaceAll("'", "&#039;");
 }
 
 /**
  * @description Sanitiza una URL para su uso seguro en atributos href
  */
 function sanitizeHref(url: string): string {
-  return encodeURI(url ?? "")
-    .replaceAll('"', "&quot;")
-    .replaceAll('\'', "&#039;");
+  return escapeHtml(encodeURI(url ?? ""));
 }
 
 /**
  * @description Renderiza una interfaz HTML moderna para el listado de directorios de archivos estáticos.
  * Es consumida por @fastify/static cuando format es 'html'.
  */
-export function renderDirectoryHtml(dirs: ListDir[], files: ListFile[]): string {
+export function renderDirectoryHtml(
+  dirs: ListDir[],
+  files: ListFile[],
+): string {
   // Generamos el HTML para los directorios
   const dirsHtml = dirs
     .map((dir) => {
@@ -104,9 +105,6 @@ export function renderDirectoryHtml(dirs: ListDir[], files: ListFile[]): string 
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Explorador de Archivos | FastifyKit</title>
-      <link rel="preconnect" href="https://fonts.googleapis.com">
-      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
       <style>
         :root {
           --bg-app: #f8fafc;
@@ -120,7 +118,7 @@ export function renderDirectoryHtml(dirs: ListDir[], files: ListFile[]): string 
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-          font-family: 'Inter', system-ui, sans-serif;
+          font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
           background-color: var(--bg-app);
           color: var(--text-primary);
           line-height: 1.5;

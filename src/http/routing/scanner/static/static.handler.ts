@@ -14,7 +14,7 @@ import { NotFoundException } from "../../../exceptions/ResourceExceptions.js";
 /**
  * @description Maneja la respuesta de un archivo estático, aplicando opciones como fallback y descarga forzada.
  */
-export function handleStaticFileResponse(
+export async function handleStaticFileResponse(
   result: StaticFile,
   reply: FastifyReply,
 ) {
@@ -24,7 +24,10 @@ export function handleStaticFileResponse(
   // verificamos si el archivo solicitado existe.
   if (result.options.fallback) {
     const fullPath = path.join(result.options.root, targetFile);
-    if (!fs.existsSync(fullPath)) {
+    try {
+      await fs.promises.access(fullPath, fs.constants.F_OK);
+    } catch {
+      // Si la promesa es rechazada (ej. código de error ENOENT), el archivo no existe.
       targetFile = result.options.fallback;
     }
   }
@@ -154,7 +157,7 @@ export async function registerStaticAssetsPlugin(
     fastifyNativeOptions.setHeaders = (
       res: SetHeadersResponse,
       _path: string,
-      _stat: any,
+      _stat: fs.Stats,
     ) => {
       if (staticOptions.cache === "none") {
         res.setHeader("Cache-Control", "no-store");
@@ -189,27 +192,49 @@ export async function registerStaticAssetsPlugin(
         staticOptions.validReferers &&
         staticOptions.validReferers.length > 0
       ) {
-        scopedInstance.addHook("onRequest", async (req, reply) => {
+        scopedInstance.addHook("onRequest", async (req, _reply) => {
           const referer = req.headers.referer;
-          if (
-            referer &&
-            !staticOptions.validReferers!.some((ref) => referer.startsWith(ref))
-          ) {
-            throw new ForbiddenException(
-              "No tienes permiso para acceder a este recurso.",
-            );
+
+          // Si no hay referer (acceso directo pegando la URL en el navegador),
+          // lo dejamos pasar. El hotlinking ocurre cuando se incrusta en otro HTML.
+          if (referer) {
+            let isAllowed = false;
+
+            try {
+              // Parseamos el referer entrante para extraer su origen real
+              const refererUrl = new URL(referer);
+
+              isAllowed = staticOptions.validReferers!.some((allowedRef) => {
+                try {
+                  // Comparamos orígenes exactos (ej: 'https://nuestra-plataforma.com' === 'https://nuestra-plataforma.com')
+                  return new URL(allowedRef).origin === refererUrl.origin;
+                } catch {
+                  // Fallback: Por si en la configuración solo pasan el dominio ('nuestra-plataforma.com')
+                  return allowedRef === refererUrl.hostname;
+                }
+              });
+            } catch (error) {
+              // Si el cliente envía un referer malformado (texto basura), denegamos el acceso
+              isAllowed = false;
+            }
+
+            if (!isAllowed) {
+              throw new ForbiddenException(
+                "No tienes permiso para acceder a este recurso.",
+              );
+            }
           }
         });
       }
 
       // Handler personalizado para rutas no encontradas dentro de este scope,
       // devolviendo un JSON con formato de error consistente
-      scopedInstance.setNotFoundHandler((_request, reply) => {
-        reply
-          .status(404)
-          .send(
-            new NotFoundException("El recurso estático solicitado no existe."),
-          );
+      scopedInstance.setNotFoundHandler((request, reply) => {
+        const notFoundError = new NotFoundException(
+          "archivo estático",
+          request.url,
+        );
+        reply.status(404).send(notFoundError.toApiError());
       });
 
       // Finalmente, registramos el plugin de archivos estáticos dentro de este scope específico
