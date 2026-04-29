@@ -8,15 +8,6 @@ import {
   registerStaticAssetsPlugin,
 } from "../../../../../src/http/routing/scanner/static/static.handler.js";
 
-// Mockeamos el módulo 'fs' para controlar el comportamiento de existsSync
-vi.mock("node:fs", () => {
-  const existsSync = vi.fn();
-  return {
-    default: { existsSync },
-    existsSync,
-  };
-});
-
 describe("Handler orquestador de los archivos estaticos", () => {
   let mockReply: any;
 
@@ -30,37 +21,41 @@ describe("Handler orquestador de los archivos estaticos", () => {
   });
 
   describe("Funcion handleStaticFileResponse()", () => {
-    it("Deberia delegar la transmisión del archivo a reply.sendFile", () => {
+    it("Deberia delegar la transmisión del archivo a reply.sendFile", async () => {
       const file = new StaticFile("logo.png", { root: "/public" });
-      handleStaticFileResponse(file, mockReply as FastifyReply);
+      await handleStaticFileResponse(file, mockReply as FastifyReply);
 
       expect(mockReply.sendFile).toHaveBeenCalledWith("logo.png", "/public");
       expect(mockReply.header).not.toHaveBeenCalled();
     });
 
-    it("Deberia cambiar al archivo fallback si el original no existe físicamente", () => {
-      // Simulamos que fs.existsSync devuelve false (no encuentra el archivo)
-      (fs.existsSync as any).mockReturnValue(false);
+    it("Deberia cambiar al archivo fallback si el original no existe físicamente", async () => {
+      // Simulamos que fs.promises.access falla (no encuentra el archivo)
+      const accessSpy = vi
+        .spyOn(fs.promises, "access")
+        .mockRejectedValue(new Error("ENOENT"));
 
       const file = new StaticFile("missing.png", {
         root: "/public",
         fallback: "default.png",
       });
 
-      handleStaticFileResponse(file, mockReply as FastifyReply);
+      await handleStaticFileResponse(file, mockReply as FastifyReply);
 
-      expect(fs.existsSync).toHaveBeenCalled();
+      expect(accessSpy).toHaveBeenCalled();
       expect(mockReply.sendFile).toHaveBeenCalledWith("default.png", "/public");
+
+      accessSpy.mockRestore();
     });
 
-    it("Deberia inyectar la cabecera Content-Disposition si attachment es true", () => {
+    it("Deberia inyectar la cabecera Content-Disposition si attachment es true", async () => {
       const file = new StaticFile("factura_123.pdf", {
         root: "/docs",
         attachment: true,
         customName: "Mi_Factura.pdf",
       });
 
-      handleStaticFileResponse(file, mockReply as FastifyReply);
+      await handleStaticFileResponse(file, mockReply as FastifyReply);
 
       expect(mockReply.header).toHaveBeenCalledWith(
         "Content-Disposition",
