@@ -11,6 +11,7 @@ import type { RouteDefinition } from "../routing/types.js";
 import type { Interceptor } from "../interceptors/Interceptor.js";
 import type { TSchema } from "@sinclair/typebox";
 import type { StaticAssetsOptions } from "../interfaces/static.interface.js";
+import { QueueProcessorMetadata } from "../../queues/interfaces/QueueOptions.js";
 
 /**
  * @description Tipos y interfaces para la metadata de los decoradores en FastifyKit.
@@ -131,5 +132,5 @@ export type FastifyKitMetadata = DecoratorMetadata & {
   routeInterceptors?: Record<string | symbol, Constructor<Interceptor>[]>; // Interceptores a nivel de ruta, mapeado por el nombre del método
   responsesSchema?: Record<string | symbol, Record<number, TSchema>>; // Esquemas de respuesta a nivel de método, mapeados por el nombre del método y el código HTTP
   staticAssets?: StaticAssetsOptions; // Opciones para servir archivos estáticos a nivel de clase
-  queueName?: string; // Para controladores que manejan colas, el nombre de la cola que deben usar
+  queue?: QueueProcessorMetadata; // Metadata para procesadores de colas a nivel de clase
 };
