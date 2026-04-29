@@ -7,7 +7,9 @@ function formatSize(bytes?: number): string {
   const k = 1024;
   const sizes = ["B", "KB", "MB", "GB", "TB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  return (
+    Number.parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
+  );
 }
 
 /**
@@ -26,6 +28,27 @@ function formatDate(timestamp?: number | string | Date): string {
 }
 
 /**
+ * @description Escapa caracteres especiales para evitar ataques XSS en el HTML
+ */
+function escapeHtml(unsafe: string): string {
+  return (unsafe ?? "")
+    .replaceAll('&', "&amp;")
+    .replaceAll('<', "&lt;")
+    .replaceAll('>', "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll('\'', "&#039;");
+}
+
+/**
+ * @description Sanitiza una URL para su uso seguro en atributos href
+ */
+function sanitizeHref(url: string): string {
+  return encodeURI(url ?? "")
+    .replaceAll('"', "&quot;")
+    .replaceAll('\'', "&#039;");
+}
+
+/**
  * @description Renderiza una interfaz HTML moderna para el listado de directorios de archivos estáticos.
  * Es consumida por @fastify/static cuando format es 'html'.
  */
@@ -39,9 +62,9 @@ export function renderDirectoryHtml(dirs: any[], files: any[]): string {
       return `
         <tr>
           <td>
-            <a href="${dir.href}" class="item-link">
+            <a href="${sanitizeHref(dir.href)}" class="item-link">
               <svg class="item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg>
-              ${dir.name}
+              ${escapeHtml(dir.name)}
             </a>
           </td>
           <td class="meta-text">${dir.name === ".." ? "--" : formatSize(size)}</td>
@@ -60,9 +83,9 @@ export function renderDirectoryHtml(dirs: any[], files: any[]): string {
       return `
         <tr>
           <td>
-            <a href="${file.href}" target="_blank" class="item-link">
+            <a href="${sanitizeHref(file.href)}" target="_blank" class="item-link">
               <svg class="item-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
-              ${file.name}
+              ${escapeHtml(file.name)}
             </a>
           </td>
           <td class="meta-text">${formatSize(size)}</td>
