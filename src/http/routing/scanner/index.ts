@@ -86,7 +86,7 @@ function formatResponse(result: any, reply: FastifyReply) {
 /**
  * @description Escanea y registra todos los controladores en la instancia de Fastify.
  */
-export function registerControllers(
+export async function registerControllers(
   app: FastifyInstance,
   controllers: Constructor[],
 ) {
@@ -125,7 +125,7 @@ export function registerControllers(
     if (metadata.staticAssets) {
       const guardHandler = buildGuardHandler(classGuards);
       // Fastify encola el app.register internamente, por lo que no necesitamos await aquí
-      registerStaticAssetsPlugin(
+      await registerStaticAssetsPlugin(
         app,
         metadata.staticAssets,
         prefix,

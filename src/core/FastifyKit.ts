@@ -254,7 +254,7 @@ export class FastifyKit {
     const prefix = options.globalPrefix || "";
     await app.register(
       async (instance) => {
-        registerControllers(instance, allControllers);
+        await registerControllers(instance, allControllers);
       },
       { prefix },
     );
