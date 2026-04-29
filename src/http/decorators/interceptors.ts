@@ -7,6 +7,16 @@ import type { FastifyKitMetadata } from "./types.js";
  * Permite registrar uno o varios interceptores que envolverán la ejecución de la ruta,
  * pudiendo mutar la petición, la respuesta, o manejar excepciones antes y después del controlador.
  * @param interceptors Uno o varios interceptores que implementan la interfaz Interceptor.
+ * @example
+ * ```typescript
+ * @UseInterceptors(LoggingInterceptor, AuthInterceptor)
+ * class UserController {
+ *   @UseInterceptors(CacheInterceptor) // Este interceptor se aplicará solo a este método
+ *   getUser() {
+ *     // ...
+ *   }
+ * }
+ * ```
  */
 export function UseInterceptors(...interceptors: Constructor<Interceptor>[]) {
   return function (
