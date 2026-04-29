@@ -36,9 +36,7 @@ export function Serialize(schema: TSchema, statusCode: number = 200) {
     const metadata = context.metadata as FastifyKitMetadata;
 
     // Inicializamos el diccionario global de respuestas si no existe
-    if (!metadata.responsesSchema) {
-      metadata.responsesSchema = {};
-    }
+    metadata.responsesSchema ??= {};
 
     // Inicializamos el diccionario específico para este método si no existe
     if (!metadata.responsesSchema[context.name]) {
