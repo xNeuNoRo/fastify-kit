@@ -35,38 +35,89 @@ import { Value } from "@sinclair/typebox/value";
 import { QueueOptions } from "./interfaces/queue.interface.js";
 
 export interface FastifyKitOptions {
+  /**
+   * Modulo raiz de la app, desde donde se escanearán los controladores y proveedores
+   * para registrarlos en Fastify. Este módulo debe estar decorado con el decorador
+   * \@Module y es el punto de entrada para que FastifyKit descubra toda la estructura de módulos,
+   * submódulos, controladores y proveedores de la aplicación.
+   */
   module: Constructor;
+  /**
+   * Esquema de validación para las variables de entorno utilizando TypeBox.
+   * Esto es util para evitar errores en tu API por falta de configuraciones en las variables de entorno
+   * o por tenerlas mal configuradas (ej: un puerto como string en vez de número).
+   */
   envSchema?: TSchema;
+  /**
+   * Prefix global para todas las rutas definidas en los controladores.
+   * Ej: globalPrefix: "/api/v1" -> todas las rutas de los controladores estarán bajo /api/v1 (ej: GET /api/v1/books)
+   */
   globalPrefix?: string;
+  /**
+   * Configuración para generar la documentación de la API utilizando Swagger/Scalar.
+   */
   swagger?: {
     title: string;
     description: string;
     version: string;
     [key: string]: any;
   };
+  /**
+   * Opciones para configurar los plugins de seguridad en Fastify,
+   * incluyendo CORS, Helmet y rate limit.
+   * (\@fastify/cors, \@fastify/helmet, \@fastify/rate-limit)
+   */
   security?: {
     enableCors?: boolean | FastifyCorsOptions;
     enableHelmet?: boolean | FastifyHelmetOptions;
     rateLimit?: CreateRateLimitOptions;
   };
+  /**
+   * Activar o desactivar el soporte para multipart/form-data en el framework.
+   * \(@fastify/multipart)
+   */
   multipart?: boolean | "keyValues" | FastifyMultipartOptions;
+  /**
+   * Activar o desactivar el soporte para cookies en el framework.
+   * \(@fastify/cookie)
+   */
   cookies?: boolean | FastifyCookieOptions;
+  /**
+   * Activar o desactivar el soporte para JWT en el framework.
+   * \(@fastify/jwt)
+   */
   jwt?: boolean | FastifyJWTOptions;
+  /**
+   * Opciones avanzadas para configurar la instancia de Fastify.
+   */
   fastifyOptions?: FastifyServerOptions & {
     http2?: boolean;
     https?: HttpsServerOptions | null;
   };
-  // Activar o desactivar el manejo de websockets del framework
+  /**
+   * Activar o desactivar el soporte para WebSockets en el framework.
+   * Recibe un boolean para activar o desactivar o un objeto de config
+   * para configurar el maximo tamaño de los mensajes de WebSocket (maxPayload)
+   */
   websockets?:
     | boolean
     | {
         maxPayload?: number; // Tamaño máximo de payload en bytes para mensajes de WebSocket (opcional, por defecto 10MB)
       };
-  // Activar o desactivar el soporte para WebRTC
+  /**
+   * Activar o desactivar el soporte para WebRTC en el framework.
+   * Si se activa, se registrarán automáticamente los managers necesarios para usar WebRTC sin configuracion adicionaL,
+   * Tambien incluye un Gateway integrado por defecto para no configurar nada adicional si solo se quiere usar WebRTC básico.
+   */
   webrtc?: boolean | FastifyKitWebRtcConfig;
-  // Configuración para servir archivos estáticos
+  /**
+   * Configuracion para servir archivos estáticos.
+   * Puede ser la ruta a la carpeta de archivos estaticos para servir o un obj de configuracion mas detallado
+   */
   staticAssets?: string | StaticAssetsOptions;
-  // Configuracion para el motor de BackgroundJobs (Integrado en el framework)
+  /**
+   * Configuracion para el motor de BackgroundJobs (Integrado en el framework)
+   */
   queue?: QueueOptions;
 }
 
