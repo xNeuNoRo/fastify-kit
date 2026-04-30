@@ -42,6 +42,9 @@ export class WorkerPool implements BeforeApplicationShutdown {
   private readonly maxIoConcurrency: number;
   private readonly cpuEluThreshold: number;
 
+  private consecutiveInitFailures = 0;
+  private readonly maxInitRetries = 5;
+
   private readonly logger = getLogger();
 
   constructor() {
@@ -86,6 +89,7 @@ export class WorkerPool implements BeforeApplicationShutdown {
       instance: worker,
       activeJobs: 0,
       elu: 0,
+      isReady: false,
     };
 
     // Configuramos el listener para mensajes del worker, para actualizar su ELU y manejar resultados de trabajos
@@ -93,6 +97,7 @@ export class WorkerPool implements BeforeApplicationShutdown {
       // Si el mensaje es de tipo init_done, marcamos al worker como listo
       // para recibir trabajos y procesamos cualquier tarea que haya quedado en espera
       if (msg.type === "init_done") {
+        this.consecutiveInitFailures = 0;
         workerNode.isReady = true;
         this.processNextFromQueue(); // Intentar procesar lo que quedó en espera
         return;
@@ -104,6 +109,40 @@ export class WorkerPool implements BeforeApplicationShutdown {
         this.logger.error(
           `[FastifyKit Background Jobs] Error inicializando hilos: ${msg.error}`,
         );
+
+        worker.terminate();
+        this.workers = this.workers.filter((w) => w.instance !== worker);
+
+        // Si el worker colapsó y excedió el límite de reintentos de inicialización,
+        // consideramos que el pool está en un estado irrecuperable y abortamos las tareas pendientes
+        if (this.consecutiveInitFailures >= this.maxInitRetries) {
+          this.logger.error(
+            `[FastifyKit Background Jobs] Límite de reintentos de inicialización alcanzado (${this.maxInitRetries}). Abortando tareas de la cola.`,
+          );
+          this.abortPendingTasks(
+            new Error(
+              "Fallo crítico y persistente en la inicialización del pool de workers.",
+            ),
+          );
+          return;
+        }
+
+        this.logger.info(
+          `[FastifyKit Background Jobs] Reintentando creación de worker en 5s... (Intento ${this.consecutiveInitFailures}/${this.maxInitRetries})`,
+        );
+
+        // Reintentamos crear un nuevo worker después de un breve retraso para evitar ciclos rápidos de creación y colapso
+        setTimeout(() => this.createWorker(), 5000);
+
+        // Si ya no quedan workers vivos ni en proceso de nacer, vaciamos la cola y rechazamos promesas
+        if (this.workers.length === 0) {
+          this.abortPendingTasks(
+            new Error(
+              "No hay workers disponibles para procesar la cola tras un fallo crítico de inicialización.",
+            ),
+          );
+        }
+
         return;
       }
 
@@ -146,14 +185,18 @@ export class WorkerPool implements BeforeApplicationShutdown {
       worker.terminate();
       this.workers = this.workers.filter((w) => w.instance !== worker);
 
-      // Si el worker colapsó durante su fase de inicialización, no hacemos nada más,
-      // ya que el pool no le asignará trabajos y esperará a que colapse para reemplazarlo por uno nuevo
       if (workerNode.isReady) {
         this.createWorker();
       } else {
-        this.logger.error(
-          "[FastifyKit Background Jobs] Hilo abortado permanentemente por fallos en su inicialización de entorno.",
-        );
+        // Si el worker colapsó durante su fase de inicialización, incrementamos el contador de fallos consecutivos
+        this.consecutiveInitFailures++;
+        if (this.consecutiveInitFailures >= this.maxInitRetries) {
+          this.abortPendingTasks(
+            new Error("Workers colapsando continuamente al nacer."),
+          );
+        } else {
+          setTimeout(() => this.createWorker(), 5000);
+        }
       }
     });
 
@@ -285,6 +328,18 @@ export class WorkerPool implements BeforeApplicationShutdown {
         this.taskQueues.get(queueName)!.push(task as JobTask<unknown>);
       }
     });
+  }
+
+  /**
+   * @description Aborta todas las tareas pendientes en las colas cuando el pool entra en un estado irrecuperable.
+   */
+  private abortPendingTasks(error: Error): void {
+    for (const [, queue] of this.taskQueues.entries()) {
+      for (const task of queue) {
+        task.reject(error);
+      }
+    }
+    this.taskQueues.clear();
   }
 
   /**
