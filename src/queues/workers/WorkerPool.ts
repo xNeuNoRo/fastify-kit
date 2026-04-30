@@ -23,7 +23,7 @@ export interface JobTask<TResult = unknown> {
 
 interface WorkerNode {
   instance: Worker;
-  activeJobs: number;
+  activeJobIds: Set<string>;
   elu: number; // Expected Latency Until available (en milisegundos)
   isReady?: boolean; // Indicador de si el worker ha terminado su fase de inicialización
 }
@@ -87,7 +87,7 @@ export class WorkerPool implements BeforeApplicationShutdown {
     const worker = new Worker(this.workerScript);
     const workerNode: WorkerNode = {
       instance: worker,
-      activeJobs: 0,
+      activeJobIds: new Set(),
       elu: 0,
       isReady: false,
     };
@@ -154,8 +154,8 @@ export class WorkerPool implements BeforeApplicationShutdown {
       // Si el mensaje es de tipo job_done, actualizamos el estado del worker
       // y resolvemos/rechazamos la promesa del trabajo correspondiente
       if (msg.type === "job_done") {
-        // Decrementamos el contador de trabajos activos del worker, ya que acaba de terminar uno
-        workerNode.activeJobs--;
+        // Removemos el jobId de la lista de trabajos activos del worker
+        workerNode.activeJobIds.delete(msg.jobId);
 
         // Buscamos la tarea activa correspondiente al jobId reportado por el worker
         const task = this.activeTasks.get(msg.jobId);
@@ -180,23 +180,16 @@ export class WorkerPool implements BeforeApplicationShutdown {
         "[FastifyKit Background Jobs] El hilo de un worker ha colapsado",
         err,
       );
+      this.handleDeadWorker(workerNode, worker, err.message);
+    });
 
-      // Finalizamos el worker que colapso y lo removemos del pool
-      worker.terminate();
-      this.workers = this.workers.filter((w) => w.instance !== worker);
-
-      if (workerNode.isReady) {
-        this.createWorker();
-      } else {
-        // Si el worker colapsó durante su fase de inicialización, incrementamos el contador de fallos consecutivos
-        this.consecutiveInitFailures++;
-        if (this.consecutiveInitFailures >= this.maxInitRetries) {
-          this.abortPendingTasks(
-            new Error("Workers colapsando continuamente al nacer."),
-          );
-        } else {
-          setTimeout(() => this.createWorker(), 5000);
-        }
+    // Manejamos la salida inesperada del worker para detectar colapsos y reemplazarlo
+    worker.on("exit", (code: number) => {
+      if (code !== 0) {
+        this.logger.error(
+          `[FastifyKit Background Jobs] Un worker se cerró inesperadamente con código ${code}`,
+        );
+        this.handleDeadWorker(workerNode, worker, `Exit code ${code}`);
       }
     });
 
@@ -240,9 +233,9 @@ export class WorkerPool implements BeforeApplicationShutdown {
     else {
       let minJobs = this.maxIoConcurrency;
       for (const w of readyWorkers) {
-        if (w.activeJobs < minJobs) {
+        if (w.activeJobIds.size < minJobs) {
           bestWorker = w;
-          minJobs = w.activeJobs;
+          minJobs = w.activeJobIds.size;
         }
       }
     }
@@ -281,7 +274,7 @@ export class WorkerPool implements BeforeApplicationShutdown {
    * @param task La tarea que se asignará al worker, con su payload y funciones de resolución/rechazo
    */
   private assignTaskToWorker(workerNode: WorkerNode, task: JobTask): void {
-    workerNode.activeJobs++;
+    workerNode.activeJobIds.add(task.jobId);
     this.activeTasks.set(task.jobId, task);
 
     const message: WorkerIncomingMessage = {
@@ -292,6 +285,50 @@ export class WorkerPool implements BeforeApplicationShutdown {
     };
 
     workerNode.instance.postMessage(message);
+  }
+
+  /**
+   * @description Maneja la limpieza de un worker que ha colapsado o salido inesperadamente,
+   * rechazando las promesas de los trabajos que se quedaron a medias para evitar memory leaks.
+   */
+  private handleDeadWorker(
+    workerNode: WorkerNode,
+    worker: Worker,
+    reason: string,
+  ): void {
+    // Rechazamos todas las tareas que se quedaron atrapadas en este worker
+    for (const jobId of workerNode.activeJobIds) {
+      const task = this.activeTasks.get(jobId);
+      if (task) {
+        task.reject(
+          new Error(`Worker colapsó inesperadamente. Razón: ${reason}`),
+        );
+        this.activeTasks.delete(jobId);
+      }
+    }
+
+    // Limpiamos el estado de trabajos activos del worker,
+    // ya que todos quedaron atrapados y fueron rechazados
+    workerNode.activeJobIds.clear();
+
+    // Limpiamos el worker del pool
+    worker.terminate().catch(() => {}); // Ignoramos errores si ya está muerto
+    this.workers = this.workers.filter((w) => w.instance !== worker);
+
+    if (workerNode.isReady) {
+      this.createWorker();
+    } else {
+      // Si el worker colapsó durante su fase de inicialización,
+      // incrementamos el contador de fallos consecutivos
+      this.consecutiveInitFailures++;
+      if (this.consecutiveInitFailures >= this.maxInitRetries) {
+        this.abortPendingTasks(
+          new Error("Workers colapsando continuamente al nacer."),
+        );
+      } else {
+        setTimeout(() => this.createWorker(), 5000);
+      }
+    }
   }
 
   /**
