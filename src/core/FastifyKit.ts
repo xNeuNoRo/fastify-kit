@@ -708,7 +708,10 @@ export class FastifyKit {
     allProviders: { token: any; implementation: Constructor }[],
   ) {
     // Guardamos la configuración del motor de BackgroundJobs en el ConfigRegistry
-    const queueConfig = options.queue || {};
+    const queueConfig: QueueOptions = options.queue || {
+      strategy: "in-process",
+    };
+
     ConfigRegistry.set("queue_user_config", queueConfig);
 
     if (!options.queue) return;
@@ -731,6 +734,25 @@ export class FastifyKit {
         token: QueueManager,
         implementation: QueueManager,
       });
+    }
+
+    // Si el usuario ha elegido la estrategia de "worker-pool",
+    // registramos el WorkerPool y lo añadimos a los providers para que el scanner de lifecycle hooks lo tenga en cuenta.
+    if (queueConfig.strategy === "worker-pool") {
+      const { WorkerPool } = await import("../queues/workers/WorkerPool.js");
+
+      // Nos aseguramos de que esté en el contenedor
+      if (!container.has(WorkerPool)) {
+        container.registerClass(WorkerPool, WorkerPool);
+      }
+
+      // Lo empujamos a allProviders para que el scanner de ciclo de vida lo vea
+      if (!allProviders.some((p) => p.token === WorkerPool)) {
+        allProviders.push({
+          token: WorkerPool,
+          implementation: WorkerPool,
+        });
+      }
     }
 
     // Escaneamos para buscar todos los Procesadores
