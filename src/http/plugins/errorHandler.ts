@@ -12,12 +12,12 @@ import {
   TooManyRequestsException,
   ForbiddenException,
 } from "../exceptions/index.js";
-import { LOGGER_TOKEN, type LoggerContract } from "../../logger/LoggerContract.js";
+import { getLogger } from "../../logger/logger.factory.js";
 
 const errorHandlerPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
   // Handler para rutas no encontradas (404)
   app.setNotFoundHandler((request, reply) => {
-    const logger = container.resolve<LoggerContract>(LOGGER_TOKEN);
+    const logger = getLogger();
 
     // Registramos un mensaje de advertencia cada vez que se intente acceder a una ruta no definida
     logger.warn(
@@ -36,7 +36,7 @@ const errorHandlerPlugin: FastifyPluginAsync = async (app: FastifyInstance) => {
 
   // Handler global para errores no manejados en las rutas
   app.setErrorHandler((error: any, request, reply) => {
-    const logger = container.resolve<LoggerContract>(LOGGER_TOKEN);
+    const logger = getLogger();
     let httpException: HttpException;
 
     // Si el error es una instancia de HttpException

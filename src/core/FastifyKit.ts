@@ -136,7 +136,7 @@ const LIFECYCLE_HOOKS: LifecycleHookName[] = [
   "onApplicationShutdown",
 ];
 
-export const FASTIFY_INSTANCE_TOKEN = Symbol("FastifyInstance");
+export const FASTIFY_INSTANCE_TOKEN = Symbol.for("FastifyInstance");
 
 export class FastifyKit {
   // Usamos un símbolo para almacenar la metadata de los módulos y

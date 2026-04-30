@@ -15,7 +15,7 @@ export interface EventBusContract {
 }
 
 // Token para identificar el EventBus en el contenedor de dependencias
-export const EVENT_BUS_TOKEN = Symbol("EVENT_BUS_TOKEN");
+export const EVENT_BUS_TOKEN = Symbol.for("EVENT_BUS_TOKEN");
 
 export class DefaultEventBus implements EventBusContract {
   private readonly emitter = new EventEmitter().setMaxListeners(100);

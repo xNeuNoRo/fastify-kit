@@ -2,7 +2,7 @@ import { FastifyKitSocket } from "./FastifyKitSocket.js";
 import { WsAdapter } from "./WsAdapter.js";
 
 // Token para la inyección de dependencias
-export const WS_ROOM_MANAGER_TOKEN = Symbol("WS_ROOM_MANAGER_TOKEN");
+export const WS_ROOM_MANAGER_TOKEN = Symbol.for("WS_ROOM_MANAGER_TOKEN");
 
 /**
  * @description Contrato estricto para el gestor de salas de WebSockets.

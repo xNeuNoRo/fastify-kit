@@ -3,7 +3,7 @@
  * Cualquier motor de colas que se integre con FastifyKit debe ser registrado
  * en el contenedor de inyección de dependencias utilizando este token.
  */
-export const QUEUE_ADAPTER_TOKEN = Symbol("QUEUE_ADAPTER");
+export const QUEUE_ADAPTER_TOKEN = Symbol.for("QUEUE_ADAPTER");
 
 /**
  * @description Interfaz que define como se debe comportar cualquier motor de colas que se integre con FastifyKit.
