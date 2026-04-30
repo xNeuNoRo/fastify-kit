@@ -18,16 +18,19 @@ export class LocalWorkerAdapter implements QueueAdapter {
     // Generamos un ID único para el rastreo del worker
     const trackingId = randomUUID();
 
+    // Preparamos el payload de la tarea, incluyendo el trackingId para que el worker pueda usarlo en los logs y rastreo.
+    const taskPayload =
+      typeof payload === "object" && payload !== null
+        ? { ...payload, _trackingId: trackingId }
+        : { data: payload, _trackingId: trackingId };
+
     // Fire-and-Forget: Lanzamos la tarea al motor multihilo sin bloquear el hilo principal
-    // Agregamos el trackingId al payload para que el worker pueda incluirlo en los logs y facilitar el rastreo de la tarea
-    this.pool
-      .execute(queueName, { ...payload, _trackingId: trackingId })
-      .catch((error) => {
-        this.logger.error(
-          `[FastifyKit QueueAdapter] Error procesando tarea en '${queueName}'`,
-          error,
-        );
-      });
+    this.pool.execute(queueName, taskPayload).catch((error) => {
+      this.logger.error(
+        `[FastifyKit QueueAdapter] Error procesando tarea en '${queueName}'`,
+        error,
+      );
+    });
 
     // Retornamos el trackingId para que el dev pueda usarlo para rastrear la tarea en los logs
     return trackingId;
