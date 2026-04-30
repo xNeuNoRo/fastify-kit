@@ -63,4 +63,12 @@ export class QueueRegistry {
   public static getRegisteredQueues(): string[] {
     return Array.from(this.registry.keys());
   }
+
+  /**
+   * @description Método de utilidad para limpiar el registro de colas, utilizado principalmente en tests
+   * para asegurar un estado limpio entre pruebas.
+   */
+  static clear(): void {
+    this.registry.clear();
+  }
 }
