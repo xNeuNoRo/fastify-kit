@@ -96,11 +96,14 @@ describe("Decorador @Processor (Inyección de Metadatos)", () => {
         const invalidDecorator = Processor("invalid-queue");
 
         // Simulamos aplicarlo a un método (kind: "method")
-        invalidDecorator(() => {}, {
-          kind: "method",
-          name: "badMethod",
-          metadata: {}, // Añadimos metadata para emular un contexto real
-        } as any);
+        invalidDecorator(
+          (() => {}) as any,
+          {
+            kind: "method",
+            name: "badMethod",
+            metadata: {}, // Añadimos metadata para emular un contexto real
+          } as any,
+        );
       }).toThrow();
     });
   });
