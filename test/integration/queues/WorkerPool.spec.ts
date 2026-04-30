@@ -44,6 +44,37 @@ class UserController {
 @Module({ controllers: [UserController] })
 class QueueIntegrationModule {}
 
+/**
+ * Hace polling del sistema de archivos esperando que el worker cree el archivo y escriba el contenido.
+ * Revisa cada 50ms. Se rinde si pasa el maxWaitMs (por defecto 15 segundos).
+ */
+async function waitForWorkerProof(
+  filePath: string,
+  expectedContent: string,
+  maxWaitMs = 15000,
+): Promise<boolean> {
+  const start = Date.now();
+
+  while (Date.now() - start < maxWaitMs) {
+    try {
+      const content = await fs.readFile(filePath, "utf-8");
+
+      // Si el contenido del archivo incluye el contenido esperado,
+      // consideramos que el worker procesó la tarea correctamente
+      if (content.includes(expectedContent)) {
+        return true;
+      }
+    } catch (e) {
+      // El archivo aún no existe, ignoramos el error y seguimos esperando
+    }
+
+    // Esperamos 50ms reales antes del siguiente chequeo
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+
+  return false; // Se acabó el tiempo
+}
+
 describe("Integración Worker Pool", () => {
   let app: FastifyInstance;
 
@@ -93,19 +124,12 @@ describe("Integración Worker Pool", () => {
       const responseBody = JSON.parse(response.payload);
       expect(responseBody.data.trackingId).toBeDefined();
 
-      // Esperamos un poco para darle tiempo al Worker Thread de hacer su trabajo
-      // (ya que no podemos usar awaits directos ni espías porque es Fire-and-Forget)
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      // Verificamos que el worker creó el archivo de prueba, lo que indica que procesó el trabajo asignado
-      const proofExists = await fs
-        .stat(PROOF_FILE)
-        .then(() => true)
-        .catch(() => false);
-      expect(proofExists).toBe(true);
-
-      const fileContent = await fs.readFile(PROOF_FILE, "utf-8");
-      expect(fileContent).toContain(responseBody.data.trackingId);
+      // Esperamos a que el worker cree el archivo de prueba con el trackingId dentro para confirmar que procesó la tarea
+      const success = await waitForWorkerProof(
+        PROOF_FILE,
+        responseBody.data.trackingId,
+      );
+      expect(success).toBe(true);
     });
   });
 });
