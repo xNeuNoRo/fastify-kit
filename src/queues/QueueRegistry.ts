@@ -12,6 +12,7 @@ interface QueueDefinition {
  */
 export class QueueRegistry {
   private static readonly registry = new Map<string, QueueDefinition>();
+  private static readonly processorFiles = new Set<string>();
 
   /**
    * @description Registra un nuevo procesador de cola en memoria.
@@ -65,10 +66,25 @@ export class QueueRegistry {
   }
 
   /**
-   * @description Método de utilidad para limpiar el registro de colas, utilizado principalmente en tests
-   * para asegurar un estado limpio entre pruebas.
+   * @description Registra la ruta de un archivo que contiene uno o más procesadores.
+   */
+  public static addProcessorFile(path: string): void {
+    this.processorFiles.add(path);
+  }
+
+  /**
+   * @description Obtiene todas las rutas de archivos registradas.
+   */
+  public static getProcessorFiles(): string[] {
+    return Array.from(this.processorFiles);
+  }
+
+  /**
+   * @description Método de utilidad para limpiar el registro de colas y archivos de procesadores,
+   * utilizado principalmente en tests para asegurar un estado limpio entre pruebas.
    */
   static clear(): void {
     this.registry.clear();
+    this.processorFiles.clear();
   }
 }
