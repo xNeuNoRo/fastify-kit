@@ -111,43 +111,11 @@ export class WorkerPool implements BeforeApplicationShutdown {
       // Si el mensaje es de tipo init_error, registramos el error y no marcamos al worker como listo
       // De esta forma el pool no le asignará trabajos y esperará a que colapse para reemplazarlo por uno nuevo
       if (msg.type === "init_error") {
-        this.logger.error(
-          `[FastifyKit Background Jobs] Error inicializando hilos: ${msg.error}`,
+        this.handleDeadWorker(
+          workerNode,
+          worker,
+          `Fallo inicialización: ${msg.error}`,
         );
-
-        worker.terminate();
-        this.workers = this.workers.filter((w) => w.instance !== worker);
-
-        // Si el worker colapsó y excedió el límite de reintentos de inicialización,
-        // consideramos que el pool está en un estado irrecuperable y abortamos las tareas pendientes
-        if (this.consecutiveInitFailures >= this.maxInitRetries) {
-          this.logger.error(
-            `[FastifyKit Background Jobs] Límite de reintentos de inicialización alcanzado (${this.maxInitRetries}). Abortando tareas de la cola.`,
-          );
-          this.abortPendingTasks(
-            new Error(
-              "Fallo crítico y persistente en la inicialización del pool de workers.",
-            ),
-          );
-          return;
-        }
-
-        this.logger.info(
-          `[FastifyKit Background Jobs] Reintentando creación de worker en 5s... (Intento ${this.consecutiveInitFailures}/${this.maxInitRetries})`,
-        );
-
-        // Reintentamos crear un nuevo worker después de un breve retraso para evitar ciclos rápidos de creación y colapso
-        setTimeout(() => this.createWorker(), 5000);
-
-        // Si ya no quedan workers vivos ni en proceso de nacer, vaciamos la cola y rechazamos promesas
-        if (this.workers.length === 0) {
-          this.abortPendingTasks(
-            new Error(
-              "No hay workers disponibles para procesar la cola tras un fallo crítico de inicialización.",
-            ),
-          );
-        }
-
         return;
       }
 
@@ -301,6 +269,15 @@ export class WorkerPool implements BeforeApplicationShutdown {
     worker: Worker,
     reason: string,
   ): void {
+    // Si el worker que colapsó no está en nuestro pool, no hacemos nada
+    if (!this.workers.some((w) => w.instance === worker)) {
+      return;
+    }
+
+    this.logger.error(
+      `[FastifyKit Background Jobs] Worker muerto. Razón: ${reason}`,
+    );
+
     // Rechazamos todas las tareas que se quedaron atrapadas en este worker
     for (const jobId of workerNode.activeJobIds) {
       const task = this.activeTasks.get(jobId);
@@ -327,10 +304,16 @@ export class WorkerPool implements BeforeApplicationShutdown {
       // incrementamos el contador de fallos consecutivos
       this.consecutiveInitFailures++;
       if (this.consecutiveInitFailures >= this.maxInitRetries) {
-        this.abortPendingTasks(
+        this.logger.error(
+          `[FastifyKit Background Jobs] Límite de fallos de inicio alcanzado (${this.maxInitRetries}). Abortando tareas.`,
+        );
+        this.abortAllTasks(
           new Error("Workers colapsando continuamente al nacer."),
         );
       } else {
+        this.logger.warn(
+          `[FastifyKit Background Jobs] Reintentando creación en 5s (Intento ${this.consecutiveInitFailures}/${this.maxInitRetries})`,
+        );
         setTimeout(() => this.createWorker(), 5000);
       }
     }
@@ -373,15 +356,21 @@ export class WorkerPool implements BeforeApplicationShutdown {
   }
 
   /**
-   * @description Aborta todas las tareas pendientes en las colas cuando el pool entra en un estado irrecuperable.
+   * @description Aborta todas las tareas pendientes y activas en el pool,
+   * utilizado cuando el pool entra en un estado irrecuperable (por ejemplo, todos los workers colapsando al iniciar).
    */
-  private abortPendingTasks(error: Error): void {
+  private abortAllTasks(error: Error): void {
+    // Limpiamos tareas que ni siquiera llegaron a un worker
     for (const [, queue] of this.taskQueues.entries()) {
-      for (const task of queue) {
-        task.reject(error);
-      }
+      for (const task of queue) task.reject(error);
     }
     this.taskQueues.clear();
+
+    // Limpiamos tareas que estaban ejecutándose en hilos
+    for (const [jobId, task] of this.activeTasks) {
+      task.reject(error);
+      this.activeTasks.delete(jobId);
+    }
   }
 
   /**
@@ -392,8 +381,16 @@ export class WorkerPool implements BeforeApplicationShutdown {
     this.logger.info(
       "[FastifyKit Background Jobs] Cerrando pool de workers...",
     );
-    await Promise.all(this.workers.map((node) => node.instance.terminate()));
+    this.abortAllTasks(
+      new Error("WorkerPool se está cerrando (Apagado de aplicación)"),
+    );
+    await Promise.allSettled(
+      this.workers.map((node) => node.instance.terminate()),
+    );
     this.workers = [];
+    this.logger.info(
+      "[FastifyKit Background Jobs] Pool de workers cerrado correctamente.",
+    );
   }
 
   /**
@@ -404,21 +401,6 @@ export class WorkerPool implements BeforeApplicationShutdown {
    * @returns Una promesa que se resuelve cuando el pool de workers ha sido cerrado correctamente.
    */
   public async beforeApplicationShutdown(signal?: string): Promise<void> {
-    if (this.workers.length === 0) return;
-
-    this.logger.info(
-      `[FastifyKit Background Jobs] Apagando pool de workers asíncronos (Señal: ${signal ?? "Manual"})...`,
-    );
-
-    // Terminamos todos los workers en paralelo de forma segura
-    await Promise.all(
-      this.workers.map((workerNode) => workerNode.instance.terminate()),
-    );
-
-    this.workers = [];
-
-    this.logger.info(
-      "[FastifyKit Background Jobs] Pool de workers cerrado correctamente.",
-    );
+    await this.close();
   }
 }
