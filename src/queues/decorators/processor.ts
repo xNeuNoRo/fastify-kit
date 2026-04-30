@@ -16,8 +16,8 @@ import { QueueType } from "../interfaces/queue-options.js";
  * }
  */
 export function Processor(name: string, type: QueueType = "cpu") {
-  return function <This, Args extends any[], Return>(
-    target: (this: This, ...args: Args) => Return,
+  return function <T extends new (...args: any[]) => any>(
+    _target: T,
     context: ClassDecoratorContext,
   ) {
     if (context.kind !== "class") {
