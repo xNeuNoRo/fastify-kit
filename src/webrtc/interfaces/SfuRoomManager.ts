@@ -1,7 +1,7 @@
 import type { Router, RouterOptions } from "mediasoup/types";
 
 // Token de inyección para el SfuRoomManager, utilizado en el contenedor de dependencias.
-export const SFU_ROOM_MANAGER_TOKEN = Symbol("SFU_ROOM_MANAGER_TOKEN");
+export const SFU_ROOM_MANAGER_TOKEN = Symbol.for("SFU_ROOM_MANAGER_TOKEN");
 
 /**
  * @description Contrato estricto para el orquestador de salas WebRTC.

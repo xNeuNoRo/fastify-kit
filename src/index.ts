@@ -153,6 +153,19 @@ export { getEventBus } from "./events/eventbus.factory.js";
 export { Scheduled, CronExpression } from "./scheduling/scheduled.decorator.js";
 
 // ----------------------------------------------
+// Background Jobs & Queues (Multithreading)
+// ----------------------------------------------
+
+export { Processor } from "./queues/decorators/processor.js";
+export { QueueManager } from "./queues/QueueManager.js";
+export type { JobHandler } from "./queues/interfaces/JobHandler.js";
+export type { QueueOptions } from "./core/interfaces/queue.interface.js";
+export type { QueueType } from "./queues/interfaces/queue-options.js";
+
+export { QUEUE_ADAPTER_TOKEN } from "./queues/interfaces/QueueAdapter.js";
+export type { QueueAdapter } from "./queues/interfaces/QueueAdapter.js";
+
+// ----------------------------------------------
 // Configuration Management
 // ----------------------------------------------
 export { ConfigRegistry } from "./config/ConfigRegistry.js";

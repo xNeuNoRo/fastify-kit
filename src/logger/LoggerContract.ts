@@ -9,7 +9,7 @@ export interface LoggerContract {
 
 // Token para inyección de dependencias, permite identificar el logger en el contenedor de dependencias.
 // Symbol es un tipo de dato primitivo que garantiza que sea único, ideal para tokens de inyección de dependencias.
-export const LOGGER_TOKEN = Symbol("LOGGER_TOKEN");
+export const LOGGER_TOKEN = Symbol.for("LOGGER_TOKEN");
 
 // Implementación por defecto del logger
 // que utiliza la consola del navegador o Node.js para mostrar los mensajes.

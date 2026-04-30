@@ -32,39 +32,93 @@ import type { FastifyKitWebRtcConfig } from "./interfaces/webrtc.interface.js";
 import { TypeCompiler } from "@sinclair/typebox/compiler";
 import { ConfigRegistry } from "../config/ConfigRegistry.js";
 import { Value } from "@sinclair/typebox/value";
+import { QueueOptions } from "./interfaces/queue.interface.js";
 
 export interface FastifyKitOptions {
+  /**
+   * Modulo raiz de la app, desde donde se escanearán los controladores y proveedores
+   * para registrarlos en Fastify. Este módulo debe estar decorado con el decorador
+   * \@Module y es el punto de entrada para que FastifyKit descubra toda la estructura de módulos,
+   * submódulos, controladores y proveedores de la aplicación.
+   */
   module: Constructor;
+  /**
+   * Esquema de validación para las variables de entorno utilizando TypeBox.
+   * Esto es util para evitar errores en tu API por falta de configuraciones en las variables de entorno
+   * o por tenerlas mal configuradas (ej: un puerto como string en vez de número).
+   */
   envSchema?: TSchema;
+  /**
+   * Prefix global para todas las rutas definidas en los controladores.
+   * Ej: globalPrefix: "/api/v1" -> todas las rutas de los controladores estarán bajo /api/v1 (ej: GET /api/v1/books)
+   */
   globalPrefix?: string;
+  /**
+   * Configuración para generar la documentación de la API utilizando Swagger/Scalar.
+   */
   swagger?: {
     title: string;
     description: string;
     version: string;
     [key: string]: any;
   };
+  /**
+   * Opciones para configurar los plugins de seguridad en Fastify,
+   * incluyendo CORS, Helmet y rate limit.
+   * (\@fastify/cors, \@fastify/helmet, \@fastify/rate-limit)
+   */
   security?: {
     enableCors?: boolean | FastifyCorsOptions;
     enableHelmet?: boolean | FastifyHelmetOptions;
     rateLimit?: CreateRateLimitOptions;
   };
+  /**
+   * Activar o desactivar el soporte para multipart/form-data en el framework.
+   * \(@fastify/multipart)
+   */
   multipart?: boolean | "keyValues" | FastifyMultipartOptions;
+  /**
+   * Activar o desactivar el soporte para cookies en el framework.
+   * \(@fastify/cookie)
+   */
   cookies?: boolean | FastifyCookieOptions;
+  /**
+   * Activar o desactivar el soporte para JWT en el framework.
+   * \(@fastify/jwt)
+   */
   jwt?: boolean | FastifyJWTOptions;
+  /**
+   * Opciones avanzadas para configurar la instancia de Fastify.
+   */
   fastifyOptions?: FastifyServerOptions & {
     http2?: boolean;
     https?: HttpsServerOptions | null;
   };
-  // Activar o desactivar el manejo de websockets del framework
+  /**
+   * Activar o desactivar el soporte para WebSockets en el framework.
+   * Recibe un boolean para activar o desactivar o un objeto de config
+   * para configurar el maximo tamaño de los mensajes de WebSocket (maxPayload)
+   */
   websockets?:
     | boolean
     | {
         maxPayload?: number; // Tamaño máximo de payload en bytes para mensajes de WebSocket (opcional, por defecto 10MB)
       };
-  // Activar o desactivar el soporte para WebRTC
+  /**
+   * Activar o desactivar el soporte para WebRTC en el framework.
+   * Si se activa, se registrarán automáticamente los managers necesarios para usar WebRTC sin configuracion adicionaL,
+   * Tambien incluye un Gateway integrado por defecto para no configurar nada adicional si solo se quiere usar WebRTC básico.
+   */
   webrtc?: boolean | FastifyKitWebRtcConfig;
-  // Configuración para servir archivos estáticos
+  /**
+   * Configuracion para servir archivos estáticos.
+   * Puede ser la ruta a la carpeta de archivos estaticos para servir o un obj de configuracion mas detallado
+   */
   staticAssets?: string | StaticAssetsOptions;
+  /**
+   * Configuracion para el motor de BackgroundJobs (Integrado en el framework)
+   */
+  queue?: QueueOptions;
 }
 
 type LifecycleHookName =
@@ -82,7 +136,7 @@ const LIFECYCLE_HOOKS: LifecycleHookName[] = [
   "onApplicationShutdown",
 ];
 
-export const FASTIFY_INSTANCE_TOKEN = Symbol("FastifyInstance");
+export const FASTIFY_INSTANCE_TOKEN = Symbol.for("FastifyInstance");
 
 export class FastifyKit {
   // Usamos un símbolo para almacenar la metadata de los módulos y
@@ -163,68 +217,19 @@ export class FastifyKit {
       } as FastifyServerOptions["ajv"],
     }).withTypeProvider<TypeBoxTypeProvider>();
 
-    // Registramos la instancia de Fastify en el contenedor de inyección de dependencias para que pueda ser inyectada en cualquier controlador o proveedor utilizando el token FASTIFY_INSTANCE_TOKEN.
-    container.registerInstance(FASTIFY_INSTANCE_TOKEN, app);
-
     // Escaneamos todos los módulos y submódulos para obtener la lista completa de controladores a registrar en Fastify. Esto permite que el usuario solo tenga que especificar el módulo raíz en las opciones, y la Factory se encargará de descubrir todos los controladores en el árbol de módulos.
     const { allControllers, allProviders } = await this.bootstrapModule(
       options.module,
     );
 
-    if (options.webrtc) {
-      // Forzamos la activación del plugin de WebSockets si el usuario ha activado la opción de WebRTC,
-      // ya que el módulo de WebRTC depende de los gateways de WebSocket para funcionar correctamente.
-      options.websockets ||= true;
+    // Inicializamos el módulo de WebRTC integrado en FastifyKit
+    await this.initializeWebRtcModule(options, allProviders);
 
-      const webrtcConfig =
-        typeof options.webrtc === "object" ? options.webrtc : {};
+    // Inicializamos el módulo de colas (BackgroundJobs)
+    await this.initializeQueueModule(options, allControllers, allProviders);
 
-      // Guardamos la configuración de WebRTC en el ConfigRegistry
-      ConfigRegistry.set("webrtc_user_config", webrtcConfig);
-
-      const { SFU_ROOM_MANAGER_TOKEN } =
-        await import("../webrtc/interfaces/SfuRoomManager.js");
-      const { AdvancedSfuRoomManager } =
-        await import("../webrtc/managers/AdvancedSfuRoomManager.js");
-
-      // Si el usuario no ha registrado un Manager para las salas de SFU,
-      // registramos el Manager por defecto para WebRTC (AdvancedSfuRoomManager)
-      if (!container.has(SFU_ROOM_MANAGER_TOKEN)) {
-        // Registramos el Manager por defecto para WebRTC
-        container.registerClass(SFU_ROOM_MANAGER_TOKEN, AdvancedSfuRoomManager);
-
-        // Registramos el Manager por defecto para WebRTC como un provider normal
-        // para que pueda ser inyectado en cualquier parte de la aplicación utilizando su token de inyección de dependencias.
-        if (!allProviders.some((p) => p.token === SFU_ROOM_MANAGER_TOKEN)) {
-          allProviders.push({
-            token: SFU_ROOM_MANAGER_TOKEN,
-            implementation: AdvancedSfuRoomManager,
-          });
-        }
-      }
-
-      // Si el usuario ha activado la opción de useDefaultGateway,
-      // inyectamos automáticamente el DefaultWebRtcGateway en el contenedor
-      // de inyección de dependencias y lo registramos como un WebSocket Gateway
-      // para que el usuario pueda usarlo sin tener que definirlo ni registrarlo manualmente.
-      if (webrtcConfig.useDefaultGateway) {
-        // Usamos importación dinámica (Lazy Load) para no cargar Mediasoup si WebRTC está apagado
-        const { DefaultWebRtcGateway } =
-          await import("../webrtc/gateways/DefaultWebRtcGateway.js");
-
-        // Lo registramos en el DI Container
-        container.registerClass(DefaultWebRtcGateway, DefaultWebRtcGateway);
-
-        // Registramos el Gateway por defecto para WebRTC
-        // como un WebSocket Gateway utilizando su token de inyección de dependencias.
-        if (!allProviders.some((p) => p.token === DefaultWebRtcGateway)) {
-          allProviders.push({
-            token: DefaultWebRtcGateway,
-            implementation: DefaultWebRtcGateway,
-          });
-        }
-      }
-    }
+    // Registramos la instancia de Fastify en el contenedor de inyección de dependencias para que pueda ser inyectada en cualquier controlador o proveedor utilizando el token FASTIFY_INSTANCE_TOKEN.
+    container.registerInstance(FASTIFY_INSTANCE_TOKEN, app);
 
     // Registramos los plugins esenciales
     await this.registerCorePlugins(app, options);
@@ -621,6 +626,163 @@ export class FastifyKit {
       coercedEnv as Record<string, any>,
     )) {
       ConfigRegistry.set(key, value);
+    }
+  }
+
+  /**
+   * @description Método privado para inicializar el módulo de WebRTC integrado en FastifyKit.
+   * @param options Las opciones de configuración para FastifyKit, que incluyen la configuración de WebRTC
+   * en la propiedad "webrtc". Si esta propiedad está presente, se inicializará el módulo de WebRTC.
+   * @param allProviders El array de proveedores registrados en los módulos
+   */
+  private static async initializeWebRtcModule(
+    options: FastifyKitOptions,
+    allProviders: { token: any; implementation: Constructor }[],
+  ) {
+    if (options.webrtc) {
+      // Forzamos la activación del plugin de WebSockets si el usuario ha activado la opción de WebRTC,
+      // ya que el módulo de WebRTC depende de los gateways de WebSocket para funcionar correctamente.
+      options.websockets ||= true;
+
+      const webrtcConfig =
+        typeof options.webrtc === "object" ? options.webrtc : {};
+
+      // Guardamos la configuración de WebRTC en el ConfigRegistry
+      ConfigRegistry.set("webrtc_user_config", webrtcConfig);
+
+      const { SFU_ROOM_MANAGER_TOKEN } =
+        await import("../webrtc/interfaces/SfuRoomManager.js");
+      const { AdvancedSfuRoomManager } =
+        await import("../webrtc/managers/AdvancedSfuRoomManager.js");
+
+      // Si el usuario no ha registrado un Manager para las salas de SFU,
+      // registramos el Manager por defecto para WebRTC (AdvancedSfuRoomManager)
+      if (!container.has(SFU_ROOM_MANAGER_TOKEN)) {
+        // Registramos el Manager por defecto para WebRTC
+        container.registerClass(SFU_ROOM_MANAGER_TOKEN, AdvancedSfuRoomManager);
+
+        // Registramos el Manager por defecto para WebRTC como un provider normal
+        // para que pueda ser inyectado en cualquier parte de la aplicación utilizando su token de inyección de dependencias.
+        if (!allProviders.some((p) => p.token === SFU_ROOM_MANAGER_TOKEN)) {
+          allProviders.push({
+            token: SFU_ROOM_MANAGER_TOKEN,
+            implementation: AdvancedSfuRoomManager,
+          });
+        }
+      }
+
+      // Si el usuario ha activado la opción de useDefaultGateway,
+      // inyectamos automáticamente el DefaultWebRtcGateway en el contenedor
+      // de inyección de dependencias y lo registramos como un WebSocket Gateway
+      // para que el usuario pueda usarlo sin tener que definirlo ni registrarlo manualmente.
+      if (webrtcConfig.useDefaultGateway) {
+        // Usamos importación dinámica (Lazy Load) para no cargar Mediasoup si WebRTC está apagado
+        const { DefaultWebRtcGateway } =
+          await import("../webrtc/gateways/DefaultWebRtcGateway.js");
+
+        // Lo registramos en el DI Container
+        container.registerClass(DefaultWebRtcGateway, DefaultWebRtcGateway);
+
+        // Registramos el Gateway por defecto para WebRTC
+        // como un WebSocket Gateway utilizando su token de inyección de dependencias.
+        if (!allProviders.some((p) => p.token === DefaultWebRtcGateway)) {
+          allProviders.push({
+            token: DefaultWebRtcGateway,
+            implementation: DefaultWebRtcGateway,
+          });
+        }
+      }
+    }
+  }
+
+  /**
+   * @description Método privado para inicializar el módulo de colas (BackgroundJobs) integrado en FastifyKit.
+   * @param options Las opciones de configuración para FastifyKit, que incluyen la configuración del motor
+   * de colas en la propiedad "queue". Si esta propiedad está presente, se inicializará el módulo de colas.
+   * @param allControllers El array de controladores registrados en los módulos
+   * @param allProviders El array de proveedores registrados en los módulos
+   */
+  private static async initializeQueueModule(
+    options: FastifyKitOptions,
+    allControllers: Constructor[],
+    allProviders: { token: any; implementation: Constructor }[],
+  ) {
+    // Guardamos la configuración del motor de BackgroundJobs en el ConfigRegistry
+    const queueConfig: QueueOptions = options.queue || {
+      strategy: "in-process",
+    };
+
+    ConfigRegistry.set("queue_user_config", queueConfig);
+
+    if (!options.queue) return;
+
+    // Lazy-loading para no cargar nada relacionado con colas si el usuario no ha configurado la opción de queue
+    const { QueueRegistry } = await import("../queues/QueueRegistry.js");
+    const { QueueManager } = await import("../queues/QueueManager.js");
+    const { getQueueAdapter } = await import("../queues/queue.factory.js");
+
+    // Invocamos la Factory para resolver el Adaptador (In-Process o WorkerPool)
+    // Esto registra automáticamente el QUEUE_ADAPTER_TOKEN en el contenedor (En caso de no tener una impl custom)
+    getQueueAdapter();
+
+    // Registramos el QueueManager en el contenedor para que sea inyectable
+    container.registerClass(QueueManager, QueueManager);
+
+    // Lo añadimos a la lista de providers para asegurar su ciclo de vida
+    if (!allProviders.some((p) => p.token === QueueManager)) {
+      allProviders.push({
+        token: QueueManager,
+        implementation: QueueManager,
+      });
+    }
+
+    // Si el usuario ha elegido la estrategia de "worker-pool",
+    // registramos el WorkerPool y lo añadimos a los providers para que el scanner de lifecycle hooks lo tenga en cuenta.
+    if (queueConfig.strategy === "worker-pool") {
+      const { WorkerPool } = await import("../queues/workers/WorkerPool.js");
+
+      // Nos aseguramos de que esté en el contenedor
+      if (!container.has(WorkerPool)) {
+        container.registerClass(WorkerPool, WorkerPool);
+      }
+
+      // Lo empujamos a allProviders para que el scanner de ciclo de vida lo vea
+      if (!allProviders.some((p) => p.token === WorkerPool)) {
+        allProviders.push({
+          token: WorkerPool,
+          implementation: WorkerPool,
+        });
+      }
+    }
+
+    // Escaneamos para buscar todos los Procesadores
+    // Unimos controladores y proveedores para buscar clases decoradas (@Processor)
+    const allClasses = [
+      ...allControllers,
+      ...allProviders.map((p) => p.implementation),
+    ];
+
+    const processors = allClasses.filter((Class) => {
+      const metadata = (Class as any)[
+        this.METADATA_SYMBOL
+      ] as FastifyKitMetadata;
+      return !!metadata?.queue;
+    });
+
+    // Registramos los Procesadores encontrados en el QueueRegistry
+    for (const ProcessorClass of processors) {
+      const metadata = (ProcessorClass as any)[
+        this.METADATA_SYMBOL
+      ] as FastifyKitMetadata;
+      const queueMeta = metadata.queue!;
+
+      // Registramos en la memoria estática para que el Adaptador sepa qué clase instanciar
+      QueueRegistry.register(queueMeta.name, ProcessorClass, queueMeta.type);
+
+      // Nos aseguramos de que la clase esté registrada en el DI Container
+      if (!container.has(ProcessorClass)) {
+        container.registerClass(ProcessorClass, ProcessorClass);
+      }
     }
   }
 

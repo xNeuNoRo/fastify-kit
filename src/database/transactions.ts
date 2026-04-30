@@ -9,7 +9,7 @@ import { getLogger } from "../logger/logger.factory.js";
 /**
  * @description Token simbólico que se utiliza para registrar y resolver la implementación del TransactionManager en el contenedor de dependencias de FastifyKit.
  */
-export const TRANSACTION_MANAGER_TOKEN = Symbol("TRANSACTION_MANAGER");
+export const TRANSACTION_MANAGER_TOKEN = Symbol.for("TRANSACTION_MANAGER");
 
 /**
  * @description Interfaz que define el contrato para un TransactionManager. Cualquier clase que implemente esta interfaz debe proporcionar una implementación del método runInTransaction, que se encargará de ejecutar una función dentro de una transacción. El TransactionManager es responsable de manejar la lógica de inicio, confirmación y rollback de transacciones, así como de almacenar la instancia de la transacción en el contexto de ejecución actual (ALS) para que pueda ser utilizada por el Proxy de la base de datos y otros componentes que necesiten acceder a la transacción activa.

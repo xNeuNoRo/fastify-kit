@@ -18,6 +18,11 @@ export function Inject<T>(contract: Contract<T>) {
       throw new Error("@Inject solo puede ser aplicado a campos de clase");
     }
 
+    // Agregamos un inicializador al campo decorado que se ejecutará durante la instanciación de la clase
+    context.addInitializer(function (this: any) {
+      this[context.name] = container.resolve<T>(contract);
+    });
+
     // Retornamos una función que se ejecutará cada vez que se acceda al campo decorado,
     // resolviendo la dependencia desde el contenedor de inyección de dependencias.
     return function () {

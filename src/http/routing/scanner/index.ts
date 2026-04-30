@@ -118,9 +118,9 @@ export async function registerControllers(
     // Obtenemos los interceptors definidos a nivel de clase para este controlador desde la metadata
     const classInterceptors = metadata.classInterceptors || [];
 
-    // Si se han configurado archivos estáticos para este controlador, 
-    // registramos el plugin de archivos estáticos en la instancia de Fastify aplicando 
-    // las opciones configuradas y un guard personalizado que combina los guards definidos 
+    // Si se han configurado archivos estáticos para este controlador,
+    // registramos el plugin de archivos estáticos en la instancia de Fastify aplicando
+    // las opciones configuradas y un guard personalizado que combina los guards definidos
     // a nivel de clase para proteger las rutas de archivos estáticos.
     if (metadata.staticAssets) {
       const guardHandler = buildGuardHandler(classGuards);
@@ -210,9 +210,14 @@ export async function registerControllers(
         },
         async (request, reply) => {
           const executeController = async () => {
-            // Si no hay decoradores de parámetros, mantenemos compatibilidad pasandole (req, reply) directamente al método del controlador
+            // Bind del método del controlador para mantener el contexto de "this"
+            // correctamente apuntando a la instancia del controlador
+            const handler = instance[route.handlerName].bind(instance);
+
+            // Si no hay decoradores de parámetros, mantenemos compatibilidad pasandole
+            // (req, reply) directamente al método del controlador
             if (methodParamsMeta.length === 0) {
-              return await instance[route.handlerName](request, reply);
+              return await handler(request, reply);
             }
 
             // Si hay decoradores de parámetros, extraemos los argumentos a pasar al método del controlador según los decoradores de parámetros definidos en el método del controlador y luego llamamos al método del controlador pasando esos argumentos.
@@ -224,8 +229,9 @@ export async function registerControllers(
               hasStreamFiles,
               globalMaxSize,
             );
-            // Llamamos al método del controlador correspondiente a esta ruta pasando los argumentos extraídos de la request y reply según los decoradores de parámetros definidos en el método del controlador
-            return await instance[route.handlerName](...args);
+            // Llamamos al método del controlador correspondiente a esta ruta pasando los argumentos
+            // extraídos de la request y reply según los decoradores de parámetros definidos en el método del controlador
+            return await handler(...args);
           };
 
           let result: unknown;
