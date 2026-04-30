@@ -17,7 +17,7 @@ export class QueueRegistry {
   /**
    * @description Registra un nuevo procesador de cola en memoria.
    * Este método es llamado por el scanner del framework cada vez
-   * que descubre una clase decorada con \@QueueProcessor.
+   * que descubre una clase decorada con \@Processor.
    * @param queueName El nombre de la cola para la que se registra el procesador, debe ser único
    * @param processorClass La clase del procesador que se encargará de manejar los trabajos de la cola,
    * debe implementar la interfaz JobHandler

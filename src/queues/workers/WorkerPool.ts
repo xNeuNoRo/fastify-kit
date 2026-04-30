@@ -24,7 +24,7 @@ export interface JobTask<TResult = unknown> {
 interface WorkerNode {
   instance: Worker;
   activeJobIds: Set<string>;
-  elu: number; // Expected Latency Until available (en milisegundos)
+  elu: number; // Event Loop Utilization como fracción entre 0 y 1
   isReady?: boolean; // Indicador de si el worker ha terminado su fase de inicialización
 }
 
@@ -61,8 +61,13 @@ export class WorkerPool implements BeforeApplicationShutdown {
     // de esa forma los pasamos luego a los workers aislados para que sepan dónde encontrar las clases procesadoras de las colas
     this.workerBootstraps = QueueRegistry.getProcessorFiles();
 
-    // Creamos la URL del script del worker
-    this.workerScript = new URL("./worker-executor.js", import.meta.url);
+    // Creamos la URL del script del worker dependiendo de si estamos en un
+    // entorno de desarrollo (TypeScript) o producción (JavaScript)
+    const extension = import.meta.url.endsWith(".ts") ? ".ts" : ".js";
+    this.workerScript = new URL(
+      `./worker-executor${extension}`,
+      import.meta.url,
+    );
 
     // Inicializamos el pool de workers
     this.initializePool();

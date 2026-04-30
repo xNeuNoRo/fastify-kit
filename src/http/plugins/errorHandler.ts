@@ -1,6 +1,5 @@
 import fp from "fastify-plugin";
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
-import { container } from "../../container/DIContainer.js";
 
 import { ApiResponse } from "../responses/ApiResponse.js";
 import {

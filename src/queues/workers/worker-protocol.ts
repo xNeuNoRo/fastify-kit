@@ -19,7 +19,7 @@ export interface WorkerIncomingJob {
  */
 export interface WorkerHeartbeatMessage {
   type: "heartbeat";
-  elu: number; // Expected Latency Until available (en milisegundos)
+  elu: number; // Event Loop Utilization (`performance.eventLoopUtilization().utilization`), ratio entre 0 y 1
 }
 
 /**
