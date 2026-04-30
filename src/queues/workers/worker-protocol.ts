@@ -1,4 +1,11 @@
 /**
+ * Mensajes que el Pool envía al Worker para asignarle un nuevo trabajo o para su fase de inicialización
+ */
+export type WorkerIncomingMessage =
+  | { type: "init"; bootstraps: string[] } // Fase de carga automática
+  | ({ type: "job" } & WorkerIncomingJob); // Fase de trabajo
+
+/**
  * Mensaje que el pool envia al hilo para asignarle un nuevo trabajo
  */
 export interface WorkerIncomingJob {
@@ -31,4 +38,6 @@ export interface WorkerJobDoneMessage {
  */
 export type WorkerOutgoingMessage =
   | WorkerHeartbeatMessage
-  | WorkerJobDoneMessage;
+  | WorkerJobDoneMessage
+  | { type: "init_done" } // Mensaje del hilo hacia el pool para indicar que ha terminado de inicializarse
+  | { type: "init_error"; error: string }; // Mensaje del hilo hacia el pool para indicar que ha ocurrido un error durante su inicialización

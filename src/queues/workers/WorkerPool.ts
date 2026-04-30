@@ -3,11 +3,15 @@ import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
 import { ConfigRegistry } from "../../config/ConfigRegistry.js";
 import { QueueOptions } from "../../core/interfaces/queue.interface.js";
-import { WorkerIncomingJob, WorkerOutgoingMessage } from "./worker-protocol.js";
+import {
+  WorkerIncomingMessage,
+  WorkerOutgoingMessage,
+} from "./worker-protocol.js";
 import { getLogger } from "../../logger/logger.factory.js";
 import { QueueType } from "../interfaces/queue-options.js";
 import { QueueRegistry } from "../QueueRegistry.js";
 import { Injectable } from "../../container/injectable.decorator.js";
+import { BeforeApplicationShutdown } from "../../core/interfaces/lifecycle.interface.js";
 
 export interface JobTask<TResult = unknown> {
   jobId: string;
@@ -21,11 +25,13 @@ interface WorkerNode {
   instance: Worker;
   activeJobs: number;
   elu: number; // Expected Latency Until available (en milisegundos)
+  isReady?: boolean; // Indicador de si el worker ha terminado su fase de inicialización
 }
 
 @Injectable()
-export class WorkerPool {
+export class WorkerPool implements BeforeApplicationShutdown {
   private workers: WorkerNode[] = [];
+  private readonly workerBootstraps: string[];
 
   private readonly taskQueues = new Map<string, JobTask[]>();
   private readonly activeTasks = new Map<string, JobTask>();
@@ -46,6 +52,11 @@ export class WorkerPool {
     this.poolSize = config.poolSize ?? Math.max(1, os.cpus().length - 1);
     this.maxIoConcurrency = config.maxIoConcurrency ?? 50;
     this.cpuEluThreshold = config.eluThreshold ?? 0.85;
+
+    // Obtenemos la lista de archivos de procesadores registrados
+    // en el QueueRegistry, que fueron detectados por el scanner del framework durante el auto-discovery
+    // de esa forma los pasamos luego a los workers aislados para que sepan dónde encontrar las clases procesadoras de las colas
+    this.workerBootstraps = QueueRegistry.getProcessorFiles();
 
     // Creamos la URL del script del worker
     this.workerScript = new URL("./worker-executor.js", import.meta.url);
@@ -79,6 +90,23 @@ export class WorkerPool {
 
     // Configuramos el listener para mensajes del worker, para actualizar su ELU y manejar resultados de trabajos
     worker.on("message", (msg: WorkerOutgoingMessage) => {
+      // Si el mensaje es de tipo init_done, marcamos al worker como listo
+      // para recibir trabajos y procesamos cualquier tarea que haya quedado en espera
+      if (msg.type === "init_done") {
+        workerNode.isReady = true;
+        this.processNextFromQueue(); // Intentar procesar lo que quedó en espera
+        return;
+      }
+
+      // Si el mensaje es de tipo init_error, registramos el error y no marcamos al worker como listo
+      // De esta forma el pool no le asignará trabajos y esperará a que colapse para reemplazarlo por uno nuevo
+      if (msg.type === "init_error") {
+        this.logger.error(
+          `[FastifyKit Background Jobs] Error inicializando hilos: ${msg.error}`,
+        );
+        return;
+      }
+
       // Solo actualizamos el ELU del worker si recibimos un mensaje de tipo heartbeat
       if (msg.type === "heartbeat") {
         workerNode.elu = msg.elu;
@@ -118,12 +146,27 @@ export class WorkerPool {
       worker.terminate();
       this.workers = this.workers.filter((w) => w.instance !== worker);
 
-      // Creamos un nuevo worker para reemplazar al que colapso
-      this.createWorker();
+      // Si el worker colapsó durante su fase de inicialización, no hacemos nada más,
+      // ya que el pool no le asignará trabajos y esperará a que colapse para reemplazarlo por uno nuevo
+      if (workerNode.isReady) {
+        this.createWorker();
+      } else {
+        this.logger.error(
+          "[FastifyKit Background Jobs] Hilo abortado permanentemente por fallos en su inicialización de entorno.",
+        );
+      }
     });
 
     // Agregamos el nuevo worker al pool
     this.workers.push(workerNode);
+
+    // Al crear el worker, le enviamos un mensaje con la fase de bootstrapping
+    // para que cargue los archivos de procesadores necesarios antes de empezar a recibir trabajos
+    const initMsg: WorkerIncomingMessage = {
+      type: "init",
+      bootstraps: this.workerBootstraps,
+    };
+    worker.postMessage(initMsg);
   }
 
   /**
@@ -135,11 +178,14 @@ export class WorkerPool {
   private getBestWorkerFor(queueType: QueueType): WorkerNode | null {
     let bestWorker: WorkerNode | null = null;
 
+    // Filtramos los workers para quedarnos solo con los que han terminado su fase de inicialización
+    const readyWorkers = this.workers.filter((w) => w.isReady);
+
     // Si la cola es de tipo CPU, buscamos el worker con el ELU más bajo,
     // siempre que esté por debajo del umbral configurado
     if (queueType === "cpu") {
       let minElu = this.cpuEluThreshold;
-      for (const w of this.workers) {
+      for (const w of readyWorkers) {
         if (w.elu < minElu) {
           bestWorker = w;
           minElu = w.elu;
@@ -150,7 +196,7 @@ export class WorkerPool {
     // siempre que no haya superado la concurrencia máxima configurada
     else {
       let minJobs = this.maxIoConcurrency;
-      for (const w of this.workers) {
+      for (const w of readyWorkers) {
         if (w.activeJobs < minJobs) {
           bestWorker = w;
           minJobs = w.activeJobs;
@@ -195,7 +241,8 @@ export class WorkerPool {
     workerNode.activeJobs++;
     this.activeTasks.set(task.jobId, task);
 
-    const message: WorkerIncomingJob = {
+    const message: WorkerIncomingMessage = {
+      type: "job",
       jobId: task.jobId,
       queueName: task.queueName,
       payload: task.payload,
@@ -238,5 +285,43 @@ export class WorkerPool {
         this.taskQueues.get(queueName)!.push(task as JobTask<unknown>);
       }
     });
+  }
+
+  /**
+   * @description Método para cerrar el pool de workers, terminando todas
+   * las instancias de Worker y limpiando el estado del pool.
+   */
+  public async close(): Promise<void> {
+    this.logger.info(
+      "[FastifyKit Background Jobs] Cerrando pool de workers...",
+    );
+    await Promise.all(this.workers.map((node) => node.instance.terminate()));
+    this.workers = [];
+  }
+
+  /**
+   * @description Método del ciclo de vida que se ejecuta antes de que la aplicación se apague,
+   * utilizado para cerrar el pool de workers de forma segura y evitar que queden procesos huérfanos.
+   * @param signal La señal que causó el apagado de la aplicación (por ejemplo, "SIGINT", "SIGTERM", etc.),
+   * o undefined si el apagado fue iniciado manualmente.
+   * @returns Una promesa que se resuelve cuando el pool de workers ha sido cerrado correctamente.
+   */
+  public async beforeApplicationShutdown(signal?: string): Promise<void> {
+    if (this.workers.length === 0) return;
+
+    this.logger.info(
+      `[FastifyKit Background Jobs] Apagando pool de workers asíncronos (Señal: ${signal ?? "Manual"})...`,
+    );
+
+    // Terminamos todos los workers en paralelo de forma segura
+    await Promise.all(
+      this.workers.map((workerNode) => workerNode.instance.terminate()),
+    );
+
+    this.workers = [];
+
+    this.logger.info(
+      "[FastifyKit Background Jobs] Pool de workers cerrado correctamente.",
+    );
   }
 }
