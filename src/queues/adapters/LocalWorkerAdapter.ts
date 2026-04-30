@@ -2,14 +2,16 @@ import { randomUUID } from "node:crypto";
 import type { QueueAdapter } from "../interfaces/QueueAdapter.js";
 import { WorkerPool } from "../workers/WorkerPool.js";
 import { getLogger } from "../../logger/logger.factory.js";
+import { container } from "../../container/DIContainer.js";
 
 export class LocalWorkerAdapter implements QueueAdapter {
   private readonly pool: WorkerPool;
   private readonly logger = getLogger();
 
   constructor() {
-    // El pool ya se auto-configura leyendo el ConfigRegistry
-    this.pool = new WorkerPool();
+    // Resolvemos el WorkerPool desde el contenedor de inyección de dependencias
+    // para asegurar que se comparta la misma instancia en toda la aplicación
+    this.pool = container.resolve(WorkerPool);
   }
 
   public async dispatch<T>(queueName: string, payload: T): Promise<string> {
@@ -19,7 +21,7 @@ export class LocalWorkerAdapter implements QueueAdapter {
     // Fire-and-Forget: Lanzamos la tarea al motor multihilo sin bloquear el hilo principal
     // Agregamos el trackingId al payload para que el worker pueda incluirlo en los logs y facilitar el rastreo de la tarea
     this.pool
-      .execute(queueName, { _trackingId: trackingId, ...payload })
+      .execute(queueName, { ...payload, _trackingId: trackingId })
       .catch((error) => {
         this.logger.error(
           `[FastifyKit QueueAdapter] Error procesando tarea en '${queueName}'`,
