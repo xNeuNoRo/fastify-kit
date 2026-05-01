@@ -192,3 +192,14 @@ export const discoverModules = (options: AutoDiscoverOptions) =>
     [".module.ts", ".module.js"], // Sufijos por defecto para módulos
     (meta) => meta.moduleOptions !== undefined,
   );
+
+/**
+ * @description Descubre manejadores de CQRS (clases exportadas en archivos con sufijo .handler.ts o .handler.js).
+ * @param options Opciones para el descubrimiento automático, incluyendo el directorio base y los sufijos.
+ */
+export const discoverHandlers = (options: AutoDiscoverOptions) =>
+  discoverClasses(
+    options,
+    [".handler.ts", ".handler.js"], // Sufijos por defecto para handlers CQRS
+    (meta) => !!meta.cqrsHandler,
+  );

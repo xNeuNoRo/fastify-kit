@@ -10,7 +10,7 @@ import {
   registerControllers,
   type Constructor,
 } from "../http/routing/scanner/index.js";
-import { discoverControllers, discoverModules } from "./discovery.js";
+import { discoverControllers, discoverHandlers, discoverModules } from "./discovery.js";
 import { registerGateways } from "../websockets/gateway.registry.js";
 import { container } from "../container/DIContainer.js";
 import { requestContext } from "../http/context/requestContext.js";
@@ -33,6 +33,7 @@ import { TypeCompiler } from "@sinclair/typebox/compiler";
 import { ConfigRegistry } from "../config/ConfigRegistry.js";
 import { Value } from "@sinclair/typebox/value";
 import { QueueOptions } from "./interfaces/queue.interface.js";
+import { Mediator } from "../cqrs/Mediator.js";
 
 export interface FastifyKitOptions {
   /**
@@ -221,6 +222,9 @@ export class FastifyKit {
     const { allControllers, allProviders } = await this.bootstrapModule(
       options.module,
     );
+
+    // Inicializamos el módulo de CQRS integrado en FastifyKit
+    await this.initializeCqrsModule(allProviders);
 
     // Inicializamos el módulo de WebRTC integrado en FastifyKit
     await this.initializeWebRtcModule(options, allProviders);
@@ -630,6 +634,28 @@ export class FastifyKit {
   }
 
   /**
+   * @description Método privado para inicializar el motor de CQRS (Mediator).
+   * Registra el Mediator globalmente para que pueda ser inyectado en cualquier controlador.
+   */
+  private static async initializeCqrsModule(
+    allProviders: { token: any; implementation: Constructor }[],
+  ) {
+    // Si no está registrado en el contenedor, lo registramos
+    if (!container.has(Mediator)) {
+      container.registerClass(Mediator, Mediator);
+    }
+
+    // Lo añadimos al array de proveedores globales para que tenga acceso a los
+    // lifecycle hooks (ej: onModuleInit) en caso de que el Mediator los necesite a futuro idk.
+    if (!allProviders.some((p) => p.token === Mediator)) {
+      allProviders.push({
+        token: Mediator,
+        implementation: Mediator,
+      });
+    }
+  }
+
+  /**
    * @description Método privado para inicializar el módulo de WebRTC integrado en FastifyKit.
    * @param options Las opciones de configuración para FastifyKit, que incluyen la configuración de WebRTC
    * en la propiedad "webrtc". Si esta propiedad está presente, se inicializará el módulo de WebRTC.
@@ -817,6 +843,24 @@ export class FastifyKit {
       metadata.providers,
       moduleClass,
     );
+
+    // Recolectamos los Handlers y los registramos como proveedores
+    const discoveredHandlers = await this.collectModuleHandlers(metadata);
+    for (const Handler of discoveredHandlers) {
+      const isAlreadyProvider = currentProviders.some(
+        (p) => p.token === Handler,
+      );
+      // Si el Handler ya está registrado como proveedor explícito, no lo registramos de nuevo
+      // para evitar duplicados. Esto permite que el dev tenga control total sobre qué clases
+      // se registran como proveedores, incluso si también son Handlers descubiertos automáticamente.
+      if (!isAlreadyProvider) {
+        if (!container.has(Handler)) {
+          container.registerClass(Handler, Handler);
+        }
+        currentProviders.push({ token: Handler, implementation: Handler });
+      }
+    }
+
     for (const provider of currentProviders) {
       // Agregamos el proveedor al mapa global para evitar duplicados en submódulos
       if (!globalProvidersMap.has(provider.token)) {
@@ -931,6 +975,18 @@ export class FastifyKit {
 
     // Fusionamos los controladores explícitos y los descubiertos
     return [...explicitControllers, ...discoveredControllers];
+  }
+
+  /**
+   * @description Función auxiliar para recolectar los manejadores CQRS (Handlers) descubiertos automáticamente
+   * si se ha configurado el auto-discover en el módulo.
+   */
+  private static async collectModuleHandlers(
+    metadata: ModuleOptions,
+  ): Promise<Constructor[]> {
+    return metadata.autoDiscoverCQRSHandlers
+      ? await discoverHandlers(metadata.autoDiscoverCQRSHandlers)
+      : [];
   }
 
   /**
