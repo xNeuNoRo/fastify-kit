@@ -92,6 +92,7 @@ export interface ModuleOptions {
   exports?: Constructor[]; // Qué servicios de este módulo pueden ser usados por otros módulos
   autoDiscoverControllers?: AutoDiscoverOptions; // Opciones para auto-descubrimiento de controladores dentro de este módulo
   autoDiscoverModules?: AutoDiscoverOptions; // Opciones para auto-descubrimiento de módulos dentro de este módulo
+  autoDiscoverCQRSHandlers?: AutoDiscoverOptions; // Opciones para auto-descubrimiento de handlers CQRS dentro de este módulo
 }
 
 /**
@@ -133,4 +134,5 @@ export type FastifyKitMetadata = DecoratorMetadata & {
   responsesSchema?: Record<string | symbol, Record<number, TSchema>>; // Esquemas de respuesta a nivel de método, mapeados por el nombre del método y el código HTTP
   staticAssets?: StaticAssetsOptions; // Opciones para servir archivos estáticos a nivel de clase
   queue?: QueueProcessorMetadata; // Metadata para procesadores de colas a nivel de clase
+  cqrsHandler?: boolean; // Indicador de que esta clase es un handler CQRS (Command, Query o Event Handler)
 };
