@@ -1,5 +1,4 @@
 import os from "node:os";
-import { createWorker as createMediasoupWorker } from "mediasoup";
 import type {
   Worker as MediasoupWorker,
   Router,
@@ -116,6 +115,8 @@ export class DefaultSfuRoomManager
     index: number,
   ): Promise<MediasoupWorker<WorkerAppData>> {
     try {
+      const { createWorker: createMediasoupWorker } = await import("mediasoup");
+
       const worker = await createMediasoupWorker<WorkerAppData>({
         ...DEFAULT_WORKER_SETTINGS,
         appData: {
