@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import type { FastifyKitMetadata } from "../http/decorators/types.js";
 import { Dirent } from "node:fs";
 import { getLogger } from "../logger/logger.factory.js";
+import { QueueRegistry } from "../queues/QueueRegistry.js";
 
 const decoratorMetadataSymbol: symbol =
   (Symbol as any).metadata ?? Symbol.for("Symbol.metadata");
@@ -32,6 +33,7 @@ function iterateModuleExports(
   module: any,
   criteria: (metadata: FastifyKitMetadata) => boolean,
   discovered: Constructor[],
+  fileUrl: string,
 ) {
   // Iteramos sobre lo que exporta el archivo (por si exporta varias clases)
   for (const key of Object.keys(module)) {
@@ -42,9 +44,17 @@ function iterateModuleExports(
       const metadata = (exportedItem as Record<PropertyKey, unknown>)[
         decoratorMetadataSymbol
       ] as FastifyKitMetadata | undefined;
-      // Si la metadata cumple con los criterios definidos, agregamos la clase al array de descubiertas
-      if (metadata && criteria(metadata)) {
-        discovered.push(exportedItem as Constructor);
+      if (metadata) {
+        // Si la clase tiene metadata de queue, registramos el archivo
+        // en el QueueRegistry para que luego sepa dónde encontrarlo en los workers aislados
+        if (metadata.queue) {
+          QueueRegistry.addProcessorFile(fileUrl);
+        }
+
+        // Si la metadata cumple con los criterios definidos, agregamos la clase al array de descubiertas
+        if (criteria(metadata)) {
+          discovered.push(exportedItem as Constructor);
+        }
       }
     }
   }
@@ -86,7 +96,7 @@ async function walkEntries({
 
         // Iteramos sobre lo que exporta el archivo (por si exporta varias clases) y lo guardamos en el array
         // de discovered si cumple con los criterios definidos
-        iterateModuleExports(module, criteria, discovered);
+        iterateModuleExports(module, criteria, discovered, fileUrl);
       } catch (err) {
         getLogger().warn(
           `[FastifyKit Discovery] Error al importar ${fullPath}, archivo ignorado.`,
@@ -181,4 +191,15 @@ export const discoverModules = (options: AutoDiscoverOptions) =>
     options,
     [".module.ts", ".module.js"], // Sufijos por defecto para módulos
     (meta) => meta.moduleOptions !== undefined,
+  );
+
+/**
+ * @description Descubre manejadores de CQRS (clases exportadas en archivos con sufijo .handler.ts o .handler.js).
+ * @param options Opciones para el descubrimiento automático, incluyendo el directorio base y los sufijos.
+ */
+export const discoverHandlers = (options: AutoDiscoverOptions) =>
+  discoverClasses(
+    options,
+    [".handler.ts", ".handler.js"], // Sufijos por defecto para handlers CQRS
+    (meta) => !!meta.cqrsHandler,
   );

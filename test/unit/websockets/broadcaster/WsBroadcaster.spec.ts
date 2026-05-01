@@ -44,6 +44,7 @@ describe("WsBroadcaster y Facades", () => {
         "mensaje-nuevo",
         { texto: "hola" },
         expect.any(Object),
+        undefined, // excludeSockets
       );
     });
 
@@ -59,6 +60,7 @@ describe("WsBroadcaster y Facades", () => {
         "alerta",
         { nivel: "alto" },
         expect.any(Object),
+        undefined, // excludeSockets
       );
       expect(mockRoomManager.emitToRoom).toHaveBeenCalledWith(
         "/chat",
@@ -66,6 +68,7 @@ describe("WsBroadcaster y Facades", () => {
         "alerta",
         { nivel: "alto" },
         expect.any(Object),
+        undefined, // excludeSockets
       );
     });
   });
@@ -86,6 +89,8 @@ describe("WsBroadcaster y Facades", () => {
         "alertas",
         "caida-servidor",
         { id: 1 },
+        undefined, // excludeSockets
+        undefined, // customAdapter
       );
 
       resolveSpy.mockRestore(); // Limpiamos el espía
@@ -108,6 +113,8 @@ describe("WsBroadcaster y Facades", () => {
         ["salaA", "salaB"],
         "notificacion",
         { ok: true },
+        undefined, // excludeSockets
+        undefined, // customAdapter
       );
 
       resolveSpy.mockRestore(); // Limpiamos el espía

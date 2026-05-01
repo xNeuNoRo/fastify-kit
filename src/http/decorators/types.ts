@@ -10,6 +10,8 @@ import type { Constructor } from "../routing/scanner/index.js";
 import type { RouteDefinition } from "../routing/types.js";
 import type { Interceptor } from "../interceptors/Interceptor.js";
 import type { TSchema } from "@sinclair/typebox";
+import type { StaticAssetsOptions } from "../interfaces/static.interface.js";
+import { QueueProcessorMetadata } from "../../queues/interfaces/queue-options.js";
 
 /**
  * @description Tipos y interfaces para la metadata de los decoradores en FastifyKit.
@@ -90,6 +92,7 @@ export interface ModuleOptions {
   exports?: Constructor[]; // Qué servicios de este módulo pueden ser usados por otros módulos
   autoDiscoverControllers?: AutoDiscoverOptions; // Opciones para auto-descubrimiento de controladores dentro de este módulo
   autoDiscoverModules?: AutoDiscoverOptions; // Opciones para auto-descubrimiento de módulos dentro de este módulo
+  autoDiscoverCQRSHandlers?: AutoDiscoverOptions; // Opciones para auto-descubrimiento de handlers CQRS dentro de este módulo
 }
 
 /**
@@ -129,4 +132,7 @@ export type FastifyKitMetadata = DecoratorMetadata & {
   classInterceptors?: Constructor<Interceptor>[]; // Interceptores a nivel de clase
   routeInterceptors?: Record<string | symbol, Constructor<Interceptor>[]>; // Interceptores a nivel de ruta, mapeado por el nombre del método
   responsesSchema?: Record<string | symbol, Record<number, TSchema>>; // Esquemas de respuesta a nivel de método, mapeados por el nombre del método y el código HTTP
+  staticAssets?: StaticAssetsOptions; // Opciones para servir archivos estáticos a nivel de clase
+  queue?: QueueProcessorMetadata; // Metadata para procesadores de colas a nivel de clase
+  cqrsHandler?: boolean; // Indicador de que esta clase es un handler CQRS (Command, Query o Event Handler)
 };
