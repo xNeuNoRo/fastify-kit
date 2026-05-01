@@ -122,6 +122,12 @@ export class WorkerPool implements BeforeApplicationShutdown {
       // Solo actualizamos el ELU del worker si recibimos un mensaje de tipo heartbeat
       if (msg.type === "heartbeat") {
         workerNode.elu = msg.elu;
+
+        // Si el worker ya recuperó capacidad (bajó su ELU) y tenemos tareas en espera,
+        // intentamos asignarlas inmediatamente sin esperar a que llegue un 'job_done'.
+        if (this.taskQueues.size > 0) {
+          this.processNextFromQueue();
+        }
         return;
       }
       // Si el mensaje es de tipo job_done, actualizamos el estado del worker
@@ -217,8 +223,9 @@ export class WorkerPool implements BeforeApplicationShutdown {
   }
 
   /**
-   * @description Recorre las colas de tareas pendientes y asigna la siguiente
-   * tarea al primer worker disponible que cumpla los criterios para el tipo de cola.
+   * @description Recorre las colas de tareas pendientes y asigna trabajos a los workers
+   * disponibles según el tipo de cola y su estado actual, intentando procesar la mayor cantidad de
+   * tareas posible sin sobrecargar a los workers.
    */
   private processNextFromQueue(): void {
     for (const [queueName, queue] of this.taskQueues.entries()) {
@@ -228,14 +235,21 @@ export class WorkerPool implements BeforeApplicationShutdown {
       }
 
       const queueType = QueueRegistry.getQueueType(queueName) || "cpu";
-      const availableWorker = this.getBestWorkerFor(queueType);
+      let availableWorker = this.getBestWorkerFor(queueType);
 
-      if (availableWorker) {
+      // Mientras haya un worker disponible y tareas en la cola, seguimos asignando trabajos
+      while (availableWorker && queue.length > 0) {
         const nextTask = queue.shift();
         if (nextTask) {
           this.assignTaskToWorker(availableWorker, nextTask);
         }
-        return;
+        availableWorker = this.getBestWorkerFor(queueType);
+      }
+
+      // Si después de intentar asignar trabajos la cola quedó vacía,
+      // la eliminamos del mapa de colas pendientes
+      if (queue.length === 0) {
+        this.taskQueues.delete(queueName);
       }
     }
   }
