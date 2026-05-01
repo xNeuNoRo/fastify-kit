@@ -10,7 +10,11 @@ import {
   registerControllers,
   type Constructor,
 } from "../http/routing/scanner/index.js";
-import { discoverControllers, discoverHandlers, discoverModules } from "./discovery.js";
+import {
+  discoverControllers,
+  discoverHandlers,
+  discoverModules,
+} from "./discovery.js";
 import { registerGateways } from "../websockets/gateway.registry.js";
 import { container } from "../container/DIContainer.js";
 import { requestContext } from "../http/context/requestContext.js";
@@ -136,6 +140,12 @@ const LIFECYCLE_HOOKS: LifecycleHookName[] = [
   "beforeApplicationShutdown",
   "onApplicationShutdown",
 ];
+
+// Aseguramos que exista Symbol.metadata para
+// almacenar la metadata de los módulos, controladores y proveedores.
+if (!(Symbol as any).metadata) {
+  (Symbol as any).metadata = Symbol.for("Symbol.metadata");
+}
 
 export const FASTIFY_INSTANCE_TOKEN = Symbol.for("FastifyInstance");
 
