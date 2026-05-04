@@ -22,7 +22,7 @@ export async function runPrismaWatch(options: PrismaSyncOptions = {}) {
 
   console.log(
     pc.cyan(
-      `${pc.gray("[FK CLI]")} Observando cambios en: ${pc.bold(modelsDir)}/**/*.prisma\n`,
+      `${pc.gray("[FK CLI]")} Observando cambios en: ${pc.bold(modelsDir)}/*.prisma\n`,
     ),
   );
 
