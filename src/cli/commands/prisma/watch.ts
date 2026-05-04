@@ -15,7 +15,7 @@ export async function runPrismaWatch(options: PrismaSyncOptions = {}) {
   await runPrismaSync(options);
 
   // Configuramos chokidar para vigilar solo archivos .prisma dentro del directorio de modelos
-  const watcher = chokidar.watch(`${modelsDir}/**/*.prisma`, {
+  const watcher = chokidar.watch(modelsDir, {
     persistent: true,
     ignoreInitial: true, // Ya hicimos el sync inicial manualmente
   });
@@ -64,6 +64,9 @@ export async function runPrismaWatch(options: PrismaSyncOptions = {}) {
 
   // Función para manejar los eventos de cambio con debounce
   const handleChange = (path: string, type: string) => {
+    // Solo reaccionamos a cambios en archivos .prisma para evitar ejecuciones innecesarias
+    if (!path.endsWith(".prisma")) return;
+
     console.log(
       `${pc.gray("[FK CLI]")} ${pc.yellow(" [MODIFICADO] ")} ${pc.gray(type)}: ${path}`,
     );
