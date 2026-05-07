@@ -15,7 +15,7 @@ export {
   FASTIFY_INSTANCE_TOKEN,
 } from "./core/FastifyKit.js";
 export { Module } from "./core/module.decorator.js";
-export { discoverControllers, discoverModules } from "./core/discovery.js";
+export { discoverControllers, discoverModules, discoverHandlers } from "./core/discovery.js";
 export type { ModuleOptions } from "./http/decorators/types.js";
 export type { AutoDiscoverOptions } from "./core/discovery.js";
 export type { Constructor } from "./http/routing/scanner/index.js";
@@ -93,6 +93,13 @@ export { requestContext } from "./http/context/requestContext.js";
 export { container, type Contract } from "./container/DIContainer.js";
 export { Injectable } from "./container/injectable.decorator.js";
 export { Inject } from "./container/inject.decorator.js";
+
+// ----------------------------------------------
+// CQRS (Command Query Responsibility Segregation)
+// ----------------------------------------------
+export { Mediator } from "./cqrs/Mediator.js";
+export { CommandHandler, QueryHandler } from "./cqrs/decorators/handler.decorators.js";
+export type { IRequest, IRequestHandler } from "./cqrs/interfaces/request.interface.js";
 
 // ----------------------------------------------
 // Data & Mapping
