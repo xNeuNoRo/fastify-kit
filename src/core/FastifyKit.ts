@@ -17,7 +17,6 @@ import {
 } from "./discovery.js";
 import { registerGateways } from "../websockets/gateway.registry.js";
 import { container } from "../container/DIContainer.js";
-import { requestContext } from "../http/context/requestContext.js";
 import type {
   ModuleOptions,
   FastifyKitMetadata,
@@ -38,6 +37,7 @@ import { ConfigRegistry } from "../config/ConfigRegistry.js";
 import { Value } from "@sinclair/typebox/value";
 import { QueueOptions } from "./interfaces/queue.interface.js";
 import { Mediator } from "../cqrs/Mediator.js";
+import { cronContext, CronContext } from "../scheduling/context/cronContext.js";
 
 export interface FastifyKitOptions {
   /**
@@ -548,10 +548,12 @@ export class FastifyKit {
         for (const task of providerMeta.scheduledTasks) {
           // Iniciamos el temporizador en segundo plano
           const job = new Cron(task.cronExpression, async () => {
-            const store = new Map<string, any>();
-            store.set("requestId", `cron-${crypto.randomUUID()}`);
+            const store: CronContext = {
+              cronId: `cron-${crypto.randomUUID()}`,
+              jobName: `${provider.implementation.name}.${String(task.methodName)}`,
+            };
 
-            await requestContext.run(store, async () => {
+            await cronContext.run(store, async () => {
               try {
                 await (instance as any)[task.methodName]();
               } catch (err) {

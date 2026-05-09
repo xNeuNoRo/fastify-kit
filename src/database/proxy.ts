@@ -1,4 +1,4 @@
-import { requestContext } from "../http/context/requestContext.js";
+import { transactionContext } from "./context/transactionContext.js";
 
 /**
  * @description Este modulo crea un Proxy que intercepta todas las llamadas a la base de datos.
@@ -8,7 +8,6 @@ import { requestContext } from "../http/context/requestContext.js";
 /**
  * @description Función para crear un Proxy que intercepta las llamadas a la base de datos y redirige a la instancia de transacción activa si existe. Este Proxy permite que cualquier componente que utilice el cliente de base de datos pueda beneficiarse automáticamente de las transacciones sin necesidad de modificar su código para inyectar o pasar explícitamente la instancia de la transacción.
  * @param globalInstance La instancia global del cliente de base de datos (por ejemplo, el Prisma Client) que se utiliza cuando no hay una transacción activa. Esta instancia se usará como fallback cuando no se detecte una transacción en el contexto actual.
- * @param alsKey El nombre de la clave que se utiliza en el Almacén de Contexto Asíncrono (ALS) para almacenar la instancia de la transacción. Por defecto, se asume que el TransactionManager almacena la transacción bajo la clave "prisma_tx", pero este valor puede ser personalizado si se utiliza un TransactionManager diferente que use una clave distinta.
  * @example
  * ```typescript
  * // Supongamos que tenemos un Prisma Client global llamado "prisma"
@@ -32,15 +31,11 @@ import { requestContext } from "../http/context/requestContext.js";
  * ```
  * @returns El proxy que intercepta las llamadas a la base de datos.
  */
-export function createTransactionProxy<T extends object>(
-  globalInstance: T,
-  alsKey: string = "prisma_tx", // El nombre que usamos en el TransactionManager
-): T {
+export function createTransactionProxy<T extends object>(globalInstance: T): T {
   return new Proxy(globalInstance, {
     get(target, prop, receiver) {
       // Miramos si hay una transacción en el almacén actual (ALS)
-      const store = requestContext.getStore();
-      const tx = store?.get(alsKey);
+      const tx = transactionContext.get("txInstance");
 
       // Elegimos el objetivo: la transacción (si existe) o el cliente global
       const activeInstance = tx || target;

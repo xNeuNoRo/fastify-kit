@@ -15,7 +15,11 @@ export {
   FASTIFY_INSTANCE_TOKEN,
 } from "./core/FastifyKit.js";
 export { Module } from "./core/module.decorator.js";
-export { discoverControllers, discoverModules, discoverHandlers } from "./core/discovery.js";
+export {
+  discoverControllers,
+  discoverModules,
+  discoverHandlers,
+} from "./core/discovery.js";
 export type { ModuleOptions } from "./http/decorators/types.js";
 export type { AutoDiscoverOptions } from "./core/discovery.js";
 export type { Constructor } from "./http/routing/scanner/index.js";
@@ -84,7 +88,10 @@ export * from "./http/exceptions/index.js"; // Exporta todos los ErrorCodes y Ex
 // Execution Context (AsyncLocalStorage)
 // ----------------------------------------------
 export { AlsStore } from "./http/context/AlsStore.js";
-export { requestContext, type RequestContext } from "./http/context/requestContext.js";
+export {
+  requestContext,
+  type RequestContext,
+} from "./http/context/requestContext.js";
 
 // ----------------------------------------------
 // Dependency Injection (IoC)
@@ -97,8 +104,14 @@ export { Inject } from "./container/inject.decorator.js";
 // CQRS (Command Query Responsibility Segregation)
 // ----------------------------------------------
 export { Mediator } from "./cqrs/Mediator.js";
-export { CommandHandler, QueryHandler } from "./cqrs/decorators/handler.decorators.js";
-export type { IRequest, IRequestHandler } from "./cqrs/interfaces/request.interface.js";
+export {
+  CommandHandler,
+  QueryHandler,
+} from "./cqrs/decorators/handler.decorators.js";
+export type {
+  IRequest,
+  IRequestHandler,
+} from "./cqrs/interfaces/request.interface.js";
 export { getCqrsHandlerToken } from "./cqrs/utils/cqrs-token.util.js";
 
 // ----------------------------------------------
@@ -123,6 +136,10 @@ export {
 } from "./database/transactions.js";
 export { createTransactionProxy } from "./database/proxy.js";
 export type { ITransactionManager } from "./database/transactions.js";
+export {
+  transactionContext,
+  type TransactionStore,
+} from "./database/context/transactionContext.js";
 
 // ----------------------------------------------
 // Observability & Logging
@@ -158,6 +175,10 @@ export { getEventBus } from "./events/eventbus.factory.js";
 // Scheduling & Background Tasks
 // ----------------------------------------------
 export { Scheduled, CronExpression } from "./scheduling/scheduled.decorator.js";
+export {
+  cronContext,
+  type CronContext,
+} from "./scheduling/context/cronContext.js";
 
 // ----------------------------------------------
 // Background Jobs & Queues (Multithreading)

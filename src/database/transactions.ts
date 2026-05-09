@@ -1,6 +1,6 @@
 import { container } from "../container/DIContainer.js";
-import { requestContext } from "../http/context/requestContext.js";
 import { getLogger } from "../logger/logger.factory.js";
+import { transactionContext } from "./context/transactionContext.js";
 
 /**
  * @description Este módulo proporciona herramientas para manejar transacciones en la base de datos de manera transparente y eficiente. Incluye un decorador @Transactional para ejecutar métodos dentro de una transacción, un token simbólico para registrar el TransactionManager en el contenedor de dependencias, y una función para crear un Proxy que intercepta las llamadas a la base de datos y redirige
@@ -41,20 +41,13 @@ async function executeInIsolatedTransaction<T>(
   txManager: ITransactionManager,
   action: () => Promise<T>,
 ): Promise<T> {
-  // Creamos un nuevo contexto de ejecución, copiando el store del contexto padre
-  // para no perder ningún dato que ya esté almacenado, pero marcándolo como una transacción
-  // activa para que el Proxy de la base de datos sepa que debe redirigir las llamadas a la
-  // instancia de transacción activa en lugar de a la conexión principal.
-  const parentStore = requestContext.getStore();
-  const childStore = new Map(parentStore || []);
-  childStore.set("is_transaction_active", true);
-  return await requestContext.run(childStore, () =>
+  return await transactionContext.run({ isActive: true }, () =>
     txManager.runInTransaction(action),
   );
 }
 
 /**
- * @description Decorador de método para ejecutar el método decorado dentro de una transacción proporcionada por un TransactionManager. Este decorador se asegura de que si ya hay una transacción activa en el contexto de ejecución actual, el método decorado se ejecute dentro de esa misma transacción en lugar de crear una nueva. Esto permite que los métodos decorados con @Transactional puedan llamar a otros métodos también decorados sin problemas, propagando la misma transacción a lo largo de toda la cadena de llamadas.
+ * @description Decorador de método para ejecutar el método decorado dentro de una transacción proporcionada por un TransactionManager. Este decorador se asegura de que si ya hay una transacción activa en el contexto de ejecución actual, el método decorado se ejecute dentro de esa misma transacción en lugar de crear una nueva. Esto permite que los métodos decorados con \@Transactional puedan llamar a otros métodos también decorados sin problemas, propagando la misma transacción a lo largo de toda la cadena de llamadas.
  * @returns Una función que envuelve el método original, ejecutándolo dentro de una transacción proporcionada por el TransactionManager. Si ya hay una transacción activa, simplemente ejecuta el método sin crear una nueva transacción.
  * @example
  * ```typescript
@@ -91,15 +84,10 @@ export function Transactional() {
         );
       }
 
-      // Obtenemos el store del contexto de ejecución actual para verificar si ya hay una transacción activa en este hilo.
-      const store = requestContext.getStore();
-      const action = () => target.apply(this, args);
-
-      // Si ya hay una transacción activa en este contexto,
+      // Si ya hay una transacción activa en el contexto actual,
       // simplemente ejecutamos el método sin crear una nueva transacción.
-      // Esto permite que los métodos decorados con @Transactional puedan llamar a otros métodos también decorados sin problemas.
-      // Osea, si ya estamos dentro de una transacción, se propagara automáticamente a otros métodos que se llamen también decorados, evitando la creación de transacciones anidadas innecesarias.
-      if (store?.has("is_transaction_active")) {
+      const action = () => target.apply(this, args);
+      if (transactionContext.get("isActive")) {
         return await action();
       }
 
