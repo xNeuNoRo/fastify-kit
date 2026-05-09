@@ -84,8 +84,7 @@ export * from "./http/exceptions/index.js"; // Exporta todos los ErrorCodes y Ex
 // Execution Context (AsyncLocalStorage)
 // ----------------------------------------------
 export { AlsStore } from "./http/context/AlsStore.js";
-// Exportamos la instancia global por si el usuario necesita acceder al requestId manualmente
-export { requestContext } from "./http/context/requestContext.js";
+export { requestContext, type RequestContext } from "./http/context/requestContext.js";
 
 // ----------------------------------------------
 // Dependency Injection (IoC)
@@ -100,6 +99,7 @@ export { Inject } from "./container/inject.decorator.js";
 export { Mediator } from "./cqrs/Mediator.js";
 export { CommandHandler, QueryHandler } from "./cqrs/decorators/handler.decorators.js";
 export type { IRequest, IRequestHandler } from "./cqrs/interfaces/request.interface.js";
+export { getCqrsHandlerToken } from "./cqrs/utils/cqrs-token.util.js";
 
 // ----------------------------------------------
 // Data & Mapping

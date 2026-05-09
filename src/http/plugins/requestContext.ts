@@ -1,7 +1,7 @@
 import fp from "fastify-plugin";
 import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
-import { requestContext } from "../context/requestContext.js";
+import { RequestContext, requestContext } from "../context/requestContext.js";
 
 const requestContextPlugin: FastifyPluginAsync = async (app) => {
   // onRequest es la primera fase del ciclo de vida de Fastify. Aquí es donde vamos a inicializar el contexto de la solicitud
@@ -14,11 +14,12 @@ const requestContextPlugin: FastifyPluginAsync = async (app) => {
     reply.header("x-request-id", requestId);
 
     // Creamos un store específico para esta solicitud,
-    // que en este caso es un Map con una propiedad "requestId".
+    // que en este caso solo contiene el requestId
     // Este store se puede extender con cualquier otro dato que
     // queramos asociar a la solicitud (como información del usuario, datos de autenticación, etc.).
-    const store = new Map<string, any>();
-    store.set("requestId", requestId);
+    const store: RequestContext = {
+      requestId,
+    };
 
     // Ejecutamos el resto del ciclo de vida de la solicitud dentro del contexto de la aplicación
     requestContext.run(store, () => {

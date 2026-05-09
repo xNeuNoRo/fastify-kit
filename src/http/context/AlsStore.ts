@@ -1,84 +1,121 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
-export class AlsStore<T extends Record<string, any>> {
-  private readonly als = new AsyncLocalStorage<Map<keyof T, any>>();
+export class AlsStore<T extends object> {
+  // Ahora el AsyncLocalStorage guarda directamente el tipo genérico T (un objeto plano)
+  private readonly als = new AsyncLocalStorage<T>();
 
   /**
    * @description Ejecuta una función dentro del contexto de almacenamiento asíncrono, proporcionando un store específico para esa ejecución. Esto permite mantener datos relacionados con la solicitud a lo largo de toda la cadena de llamadas asíncronas sin necesidad de pasarlos explícitamente como argumentos.
-   * @param store Un Map que contiene los datos que se desean almacenar en el contexto de la solicitud. Este map estará disponible para cualquier función que se ejecute dentro del callback proporcionado, permitiendo acceder a estos datos sin necesidad de pasarlos como argumentos.
-   * @param callback Una función que se ejecutará dentro del contexto de almacenamiento asíncrono. Esta función puede ser síncrona o asíncrona, y tendrá acceso al store proporcionado a través del método getStore() del RequestContext.
+   * @param store Un objeto plano que contiene los datos que se desean almacenar en el contexto de la solicitud. Este objeto estará disponible para cualquier función que se ejecute dentro del callback proporcionado.
+   * @param callback Una función que se ejecutará dentro del contexto de almacenamiento asíncrono. Esta función puede ser síncrona o asíncrona, y tendrá acceso al store proporcionado a través del método getStore().
    * @example
-   * // Creamos una instancia de RequestContext con un tipo específico para el store
-   * const requestContext = new RequestContext<Map<string, any>>();
+   * // Creamos una instancia de AlsStore con un tipo específico para el store
+   * const requestContext = new AlsStore<{ requestId: string }>();
    *
    * // Establecemos el contexto con un store que contiene un requestId
-   * requestContext.run(new Map([["requestId", "12345"]]), () => {
-   *   // Dentro de este callback, podemos acceder al store con getStore()
-   *   const store = requestContext.getStore();
-   *   console.log(store?.get("requestId")); // Imprime "12345"
+   * requestContext.run({ requestId: "12345" }, () => {
+   *    // Dentro de este callback, podemos acceder al store con getStore()
+   *    const store = requestContext.getStore();
+   *    console.log(store?.requestId); // Imprime "12345"
    * });
-   * @remarks El método run() es fundamental para establecer el contexto de la solicitud, y cualquier función que necesite acceder a los datos del store debe ser llamada dentro del callback proporcionado a run(). Si fuera en Express u Fastify, este método se llamaría dentro del middleware/handler/hook que maneja la solicitud, asegurando que el contexto esté disponible durante toda la vida de la solicitud.
    * @return El resultado de la función callback, que puede ser de cualquier tipo dependiendo de lo que retorne dicha función.
    */
-  run<R>(store: Map<keyof T, any>, callback: () => R): R {
+  run<R>(store: T, callback: () => R): R {
     return this.als.run(store, callback);
   }
 
   /**
-   * @description Obtiene el store actual del contexto de almacenamiento asíncrono. Este método devuelve el map que se proporcionó al método run() para la ejecución actual, o undefined si no se ha establecido ningún contexto.
+   * @description Obtiene el store actual del contexto de almacenamiento asíncrono. Este método devuelve el objeto que se proporcionó al método run() para la ejecución actual, o undefined si no se ha establecido ningún contexto.
+   * @returns El objeto del store actual, o undefined si no se ha establecido ningún contexto. El tipo de este objeto es el mismo que se proporcionó al crear la instancia de AlsStore.
    * @example
-   * // Creamos una instancia de RequestContext con un tipo específico para el store
-   * const requestContext = new RequestContext<{ userId: string }>();
+   * // Supongamos que tenemos una instancia de AlsStore con un tipo específico para el store
+   * const requestContext = new AlsStore<{ requestId: string }>();
    *
-   * // Establecemos el contexto con un store que contiene un userId
-   * requestContext.run({ userId: "12345" }, () => {
-   *   // Dentro de este callback, podemos acceder al store con getStore()
-   *   const store = requestContext.getStore();
-   *   console.log(store?.userId); // Imprime "12345"
+   * // Establecemos el contexto con un store que contiene un requestId
+   * requestContext.run({ requestId: "12345" }, () => {
+   *    // Dentro de este callback, podemos obtener el store actual
+   *    const store = requestContext.getStore();
+   *    console.log(store?.requestId); // Imprime "12345"
    * });
-   * @remarks El método getStore() es útil para acceder a los datos relacionados con la solicitud en cualquier parte del código que se ejecute dentro del contexto establecido por run(). Si se llama a getStore() fuera de ese contexto, devolverá undefined, por lo que es importante asegurarse de que cualquier función que necesite acceder al store se ejecute dentro del callback proporcionado a run().
-   * @returns El map del store actual, o undefined si no se ha establecido ningún contexto. El tipo de este map es el mismo que se proporcionó al crear la instancia de RequestContext.
+   * // Fuera del contexto, getStore() devolverá undefined
+   * const storeOutside = requestContext.getStore();
+   * console.log(storeOutside); // Imprime undefined
    */
-  getStore(): Map<keyof T, any> | undefined {
+  getStore(): T | undefined {
     return this.als.getStore();
   }
 
   /**
-   * @description Obtiene un valor específico del store actual utilizando una clave. Este método es una forma conveniente de acceder a propiedades individuales del store sin necesidad de obtener el map completo.
-   * @param key La clave del valor que se desea obtener del store. Esta clave debe ser una propiedad del tipo T que se utilizó para crear la instancia de RequestContext.
+   * @description Obtiene un valor específico del store actual utilizando una clave. Este método es una forma conveniente de acceder a propiedades individuales del store sin necesidad de obtener el objeto completo.
+   * @param key La clave del valor que se desea obtener del store. Esta clave debe ser una propiedad del tipo T.
+   * @returns El valor asociado a la clave proporcionada en el store actual, o undefined si no se ha establecido ningún contexto o si la clave no existe en el store.
    * @example
-   * // Creamos una instancia de RequestContext con un tipo específico para el store
-   * const requestContext = new RequestContext<{ userId: string; sessionId: string }>();
+   * // Supongamos que tenemos un store con la forma { requestId: string, userId: number }
+   * const requestContext = new AlsStore<{ requestId: string; userId: number }>();
    *
-   * // Establecemos el contexto con un store que contiene userId y sessionId
-   * requestContext.run({ userId: "12345", sessionId: "abcde" }, () => {
-   *   // Dentro de este callback, podemos acceder a valores específicos del store con get()
-   *   const userId = requestContext.get("userId");
-   *   console.log(userId); // Imprime "12345"
+   * // Establecemos el contexto con un store que contiene requestId y userId
+   * requestContext.run({ requestId: "12345", userId: 42 }, () => {
+   *    // Podemos obtener valores individuales del store usando get()
+   *    const requestId = requestContext.get("requestId");
+   *    const userId = requestContext.get("userId");
+   *    console.log(requestId); // Imprime "12345"
+   *    console.log(userId); // Imprime 42
    * });
-   * @remarks El método get() es útil para acceder directamente a valores específicos del store sin necesidad de manipular el map completo. Al igual que con getStore(), es importante asegurarse de que cualquier función que llame a get() se ejecute dentro del contexto establecido por run(), ya que de lo contrario devolverá undefined.
-   * @returns El valor asociado a la clave proporcionada en el store actual, o undefined si no se ha establecido ningún contexto o si la clave no existe en el store. El tipo de este valor es el tipo de la propiedad correspondiente en T.
    */
   get<K extends keyof T>(key: K): T[K] | undefined {
     const store = this.als.getStore();
-    return store ? store.get(key) : undefined;
+    return store ? store[key] : undefined;
   }
 
   /**
-   * @description Obtiene un valor específico del store actual utilizando una clave, y lanza un error si el valor es undefined. Este método es útil para garantizar que se obtenga un valor válido del store, evitando así errores posteriores debido a valores undefined.
-   * @param key La clave del valor que se desea obtener del store. Esta clave debe ser una propiedad del tipo T que se utilizó para crear la instancia de RequestContext.
+   * @description Establece o actualiza un valor específico en el store actual utilizando una clave. Es ideal para inyectar datos (como el usuario autenticado) a mitad del ciclo de vida de la solicitud.
+   * @param key La clave de la propiedad que se desea establecer.
+   * @param value El valor fuertemente tipado que se desea guardar.
    * @example
-   * // Creamos una instancia de RequestContext con un tipo específico para el store
-   * const requestContext = new RequestContext<{ userId: string; sessionId: string }>();
+   * // Supongamos que tenemos un store con la forma { requestId: string, userId: number }
+   * const requestContext = new AlsStore<{ requestId: string; userId: number }>();
    *
-   * // Establecemos el contexto con un store que contiene userId y sessionId
-   * requestContext.run({ userId: "12345", sessionId: "abcde" }, () => {
-   *   // Dentro de este callback, podemos acceder a valores específicos del store con getOrThrow()
-   *   const userId = requestContext.getOrThrow("userId");
-   *   console.log(userId); // Imprime "12345"
+   * // Establecemos el contexto con un store que contiene solo el requestId
+   * requestContext.run({ requestId: "12345", userId: 0 }, () => {
+   *    // Más adelante en el ciclo de vida de la solicitud, podemos establecer el userId
+   *    requestContext.set("userId", 42); // Actualiza el userId en el store actual
+   *
+   *    // Ahora podemos obtener el userId actualizado
+   *    const userId = requestContext.get("userId");
+   *    console.log(userId); // Imprime 42
    * });
-   * @remarks El método getOrThrow() es útil para acceder a valores específicos del store cuando se espera que esos valores siempre estén presentes. Si el valor asociado a la clave proporcionada es undefined, este método lanzará un error con un mensaje claro, lo que facilita la identificación de problemas relacionados con el contexto de la solicitud. Al igual que con los otros métodos, es importante asegurarse de que cualquier función que llame a getOrThrow() se ejecute dentro del contexto establecido por run(), ya que de lo contrario lanzará un error debido a la falta de contexto.
-   * @returns El valor asociado a la clave proporcionada en el store actual. El tipo de este valor es el tipo de la propiedad correspondiente en T. Si el valor es undefined, se lanzará un error.
+   * @throws Si se intenta establecer un valor fuera del contexto de una solicitud
+   * (es decir, cuando no hay un store activo), se lanzará un error indicando que no se puede establecer la propiedad.
+   */
+  set<K extends keyof T>(key: K, value: T[K]): void {
+    const store = this.als.getStore();
+    if (store) {
+      store[key] = value;
+    } else {
+      throw new Error(
+        `[RequestContext] Intentaste establecer la propiedad '${String(key)}' fuera del contexto de una solicitud.`,
+      );
+    }
+  }
+
+  /**
+   * @description Obtiene un valor específico del store actual utilizando una clave, y lanza un error si el valor es undefined. Este método es útil para garantizar que se obtenga un valor válido del store, evitando así errores posteriores.
+   * @param key La clave del valor que se desea obtener del store.
+   * @returns El valor asociado a la clave proporcionada en el store actual. Si el valor es undefined o estamos fuera de contexto, se lanzará un error.
+   * @throws Si el valor asociado a la clave es undefined o si no hay un contexto activo,
+   * se lanzará un error indicando que se intentó acceder a una propiedad fuera de contexto o que el valor es undefined.
+   * @example
+   * // Supongamos que tenemos un store con la forma { requestId: string, userId: number }
+   * const requestContext = new AlsStore<{ requestId: string; userId: number }>();
+   *
+   * // Establecemos el contexto con un store que contiene requestId y userId
+   * requestContext.run({ requestId: "12345", userId: 42 }, () => {
+   *    // Podemos obtener valores individuales del store usando getOrThrow()
+   *    const requestId = requestContext.getOrThrow("requestId");
+   *    const userId = requestContext.getOrThrow("userId");
+   *    console.log(requestId); // Imprime "12345"
+   *    console.log(userId); // Imprime 42
+   * });
    */
   getOrThrow<K extends keyof T>(key: K): T[K] {
     const value = this.get(key);
