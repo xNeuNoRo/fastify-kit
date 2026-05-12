@@ -9,13 +9,13 @@ import {
 } from "vitest";
 
 import { container } from "../../../src/container/DIContainer.js";
+import { transactionContext } from "../../../src/database/context/transactionContext.js";
 import { createTransactionProxy } from "../../../src/database/proxy.js";
 import {
   Transactional,
   TRANSACTION_MANAGER_TOKEN,
   type ITransactionManager,
 } from "../../../src/database/transactions.js";
-import { requestContext } from "../../../src/http/context/requestContext.js";
 
 describe("Sistema de Base de Datos (Proxy & Transacciones)", () => {
   // Variable para espiar los errores del logger y verificar que se loguean correctamente en caso de excepciones dentro de transacciones
@@ -59,11 +59,8 @@ describe("Sistema de Base de Datos (Proxy & Transacciones)", () => {
       // Lo marcamos como transacción
       txClient.isTransaction = true;
 
-      // Lo guardamos en el ALS para que el Proxy lo encuentre
-      const store = requestContext.getStore();
-      if (store) {
-        store.set("prisma_tx", txClient);
-      }
+      // Iniciamos el contexto de la transacción en el ALS, inyectando el cliente de la transacción
+      transactionContext.set("txInstance", txClient);
 
       // Ejecutamos la acción del usuario
       return await action();
@@ -89,24 +86,20 @@ describe("Sistema de Base de Datos (Proxy & Transacciones)", () => {
       const txClient = new MockDatabaseClient();
       txClient.isTransaction = true;
 
-      // Simulamos un entorno con ALS activo y una transacción guardada
-      const store = new Map();
-      store.set("prisma_tx", txClient); // Coincide con el alsKey por defecto
-
-      await requestContext.run(store, async () => {
-        const result = await proxy.user.create({ name: "Angel" });
-        // El proxy intercepta y usa la transacción del ALS, no el cliente global
-        expect(result.createdInTx).toBe(true);
-      });
+      await transactionContext.run(
+        { isActive: true, txInstance: txClient },
+        async () => {
+          const result = await proxy.user.create({ name: "Angel" });
+          expect(result.createdInTx).toBe(true);
+        },
+      );
     });
 
     it("Debería preservar el contexto 'this' al llamar funciones del cliente", async () => {
       const globalClient = new MockDatabaseClient();
       const proxy = createTransactionProxy(globalClient);
 
-      const store = new Map();
-      await requestContext.run(store, async () => {
-        // Al llamar proxy.query(), Reflect.get entra en acción y debe bindear la función
+      await transactionContext.run({ isActive: false }, async () => {
         const result = await proxy.query("SELECT *");
         expect(result).toBe("Executed in Tx: false");
       });
@@ -136,12 +129,8 @@ describe("Sistema de Base de Datos (Proxy & Transacciones)", () => {
 
       const service = new UserService();
 
-      // Iniciamos un contexto HTTP base
-      await requestContext.run(new Map(), async () => {
-        const result = await service.createUser("Neu");
-        // Comprobamos que el proxy haya hecho su trabajo redirigiendo al cliente de la transacción, no al global
-        expect(result.createdInTx).toBe(true);
-      });
+      const result = await service.createUser("Neu");
+      expect(result.createdInTx).toBe(true);
     });
 
     it("Debería propagar la transacción existente si hay métodos anidados decorados (evita transacciones anidadas)", async () => {
@@ -179,10 +168,8 @@ describe("Sistema de Base de Datos (Proxy & Transacciones)", () => {
 
       const service = new OrderService();
 
-      // Abrimos un nuevo contexto para simular una petición HTTP
-      await requestContext.run(new Map(), async () => {
-        await service.createOrder();
-      });
+      // Ejecutamos el método principal
+      await service.createOrder();
 
       // El TransactionManager solo debió llamarse 1 vez (para el método principal) evitando multiples transacciones anidadas
       expect(txManagerCalls).toBe(1);
@@ -199,11 +186,9 @@ describe("Sistema de Base de Datos (Proxy & Transacciones)", () => {
 
       const service = new FailingService();
 
-      await requestContext.run(new Map(), async () => {
-        await expect(service.failTask()).rejects.toThrow(
-          "Violación de llave única (DB)",
-        );
-      });
+      await expect(service.failTask()).rejects.toThrow(
+        "Violación de llave única (DB)",
+      );
 
       // Verificamos que el error haya sido logueado por el TransactionManager
       expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
