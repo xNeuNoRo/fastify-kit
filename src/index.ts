@@ -96,9 +96,18 @@ export {
 // ----------------------------------------------
 // Dependency Injection (IoC)
 // ----------------------------------------------
-export { container, type Contract } from "./container/DIContainer.js";
+export {
+  container,
+  type Contract,
+  ScopeType,
+} from "./container/DIContainer.js";
 export { Injectable } from "./container/injectable.decorator.js";
-export { Inject } from "./container/inject.decorator.js";
+export {
+  Inject,
+  Optional,
+  PostConstruct,
+} from "./container/inject.decorator.js";
+export { Scope } from "./container/scope.decorator.js";
 
 // ----------------------------------------------
 // CQRS (Command Query Responsibility Segregation)

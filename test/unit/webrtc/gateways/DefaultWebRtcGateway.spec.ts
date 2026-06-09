@@ -126,7 +126,7 @@ describe("Gateway por defecto para WebRTC (DefaultWebRtcGateway)", () => {
     mockBroadcaster = { emitToRoom: vi.fn(), emitToRooms: vi.fn() };
     container.registerInstance(WsBroadcaster, mockBroadcaster);
 
-    gateway = new DefaultWebRtcGateway();
+    gateway = container.resolve(DefaultWebRtcGateway);
 
     mockSocket = {
       id: "socket-123",

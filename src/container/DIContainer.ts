@@ -1,88 +1,113 @@
+import {
+  resolveFactory,
+  resolveByScope,
+  resolveAutoDiscovery,
+} from "./DIContainer.resolver.js";
+
 // El contrato puede ser una clase concreta o una clase abstracta.
 export type Contract<T> =
   | (new (...args: any[]) => T)
   | (abstract new (...args: any[]) => T)
   | symbol;
 
-class DIContainer {
+/**
+ * @description Define los tipos de ciclo de vida (scope) de una instancia en el contenedor.
+ */
+export enum ScopeType {
+  /** Una sola instancia para toda la aplicación (Por defecto) */
+  Singleton = 0,
+  /** Una instancia nueva cada vez que se solicita */
+  Transient = 1,
+  /** Una instancia nueva por cada petición HTTP */
+  Request = 2,
+}
+
+export class DIContainer {
   private readonly registry = new Map<
-    Contract<unknown>, // El contrato (puede ser una clase concreta o abstracta)
-    new (...args: any[]) => unknown // El constructor de la clase concreta que implementa el contrato
+    Contract<unknown>,
+    new (...args: any[]) => unknown
   >();
   private readonly instances = new Map<Contract<unknown>, unknown>();
+  private readonly factories = new Map<
+    Contract<unknown>,
+    { factory: (container: DIContainer) => unknown; scope: ScopeType }
+  >();
+
+  // Stack de resolución actual para detectar dependencias circulares.
+  private readonly resolutionStack = new Set<Contract<any>>();
 
   /**
-   * @description Registra una implementación concreta para un contrato específico en el contenedor de inyección de dependencias.
-   * @param contract El contrato (puede ser una clase concreta o abstracta) para el cual se desea registrar la implementación.
-   * @param Implementation La clase concreta que implementa el contrato.
-   * Esta clase debe tener un constructor que acepte las dependencias necesarias para su instanciación.
+   * @description Registra una implementación concreta para un contrato específico.
    */
   registerClass<T>(
     contract: Contract<T>,
     Implementation: new (...args: any[]) => T,
   ): void {
-    // Si habia una instancia registrada previamente, lo eliminamos para evitar conflictos y asegurar que la nueva implementación se pueda resolver correctamente
     this.instances.delete(contract);
+    this.factories.delete(contract);
     this.registry.set(contract, Implementation);
   }
 
   /**
-   * @description Registra una instancia concreta para un contrato específico en el contenedor de inyección de dependencias.
-   * @param contract El contrato (puede ser una clase concreta o abstracta) para el cual se desea registrar la instancia.
-   * @param instance La instancia concreta que implementa el contrato. Esta instancia se utilizará directamente cuando se resuelva el contrato.
+   * @description Registra una instancia concreta para un contrato específico.
    */
   registerInstance<T>(contract: Contract<T>, instance: T): void {
-    // Si habia un contrato registrado previamente, lo eliminamos para evitar conflictos y asegurar que la nueva instancia se pueda resolver correctamente
     this.registry.delete(contract);
+    this.factories.delete(contract);
     this.instances.set(contract, instance);
-  }
-
-  resolve<T>(contract: Contract<T>): T {
-    // Verificamos si ya existe una instancia para el contrato solicitado
-    if (this.instances.has(contract)) {
-      return this.instances.get(contract) as T;
-    }
-
-    // Si no existe una instancia, verificamos si hay una implementación registrada para el contrato
-    const Implementation = this.registry.get(contract);
-    if (!Implementation) {
-      // Si el contrato es una clase concreta (no abstracta), intentamos instanciarlo directamente sin registro previo
-      if (typeof contract === "function") {
-        // Creamos una nueva instancia de la clase concreta y la almacenamos en el contenedor para futuras resoluciones
-        const instance = new (contract as any)();
-        this.instances.set(contract, instance);
-        return instance as T;
-      }
-      throw new Error(
-        `No se ha registrado una implementación para el contrato: ${String(contract)}`,
-      );
-    }
-
-    // Creamos una nueva instancia de la implementación concreta
-    const instance = new Implementation();
-    // Almacenamos la instancia creada en el contenedor para futuras resoluciones
-    this.instances.set(contract, instance);
-    // Devolvemos la instancia creada
-    return instance as T;
   }
 
   /**
-   * @description Verifica si un contrato está explícitamente registrado en el contenedor
-   * (ya sea mediante una implementación/instancia, o porque ya fue resuelto previamente).
-   * @param contract El contrato a verificar.
-   * @returns true si el contrato está registrado en el contenedor, false de lo contrario.
+   * @description Registra una factory para un contrato específico.
+   */
+  registerFactory<T>(
+    contract: Contract<T>,
+    factory: (container: DIContainer) => T,
+    scope: ScopeType = ScopeType.Singleton,
+  ): void {
+    this.instances.delete(contract);
+    this.registry.delete(contract);
+    this.factories.set(contract, { factory, scope });
+  }
+
+  /**
+   * @description Resuelve un contrato a su instancia correspondiente.
+   */
+  resolve<T>(contract: Contract<T>): T {
+    const factoryEntry = this.factories.get(contract);
+    if (factoryEntry) {
+      return resolveFactory.call(this, contract, factoryEntry as any) as T;
+    }
+
+    const Implementation = this.registry.get(contract);
+    if (Implementation) {
+      return resolveByScope.call(this, contract, Implementation as any) as T;
+    }
+
+    const existing = this.instances.get(contract);
+    if (existing !== undefined) return existing as T;
+
+    return resolveAutoDiscovery.call(this, contract) as T;
+  }
+
+  /**
+   * @description Verifica si un contrato está registrado.
    */
   has<T>(contract: Contract<T>): boolean {
-    return this.instances.has(contract) || this.registry.has(contract);
+    return (
+      this.instances.has(contract) ||
+      this.registry.has(contract) ||
+      this.factories.has(contract)
+    );
   }
 
   /**
-   * @description Elimina todas las implementaciones e instancias registradas en el contenedor de inyección de dependencias,
-   * dejando el contenedor vacío y listo para nuevas registraciones. Util para entornos de testing.
+   * @description Limpia todas las registraciones e instancias.
    */
   clearAll(): void {
     this.registry.clear();
     this.instances.clear();
+    this.factories.clear();
   }
 }
 

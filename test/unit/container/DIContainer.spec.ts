@@ -1,8 +1,14 @@
 import { describe, it, expect } from "vitest";
 
-import { container } from "../../../src/container/DIContainer.js";
-import { Inject } from "../../../src/container/inject.decorator.js";
+import { container, ScopeType } from "../../../src/container/DIContainer.js";
+import {
+  Inject,
+  Optional,
+  PostConstruct,
+} from "../../../src/container/inject.decorator.js";
 import { Injectable } from "../../../src/container/injectable.decorator.js";
+import { Scope } from "../../../src/container/scope.decorator.js";
+import { requestContext } from "../../../src/http/context/requestContext.js";
 
 describe("DIContainer (Dependency Injection Container)", () => {
   describe("Comportamiento Esperado y Gestión de Instancias", () => {
@@ -178,6 +184,221 @@ describe("DIContainer (Dependency Injection Container)", () => {
 
       expect(original.isValid()).toBe(false);
       expect(mocked.isValid()).toBe(true);
+    });
+  });
+
+  describe("Ciclos de Vida (Scopes)", () => {
+    it("Scope.Singleton: Debería compartir la misma instancia siempre", () => {
+      @Injectable()
+      class SingletonSrv {
+        public id = Math.random();
+      }
+
+      const i1 = container.resolve(SingletonSrv);
+      const i2 = container.resolve(SingletonSrv);
+
+      expect(i1.id).toBe(i2.id);
+      expect(i1).toBe(i2);
+    });
+
+    it("Scope.Transient: Debería crear una instancia nueva cada vez", () => {
+      @Scope(ScopeType.Transient)
+      @Injectable()
+      class TransientSrv {
+        public id = Math.random();
+      }
+
+      const i1 = container.resolve(TransientSrv);
+      const i2 = container.resolve(TransientSrv);
+
+      expect(i1.id).not.toBe(i2.id);
+      expect(i1).not.toBe(i2);
+    });
+
+    it("Scope.Request: Debería aislar instancias por contexto de petición", () => {
+      @Scope(ScopeType.Request)
+      @Injectable()
+      class RequestSrv {
+        public id = Math.random();
+      }
+
+      let id1: number, id2: number, id3: number;
+
+      // Simulamos Petición A
+      requestContext.run({ requestId: "A", diInstances: new Map() }, () => {
+        const i1 = container.resolve(RequestSrv);
+        const i2 = container.resolve(RequestSrv);
+        id1 = i1.id;
+        id2 = i2.id;
+      });
+
+      // Simulamos Petición B
+      requestContext.run({ requestId: "B", diInstances: new Map() }, () => {
+        const i3 = container.resolve(RequestSrv);
+        id3 = i3.id;
+      });
+
+      expect(id1!).toBe(id2!); // Misma petición, misma instancia
+      expect(id1!).not.toBe(id3!); // Diferente petición, diferente instancia
+    });
+
+    it("Scope.Request: Debería lanzar error si se resuelve fuera de contexto", () => {
+      @Scope(ScopeType.Request)
+      @Injectable()
+      class RequestSrv {}
+
+      expect(() => container.resolve(RequestSrv)).toThrow(
+        /fuera de un contexto de petición/,
+      );
+    });
+  });
+
+  describe("Dependencias Circulares (Hybrid Eager/Lazy)", () => {
+    it("Debería resolver ciclos complejos A -> B -> A automáticamente", () => {
+      @Injectable()
+      class ClassA {
+        @Inject(() => ClassB) public b!: any;
+      }
+
+      @Injectable()
+      class ClassB {
+        @Inject(() => ClassA) public a!: any;
+      }
+
+      const a = container.resolve(ClassA);
+      const b = a.b;
+
+      expect(a).toBeDefined();
+      expect(b).toBeDefined();
+      expect(b.a).toBe(a); // El ciclo se cerró correctamente
+    });
+  });
+
+  describe("Inyección Opcional (@Optional)", () => {
+    it("Debería inyectar undefined si la dependencia no existe y es @Optional", () => {
+      class MissingSrv {
+        dummy = true;
+      }
+
+      @Injectable()
+      class HostSrv {
+        @Optional()
+        @Inject(MissingSrv)
+        public missing?: MissingSrv;
+      }
+
+      const host = container.resolve(HostSrv);
+      expect(host.missing).toBeUndefined();
+    });
+
+    it("Debería lanzar error si la dependencia no existe y NO es @Optional", () => {
+      const TOKEN = Symbol("Missing");
+      @Injectable()
+      class HostSrv {
+        @Inject(TOKEN) public missing: any;
+      }
+
+      expect(() => container.resolve(HostSrv)).toThrow();
+    });
+  });
+
+  describe("Fábricas (Factory Providers)", () => {
+    it("Debería resolver una instancia desde una función factory", () => {
+      const TOKEN = Symbol("FACTORY");
+      container.registerFactory(TOKEN, () => ({
+        createdBy: "factory",
+        time: Date.now(),
+      }));
+
+      const obj = container.resolve<any>(TOKEN);
+      expect(obj.createdBy).toBe("factory");
+    });
+
+    it("La factory debería poder inyectar otras dependencias del contenedor", () => {
+      @Injectable()
+      class InternalSrv {
+        public value = "OK";
+      }
+
+      const TOKEN = Symbol("DEPENDENT_FACTORY");
+      container.registerFactory(TOKEN, (c) => {
+        const internal = c.resolve(InternalSrv);
+        return { status: internal.value };
+      });
+
+      const obj = container.resolve<any>(TOKEN);
+      expect(obj.status).toBe("OK");
+    });
+
+    it("Debería respetar el scope en las fábricas", () => {
+      const TOKEN = Symbol("TRANSIENT_FACTORY");
+      let count = 0;
+      container.registerFactory(
+        TOKEN,
+        () => ({ id: ++count }),
+        ScopeType.Transient,
+      );
+
+      const o1 = container.resolve<any>(TOKEN);
+      const o2 = container.resolve<any>(TOKEN);
+
+      expect(o1.id).toBe(1);
+      expect(o2.id).toBe(2);
+      expect(o1).not.toBe(o2);
+    });
+  });
+
+  describe("Hooks de Vida (@PostConstruct)", () => {
+    it("Debería ejecutar el método @PostConstruct tras la inyección", () => {
+      @Injectable()
+      class Dependency {
+        public ready = true;
+      }
+
+      @Injectable()
+      class PostSrv {
+        public initialized = false;
+        public depReady = false;
+
+        @Inject(Dependency) public dep: any;
+
+        @PostConstruct()
+        init() {
+          this.initialized = true;
+          this.depReady = this.dep?.ready;
+        }
+      }
+
+      const instance = container.resolve(PostSrv);
+      expect(instance.initialized).toBe(true);
+      expect(instance.depReady).toBe(true);
+    });
+
+    it("Debería capturar errores en @PostConstruct y propagarlos si fallan", async () => {
+      await Promise.resolve(); // Para simular async
+
+      @Injectable()
+      class FailingPostSrv {
+        @PostConstruct()
+        init() {
+          throw new Error("Sync Boom");
+        }
+      }
+
+      expect(() => container.resolve(FailingPostSrv)).toThrow();
+    });
+  });
+
+  describe("Clean Architecture (State vs logic)", () => {
+    it("El contenedor debería mantener su estado incluso tras múltiples resoluciones complejas", () => {
+      @Injectable()
+      class Srv {}
+
+      container.resolve(Srv);
+      container.resolve(Srv);
+
+      // Acceso a propiedad privada vía cast para verificar limpieza de memoria interna
+      expect((container as any).resolutionStack.size).toBe(0);
     });
   });
 });
