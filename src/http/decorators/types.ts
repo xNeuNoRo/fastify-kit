@@ -142,4 +142,5 @@ export type FastifyKitMetadata = DecoratorMetadata & {
   queue?: QueueProcessorMetadata; // Metadata para procesadores de colas a nivel de clase
   cqrsHandler?: boolean; // Indicador de que esta clase es un handler CQRS (Command, Query o Event Handler)
   scope?: Scope; // Ciclo de vida de la clase en el contenedor DI
+  postConstructMethod?: string | symbol; // Nombre del método a ejecutar después de la inyección de dependencias
 };

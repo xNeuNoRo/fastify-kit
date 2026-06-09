@@ -169,11 +169,28 @@ export function instantiate<T>(
     // Creamos la instancia. Los campos se inicializan con sus valores por defecto aquí.
     const instance = new Implementation();
 
+    // Obtenemos la metadata de la clase
+    const metadata = (Implementation as any)[metadataSymbol];
+
     // Aplicamos las inyecciones de la metadata
     applyInjections.call(this, instance, Implementation);
 
-    // Verificamos el scope antes de guardar en el mapa de instancias
-    const metadata = (Implementation as any)[metadataSymbol];
+    // Verificamos si hay un método marcado con @PostConstruct para ejecutarlo
+    if (metadata?.postConstructMethod) {
+      const method = (instance as any)[metadata.postConstructMethod];
+      if (typeof method === "function") {
+        const result = method.apply(instance);
+        if (result instanceof Promise) {
+          result.catch((err) => {
+            throw new Error(
+              `[FastifyKit DI] Error fatal en @PostConstruct de ${Implementation.name}: ${err.message}`,
+            );
+          });
+        }
+      }
+    }
+
+    // Verificamos el scope antes de guardar en el mapa de instancias (Singleton)
     const scope = metadata?.scope ?? Scope.Singleton;
 
     if (scope === Scope.Singleton) {
