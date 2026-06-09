@@ -99,7 +99,7 @@ describe("Integración Sistema Distribuido (Redis)", () => {
     const { DistributedProcessor: ProcessorImpl } =
       await import("../queues/fixtures/Distributed.processor.js");
 
-    // 1. Registramos el archivo del procesador para que el WorkerPool pueda cargarlo en el hilo
+    // Registramos el archivo del procesador para que el WorkerPool pueda cargarlo en el hilo
     const fixturePath = path.resolve(
       process.cwd(),
       "test/integration/queues/fixtures/Distributed.processor.ts",
@@ -111,7 +111,7 @@ describe("Integración Sistema Distribuido (Redis)", () => {
     })
     class DynamicTestModule {}
 
-    // 2. Inicializamos FastifyKit con modo Redis
+    // Inicializamos FastifyKit con modo Redis
     const app = await FastifyKit.create({
       module: DynamicTestModule,
       distributed: {
@@ -124,17 +124,17 @@ describe("Integración Sistema Distribuido (Redis)", () => {
     const queueManager = container.resolve(QueueManager);
     const eventBus = container.resolve(RedisEventBus);
 
-    // 2. Escuchamos el evento global de finalización (Nomenclatura Jerárquica)
+    // Escuchamos el evento global de finalización (Nomenclatura Jerárquica)
     let finalResult: any = null;
 
     eventBus.on(`queue.distributed-test-queue.done.*`, (payload) => {
       finalResult = payload;
     });
 
-    // 4. Despachamos el trabajo
+    // Despachamos el trabajo
     await queueManager.dispatch("distributed-test-queue", { test: "data" });
 
-    // 5. Esperamos a que el WorkerPool y el EventBus hagan su magia
+    // Esperamos a que el WorkerPool y el EventBus hagan su magia
     let attempts = 0;
     while (!finalResult && attempts < 40) {
       await new Promise((r) => setTimeout(r, 100));
