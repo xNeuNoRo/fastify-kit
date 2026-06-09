@@ -85,22 +85,21 @@
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "chokidar": "^5.0.0",
-    "commander": "^14.0.3",
+    "commander": "^15.0.0",
     "croner": "^10.0.1",
-    "fastify-plugin": "^5.1.0",
+    "fastify-plugin": "^6.0.0",
     "glob": "^13.0.6",
     "ora": "^9.4.0",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
-    "bullmq": "^5.78.0",
-    "ioredis": "^5.11.1",
     "@eslint/eslintrc": "^3.3.1",
     "@types/bun": "^1.3.13",
-    "@types/node": "^24.12.3",
+    "@types/node": "^24.13.1",
     "@types/ws": "^8.18.1",
     "@typescript-eslint/eslint-plugin": "^8.39.1",
     "@typescript-eslint/parser": "^8.39.1",
+    "bullmq": "^5.78.0",
     "eslint": "^9.33.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-import-resolver-typescript": "^4.4.4",
@@ -110,11 +109,13 @@
     "eslint-plugin-unicorn": "^60.0.0",
     "eslint-plugin-vitest": "^0.5.4",
     "husky": "^8.0.0",
+    "ioredis": "^5.11.1",
     "lint-staged": "^16.1.5",
-    "prettier": "^3.6.2",
+    "mediasoup": "^3.20.5",
+    "prettier": "^3.8.4",
+    "ts-morph": "^28.0.0",
     "typescript": "^6.0.2",
     "vitest": "^4.1.1",
-    "ws": "^8.21.0",
-    "mediasoup": "^3.19.21"
+    "ws": "^8.21.0"
   }
 }
