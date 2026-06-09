@@ -1,10 +1,4 @@
-/**
- * Soporte para Stage 3 Decorators Metadata.
- * Garantiza que Symbol.metadata exista en el entorno de ejecución (Bun/Node/V8).
- */
-if ((Symbol as any).metadata === undefined) {
-  (Symbol as any).metadata = Symbol.for("Symbol.metadata");
-}
+import "./core/constants/symbols.js";
 
 // ----------------------------------------------
 // Core & Bootstrap

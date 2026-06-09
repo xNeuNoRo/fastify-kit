@@ -41,9 +41,7 @@ import {
   registerWebSocketGateways,
 } from "./bootstrap/lifecycle.bootstrap.js";
 
-export const FASTIFY_KIT_METADATA_SYMBOL: symbol =
-  (Symbol as SymbolConstructor & { metadata?: symbol }).metadata ??
-  Symbol.for("Symbol.metadata");
+export { FASTIFY_KIT_METADATA_SYMBOL } from "./constants/symbols.js";
 export const defaultHelmetConfig = {
   contentSecurityPolicy: {
     directives: {

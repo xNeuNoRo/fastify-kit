@@ -47,7 +47,7 @@ export class QueueWorkerManager
           // Emitimos un evento global con el resultado
           const eventBus = getEventBus();
           eventBus.emit(
-            `queue:${queueName}:done:${job.id}`,
+            `queue.${queueName}.done.${job.id}`,
             {
               jobId: job.id,
               queueName,
@@ -75,7 +75,7 @@ export class QueueWorkerManager
         // Emitimos evento global de error
         const eventBus = getEventBus();
         eventBus.emit(
-          `queue:${queueName}:failed:${job?.id}`,
+          `queue.${queueName}.failed.${job?.id}`,
           {
             jobId: job?.id,
             queueName,

@@ -8,11 +8,7 @@ import { parentPort } from "node:worker_threads";
 import { QueueRegistry } from "../QueueRegistry.js";
 import { container } from "../../container/DIContainer.js";
 import type { JobHandler } from "../interfaces/JobHandler.js";
-
-// Definimos el símbolo para la metadata de los procesadores,
-// que usaremos para registrar los procesadores de cada cola en el Worker
-const METADATA_SYMBOL =
-  (Symbol as any).metadata ?? Symbol.for("Symbol.metadata");
+import { FASTIFY_KIT_METADATA_SYMBOL } from "../../core/constants/symbols.js";
 
 // Variable para almacenar la última medición de ELU, inicializada al momento de cargar el módulo
 let lastElu = performance.eventLoopUtilization();
@@ -46,8 +42,11 @@ async function registerProcessorsFromFile(fileUrl: string) {
     const exportedItem = importedFile[key as keyof typeof importedFile];
 
     // Si es una clase y tiene nuestra metadata
-    if (typeof exportedItem === "function" && exportedItem[METADATA_SYMBOL]) {
-      const metadata = exportedItem[METADATA_SYMBOL];
+    if (
+      typeof exportedItem === "function" &&
+      exportedItem[FASTIFY_KIT_METADATA_SYMBOL]
+    ) {
+      const metadata = exportedItem[FASTIFY_KIT_METADATA_SYMBOL];
 
       if (metadata.queue) {
         // Lo registramos en el motor de colas del worker
