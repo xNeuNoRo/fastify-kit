@@ -1,8 +1,10 @@
 import { Redis } from "ioredis";
 import { DefaultEventBus, EventBusContract, EmitOptions } from "./EventBus.js";
 import { getLogger } from "../logger/logger.factory.js";
-import { BeforeApplicationShutdown } from "../core/interfaces/lifecycle.interface.js";
 import { InternalConfig } from "../config/InternalConfig.js";
+import { BeforeApplicationShutdown } from "../core/interfaces/lifecycle.interface.js";
+import { container } from "../container/DIContainer.js";
+import { REDIS_CONNECTION_TOKEN } from "../distributed/redis.factory.js";
 
 /**
  * @description Implementación híbrida del EventBus que sincroniza eventos entre instancias usando Redis Pub/Sub.
@@ -30,20 +32,19 @@ export class RedisEventBus
     // Llamamos al constructor de DefaultEventBus para inicializar el EventEmitter interno
     super();
 
-    // Obtenemos la configuración de Redis desde el InternalConfig para establecer las conexiones de Pub/Sub
+    // Obtenemos la conexión compartida para publicar
+    this.pub = container.resolve<any>(REDIS_CONNECTION_TOKEN);
+
+    // Para suscribir (SUB) necesitamos una conexión dedicada que no sea compartida
+    // ya que una conexión en modo suscripción no puede ejecutar comandos normales (como PUBLISH)
     const distributedConfig = InternalConfig.get("distributed") || {};
     const redisConfig = distributedConfig.redis || {};
-
-    const connectionOptions = {
+    this.sub = new Redis({
       host: redisConfig.host || "localhost",
       port: redisConfig.port || 6379,
       password: redisConfig.password,
       db: redisConfig.db || 0,
-    };
-
-    // Inicializamos las conexiones de Redis para publicar y suscribir eventos entre instancias
-    this.pub = new Redis(connectionOptions);
-    this.sub = new Redis(connectionOptions);
+    });
 
     this.initSubscriber();
     this.logger.info(
@@ -144,7 +145,8 @@ export class RedisEventBus
    * @description Cierra las conexiones de Redis al detener la app
    */
   public async beforeApplicationShutdown(): Promise<void> {
-    this.logger.info("[FastifyKit RedisEventBus] Cerrando conexiones Redis...");
-    await Promise.allSettled([this.pub.quit(), this.sub.quit()]);
+    this.logger.info("[FastifyKit RedisEventBus] Cerrando suscripción Redis...");
+    await this.sub.quit();
+    // No cerramos 'this.pub' aquí porque es la conexión compartida central
   }
 }

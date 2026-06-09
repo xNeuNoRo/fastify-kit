@@ -1,5 +1,6 @@
-import { Worker, ConnectionOptions } from "bullmq";
+import { ConnectionOptions, Worker } from "bullmq";
 import { Redis } from "ioredis";
+import { InternalConfig } from "../config/InternalConfig.js";
 import { QueueRegistry } from "./QueueRegistry.js";
 import { WorkerPool } from "./workers/WorkerPool.js";
 import { getLogger } from "../logger/logger.factory.js";
@@ -10,7 +11,7 @@ import {
 } from "../core/interfaces/lifecycle.interface.js";
 import { container } from "../container/DIContainer.js";
 import { getEventBus } from "../events/eventbus.factory.js";
-import { InternalConfig } from "../config/InternalConfig.js";
+import { REDIS_CONNECTION_TOKEN } from "../distributed/redis.factory.js";
 
 /**
  * @description Gestor de Workers distribuidos para BullMQ.
@@ -22,44 +23,21 @@ export class QueueWorkerManager
   implements OnApplicationBootstrap, BeforeApplicationShutdown
 {
   private readonly workers: Worker[] = [];
-  private redisConnection?: Redis;
   private readonly logger = getLogger();
 
   public async onApplicationBootstrap(): Promise<void> {
     const config = InternalConfig.get("queue") || {};
-    const distributedConfig = InternalConfig.get("distributed");
 
     if (config.strategy !== "redis") return;
-    if (!distributedConfig?.redis) {
-      this.logger.error(
-        "[FastifyKit] Seleccionaste la estrategia 'redis' pero no se encontró configuración alguna de Redis.",
-      );
-      return;
-    }
 
-    // Configuramos la conexión a Redis para los Workers de BullMQ
-    const redisConfig = distributedConfig.redis || {};
-    const connectionOptions: ConnectionOptions = {
-      host: redisConfig.host || "localhost",
-      port: redisConfig.port || 6379,
-      password: redisConfig.password,
-      username: redisConfig.username,
-      db: redisConfig.db || 0,
-      maxRetriesPerRequest: null,
-    };
-    this.redisConnection = new Redis(connectionOptions as any);
-
-    // Obtenemos el WorkerPool local para delegar la ejecución de tareas en hilos paralelos
+    // Obtenemos la conexión compartida centralizada
+    const redisInstance = container.resolve<Redis>(REDIS_CONNECTION_TOKEN);
     const workerPool = container.resolve(WorkerPool);
 
     // Obtenemos todas las colas registradas por el scanner
     const registeredQueues = QueueRegistry.getRegisteredQueues();
 
     for (const queueName of registeredQueues) {
-      this.logger.debug(
-        `[FastifyKit Queue] Iniciando Worker distribuido para la cola: ${queueName}`,
-      );
-
       const worker = new Worker(
         queueName,
         async (job) => {
@@ -69,7 +47,7 @@ export class QueueWorkerManager
           // Emitimos un evento global con el resultado
           const eventBus = getEventBus();
           eventBus.emit(
-            `job.done:${queueName}:${job.id}`,
+            `queue:${queueName}:done:${job.id}`,
             {
               jobId: job.id,
               queueName,
@@ -82,7 +60,8 @@ export class QueueWorkerManager
           return result;
         },
         {
-          connection: this.redisConnection as unknown as ConnectionOptions,
+          connection: redisInstance as unknown as ConnectionOptions,
+          // Sincronizamos la concurrencia con la capacidad real del WorkerPool
           concurrency: config.maxIoConcurrency || 50,
         },
       );
@@ -96,7 +75,7 @@ export class QueueWorkerManager
         // Emitimos evento global de error
         const eventBus = getEventBus();
         eventBus.emit(
-          `job.done:${queueName}:${job?.id}`,
+          `queue:${queueName}:failed:${job?.id}`,
           {
             jobId: job?.id,
             queueName,
@@ -112,12 +91,9 @@ export class QueueWorkerManager
   }
 
   /**
-   * @description Cierra los workers y la conexión a Redis al detener la app.
+   * @description Cierra los workers al detener la app.
    */
   public async beforeApplicationShutdown(): Promise<void> {
     await Promise.all(this.workers.map((w) => w.close()));
-    if (this.redisConnection) {
-      this.redisConnection.disconnect();
-    }
   }
 }

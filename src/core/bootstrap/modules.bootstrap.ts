@@ -155,6 +155,11 @@ export async function initializeDistributedModule(
   const distributed = options.distributed;
   if (!distributed?.redis) return;
 
+  // Registramos la conexión centralizada de Redis
+  const { registerRedisConnection } =
+    await import("../../distributed/redis.factory.js");
+  registerRedisConnection();
+
   if (distributed.features?.eventBus) {
     try {
       await registerRedisEventBus(allProviders);
@@ -219,6 +224,9 @@ export async function registerQueueStrategySpecificServices(
   if (queueConfig.strategy === "worker-pool") {
     await registerWorkerPoolStrategy(allProviders);
   } else if (queueConfig.strategy === "redis") {
+    const { registerRedisConnection } =
+      await import("../../distributed/redis.factory.js");
+    registerRedisConnection();
     await registerRedisStrategy(options, allProviders);
   }
 }

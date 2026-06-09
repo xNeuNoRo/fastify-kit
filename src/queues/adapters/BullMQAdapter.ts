@@ -1,5 +1,6 @@
-import { Queue, ConnectionOptions } from "bullmq";
-import { InternalConfig } from "../../config/InternalConfig.js";
+import { Queue } from "bullmq";
+import { container } from "../../container/DIContainer.js";
+import { REDIS_CONNECTION_TOKEN } from "../../distributed/redis.factory.js";
 import type { QueueAdapter } from "../interfaces/QueueAdapter.js";
 import { getLogger } from "../../logger/logger.factory.js";
 import { BeforeApplicationShutdown } from "../../core/interfaces/lifecycle.interface.js";
@@ -11,31 +12,22 @@ import { BeforeApplicationShutdown } from "../../core/interfaces/lifecycle.inter
  */
 export class BullMQAdapter implements QueueAdapter, BeforeApplicationShutdown {
   private readonly queues = new Map<string, Queue>();
-  private readonly redisConnection: ConnectionOptions;
-
   private readonly logger = getLogger();
 
-  constructor() {
-    const distributedConfig = InternalConfig.get("distributed") || {};
-    const redisConfig = distributedConfig.redis || {};
-
-    const connectionOptions: ConnectionOptions = {
-      host: redisConfig.host || "localhost",
-      port: redisConfig.port || 6379,
-      password: redisConfig.password,
-      username: redisConfig.username,
-      db: redisConfig.db || 0,
-      maxRetriesPerRequest: null, // Para evitar que BullMQ falle si Redis se reinicia
-    };
-
-    this.redisConnection = connectionOptions;
+  /**
+   * @description Obtiene la conexión compartida de Redis desde el contenedor.
+   */
+  private getRedisConnection() {
+    return container.resolve<any>(REDIS_CONNECTION_TOKEN);
   }
 
   public async dispatch<T>(queueName: string, payload: T): Promise<string> {
     let queue = this.queues.get(queueName);
 
     if (!queue) {
-      queue = new Queue(queueName, { connection: this.redisConnection });
+      queue = new Queue(queueName, {
+        connection: this.getRedisConnection(),
+      });
       this.queues.set(queueName, queue);
     }
 
@@ -48,21 +40,21 @@ export class BullMQAdapter implements QueueAdapter, BeforeApplicationShutdown {
   }
 
   /**
-   * @description Registra un nuevo procesador. Para BullMQ, esto simplemente asegura que la conexión esté lista.
-   * El procesamiento real se maneja en el QueueWorkerManager.
+   * @description Registra un nuevo procesador asegurando que la cola esté inicializada.
    */
   public registerProcessor(queueName: string): void {
     if (!this.queues.has(queueName)) {
-      const queue = new Queue(queueName, { connection: this.redisConnection });
+      const queue = new Queue(queueName, {
+        connection: this.getRedisConnection(),
+      });
       this.queues.set(queueName, queue);
     }
   }
 
   /**
-   * @description Cierra las conexiones de las colas y de Redis al apagar la aplicación.
+   * @description Cierra las colas al detener la app.
    */
   public async beforeApplicationShutdown(): Promise<void> {
-    this.logger.info("[FastifyKit BullMQ] Cerrando conexiones de colas...");
     for (const queue of this.queues.values()) {
       await queue.close();
     }
