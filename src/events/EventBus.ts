@@ -10,32 +10,38 @@ export interface EmitOptions {
   target?: "local" | "global" | (string & {});
 }
 
+type EventListener = (payload: any) => void | Promise<void>;
+
 // Interfaz que define el contrato para el EventBus
 export interface EventBusContract {
   emit(eventName: string, payload?: any, options?: EmitOptions): void;
-  on(eventName: string, listener: (payload: any) => void | Promise<void>): void;
-  off(
-    eventName: string,
-    listener: (payload: any) => void | Promise<void>,
-  ): void;
-  once(
-    eventName: string,
-    listener: (payload: any) => void | Promise<void>,
-  ): void;
+  on(eventName: string, listener: EventListener): void;
+  off(eventName: string, listener: EventListener): void;
+  once(eventName: string, listener: EventListener): void;
 }
 
 // Token para identificar el EventBus en el contenedor de dependencias
 export const EVENT_BUS_TOKEN = Symbol.for("EVENT_BUS_TOKEN");
 
+/**
+ * @description Nodo interno para el Árbol de Eventos.
+ */
+class EventNode {
+  public listeners: EventListener[] = [];
+  public children = new Map<string, EventNode>();
+}
+
 export class DefaultEventBus implements EventBusContract {
-  private readonly emitter = new EventEmitter().setMaxListeners(100);
+  private readonly root = new EventNode();
+  private catchAllListeners: EventListener[] = [];
+  private readonly maxListeners = 100;
 
   /**
-   * @description Emite un evento con un nombre específico y un payload opcional. Los listeners registrados para ese evento serán ejecutados con el payload proporcionado. Todos los listeners se pueden subscribir con el decorador `@OnEvent` o `@OnceEvent` en sus respectivos métodos. El método `emit` es utilizado para disparar eventos desde cualquier parte de la aplicación, permitiendo una comunicación eficiente entre diferentes componentes sin acoplarlos directamente.
-   * @param eventName El nombre del evento a emitir. Este es un string que identifica el tipo de evento que se está emitiendo.
-   * @param payload Opcional. Cualquier dato que se desee pasar a los listeners del evento. Puede ser de cualquier tipo (objeto, string, número, etc.) y será recibido por los listeners registrados para ese evento.
-   * @param options Opcional. Configuración adicional para la emisión del evento,
-   * como el destino (local, global o dirigido a una instancia específica).
+   * @description Emite un evento con un nombre específico y un payload opcional.
+   * Soporta wildcards locales de alto rendimiento sin expresiones regulares.
+   * @param eventName El nombre del evento a emitir.
+   * @param payload Opcional. Cualquier dato que se desee pasar a los listeners.
+   * @param options Opcional. Configuración adicional para la emisión.
    * @example
    * ```typescript
    * // Emitiendo un evento de usuario registrado
@@ -52,72 +58,190 @@ export class DefaultEventBus implements EventBusContract {
    * ```
    */
   emit(eventName: string, payload?: any, options?: EmitOptions): void {
-    this.emitter.emit(eventName, payload);
+    // Emitimos a los listeners globales de catch-all ("*") 
+    // antes de cualquier otro procesamiento, ya que deben recibir todos 
+    // los eventos sin importar su nombre o destino.
+    for (let i = 0; i < this.catchAllListeners.length; i++) { // NOSONAR
+      this.catchAllListeners[i](payload);
+    }
+
+    // Separamos el nombre del evento en partes para navegar por el árbol de eventos.
+    const parts = eventName.split(".");
+    // Iniciamos el proceso de emisión recursivo desde la raíz del árbol.
+    this.emitNode(this.root, parts, 0, payload);
   }
 
   /**
-   * @description Registra un listener para un evento específico. El listener es una función que se ejecutará cada vez que se emita el evento con el nombre correspondiente. El payload del evento será pasado como argumento a la función del listener. Este método es utilizado para suscribirse a eventos y reaccionar a ellos cuando ocurren en la aplicación. (SE RECOMIENDA USAR LOS DECORADORES `@OnEvent` O `@OnceEvent` EN LUGAR DE ESTE MÉTODO PARA REGISTRAR LISTENERS EN CLASES DE SERVICIOS).
-   * @param eventName El nombre del evento al que se desea suscribir. Este es un string que identifica el tipo de evento que se quiere escuchar.
-   * @param listener La función que se ejecutará cuando se emita el evento. Recibirá el payload del evento como argumento.
+   * @description Motor recursivo interno que recorre el árbol evaluando caminos exactos y wildcards.
+   */
+  private emitNode(
+    node: EventNode,
+    parts: string[],
+    index: number,
+    payload: any,
+  ): void {
+    // Si la rama actual tiene un comodín tipo '**', se dispara sin importar lo que reste del path
+    // Ejemplo: Si el listener es 'user.**' y emitimos 'user.profile.updated'
+    const globChild = node.children.get("**");
+    if (globChild) {
+      for (let i = 0; i < globChild.listeners.length; i++) { // NOSONAR
+        globChild.listeners[i](payload);
+      }
+    }
+
+    // Si llegamos al final de los segmentos exactos, disparamos los listeners de este nodo
+    if (index === parts.length) {
+      for (let i = 0; i < node.listeners.length; i++) { // NOSONAR
+        node.listeners[i](payload);
+      }
+      return;
+    }
+
+    const part = parts[index];
+
+    // Camino 1: Coincidencia Exacta (ej: 'user.created' coincidiría solo con 'user.created')
+    const exactChild = node.children.get(part);
+    if (exactChild) {
+      this.emitNode(exactChild, parts, index + 1, payload);
+    }
+
+    // Camino 2: Comodín de un solo segmento '*' (ej: 'user.*' coincidiría con 
+    // 'user.created' pero no con 'user.profile.updated')
+    const wildcardChild = node.children.get("*");
+    if (wildcardChild) {
+      this.emitNode(wildcardChild, parts, index + 1, payload);
+    }
+  }
+
+  /**
+   * @description Registra un listener para un evento.
+   * Puedes usar el comodín "*" para atrapar todos los eventos globalmente,
+   * o usar sub-comodines como "user.*" o "user.**".
+   * @param eventName El nombre del evento para el que se desea registrar el listener.
+   * @param listener La función que se ejecutará cuando se emita el evento. Recibe el payload como argumento.
    * @example
    * ```typescript
-   * // Registrando un listener para el evento de usuario registrado
-   * eventBus.on("user.registered", (payload) => {
-   *   console.log(`Nuevo usuario registrado: ${payload.username}`);
+   * // Registrando un listener para eventos de usuario
+   * eventBus.on("user.*", (payload) => {
+   *   console.log("Evento de usuario recibido:", payload);
+   * });
+   *
+   * // Registrando un listener global para todos los eventos
+   * eventBus.on("*", (payload) => {
+   *   console.log("Evento global recibido:", payload);
    * });
    * ```
    */
-  on(
-    eventName: string,
-    listener: (payload: any) => void | Promise<void>,
-  ): void {
-    this.emitter.on(eventName, listener);
+  on(eventName: string, listener: EventListener): void {
+    // Registro exclusivo para el catch global explicitamente con "*"
+    if (eventName === "*") {
+      this.checkMemoryLeak(eventName, this.catchAllListeners.length);
+      this.catchAllListeners.push(listener);
+      return;
+    }
+
+    const node = this.getOrCreateNode(eventName);
+    this.checkMemoryLeak(eventName, node.listeners.length);
+    node.listeners.push(listener);
   }
 
   /**
-   * @description Elimina un listener registrado para un evento específico. Este método se utiliza para dejar de escuchar un evento en particular, evitando que la función del listener se ejecute cuando se emita el evento. Es importante proporcionar tanto el nombre del evento como la función del listener que se desea eliminar para que el EventBus pueda identificar correctamente cuál suscripción eliminar.
-   * @param eventName El nombre del evento del cual se desea eliminar el listener. Este es un string que identifica el tipo de evento.
-   * @param listener La función del listener que se desea eliminar. Debe ser la misma función que se registró previamente para el evento.
+   * @description Elimina un listener registrado para un evento específico.
+   * @param eventName El nombre del evento del que se desea eliminar el listener.
+   * @param listener La función del listener que se desea eliminar.
    * @example
    * ```typescript
-   * // Eliminando un listener para el evento de usuario registrado
-   * const userRegisteredListener = (payload) => {
-   *   console.log(`Nuevo usuario registrado: ${payload.username}`);
+   * const onUserCreated = (payload) => {
+   *   console.log("Usuario creado:", payload);
    * };
-   * eventBus.on("user.registered", userRegisteredListener);
+   * eventBus.on("user.created", onUserCreated);
    *
-   * // Más tarde, si ya no queremos escuchar el evento
-   * eventBus.off("user.registered", userRegisteredListener);
+   * // Luego, para eliminar el listener:
+   * eventBus.off("user.created", onUserCreated);
    * ```
    */
-  off(
-    eventName: string,
-    listener: (payload: any) => void | Promise<void>,
-  ): void {
-    this.emitter.off(eventName, listener);
+  off(eventName: string, listener: EventListener): void {
+    if (eventName === "*") {
+      this.catchAllListeners = this.catchAllListeners.filter(
+        (l) => l !== listener && (l as any).originalListener !== listener,
+      );
+      return;
+    }
+
+    const node = this.findNode(eventName);
+    if (node) {
+      // Filtramos considerando también si el listener fue envuelto por once()
+      node.listeners = node.listeners.filter(
+        (l) => l !== listener && (l as any).originalListener !== listener,
+      );
+    }
   }
 
   /**
-   * @description Registra un listener para un evento específico que se ejecutará solo una vez. La función del listener se ejecutará la primera vez que se emita el evento con el nombre correspondiente, y luego se eliminará automáticamente, por lo que no se ejecutará en emisiones posteriores del mismo evento. Este método es útil para situaciones donde solo se necesita reaccionar a la primera ocurrencia de un evento, como la inicialización de un recurso o la respuesta a una acción única. (SE RECOMIENDA USAR LOS DECORADORES `@OnEvent` O `@OnceEvent` EN LUGAR DE ESTE MÉTODO PARA REGISTRAR LISTENERS EN CLASES DE SERVICIOS).
-   * @param eventName El nombre del evento al que se desea suscribir para una sola ejecución. Este es un string que identifica el tipo de evento.
-   * @param listener La función que se ejecutará la primera vez que se emita el evento. Recibirá el payload del evento como argumento. Después de la primera ejecución, esta función será eliminada automáticamente de las suscripciones del evento.
+   * @description Registra un listener para un evento específico que se ejecutará solo una vez.
+   * @param eventName El nombre del evento para el que se desea registrar el listener de una sola ejecución.
+   * @param listener La función del listener que se desea ejecutar solo la primera vez que se emita el evento.
    * @example
    * ```typescript
-   * // Registrando un listener para el evento de inicialización que solo se ejecutará una vez
-   * eventBus.once("app.initialized", (payload) => {
-   *   console.log("La aplicación ha sido inicializada");
+   * // Registrando un listener que solo se ejecutará la primera vez que se emita 'user.created'
+   * eventBus.once("user.created", (payload) => {
+   *   console.log("Este mensaje solo aparecerá la primera vez que se cree un usuario:", payload);
    * });
-   *
-   * // Emitiendo el evento de inicialización
-   * eventBus.emit("app.initialized");
-   * // Emitiendo el evento de inicialización nuevamente no ejecutará el listener
-   * eventBus.emit("app.initialized");
    * ```
    */
-  once(
-    eventName: string,
-    listener: (payload: any) => void | Promise<void>,
-  ): void {
-    this.emitter.once(eventName, listener);
+  once(eventName: string, listener: EventListener): void {
+    const wrapper = (payload: any) => {
+      this.off(eventName, wrapper);
+      listener(payload);
+    };
+
+    // Almacenamos la referencia original para que .off() pueda encontrarlo
+    (wrapper as any).originalListener = listener;
+    this.on(eventName, wrapper);
+  }
+
+  /**
+   * @description Advertencia de fuga de memoria idéntica al EventEmitter de Node.js
+   */
+  private checkMemoryLeak(eventName: string, currentCount: number): void {
+    if (currentCount >= this.maxListeners) {
+      console.warn(
+        `[FastifyKit EventBus] Memory Leak Warning: El evento "${eventName}" ha excedido los ${this.maxListeners} listeners registrados.`,
+      );
+    }
+  }
+
+  /**
+   * @description Navega o construye las ramas del árbol para suscribirse
+   */
+  private getOrCreateNode(eventName: string): EventNode {
+    const parts = eventName.split(".");
+    let current = this.root;
+
+    for (let i = 0; i < parts.length; i++) { // NOSONAR
+      const part = parts[i];
+      let next = current.children.get(part);
+      if (!next) {
+        next = new EventNode();
+        current.children.set(part, next);
+      }
+      current = next;
+    }
+    return current;
+  }
+
+  /**
+   * @description Encuentra un nodo existente sin mutarlo (usado en off)
+   */
+  private findNode(eventName: string): EventNode | undefined {
+    const parts = eventName.split(".");
+    let current = this.root;
+
+    for (let i = 0; i < parts.length; i++) { // NOSONAR
+      const next = current.children.get(parts[i]);
+      if (!next) return undefined;
+      current = next;
+    }
+    return current;
   }
 }

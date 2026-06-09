@@ -63,7 +63,16 @@ export class RedisEventBus
 
     this.sub.on("message", (channel, message) => {
       try {
-        const { eventName, payload, _sourceId } = JSON.parse(message);
+        // Extraemos el mensaje restaurando automáticamente los Buffers binarios si existiesen
+        const { eventName, payload, _sourceId } = JSON.parse(
+          message,
+          (key, value) => {
+            if (value?._fk_type === "Buffer") {
+              return Buffer.from(value.data, "base64");
+            }
+            return value;
+          },
+        );
 
         // Evitamos disparar localmente si nosotros mismos emitimos el evento en el canal global
         // (porque en emit() ya lo disparamos localmente para ser más rápidos)
@@ -82,7 +91,7 @@ export class RedisEventBus
   }
 
   /**
-   * @description Emite un evento, pudiendo dirigirlo localmente (por defecto), globalmente o a una instancia específica.
+   * @description Emite un evento, pudiendo directo localmente (por defecto), globalmente o a una instancia específica.
    */
   emit(eventName: string, payload?: any, options?: EmitOptions): void {
     const target = options?.target || "local";
@@ -100,12 +109,23 @@ export class RedisEventBus
     // Si solo era local, retornamos aquí para evitar propagar a Redis.
     if (target === "local") return;
 
-    // Propagamos via Redis (Global o Dirigida)
-    const message = JSON.stringify({
-      eventName,
-      payload,
-      _sourceId: this.instanceId,
-    });
+    // Propagamos via Redis (Global o Dirigida) detectando si hay instancias de Buffer para codificarlas a Base64
+    const message = JSON.stringify(
+      {
+        eventName,
+        payload,
+        _sourceId: this.instanceId,
+      },
+      function (key, value) {
+        if (this[key] instanceof Buffer) {
+          return {
+            _fk_type: "Buffer",
+            data: this[key].toString("base64"),
+          };
+        }
+        return value;
+      },
+    );
 
     // Determinamos el canal de Redis según el destino: global o dirigido a una instancia específica.
     const targetChannel =
