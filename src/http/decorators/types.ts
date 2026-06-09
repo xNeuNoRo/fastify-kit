@@ -122,6 +122,7 @@ export type FastifyKitMetadata = DecoratorMetadata & {
   injections?: {
     propertyName: string | symbol;
     contractOrResolver: Contract<unknown> | (() => Contract<unknown>);
+    optional?: boolean;
   }[]; // Metadata para inyecciones de dependencias con @Inject
   parameters?: Record<string | symbol, ParameterMetadata[]>; // Metadata de parámetros, mapeada por el nombre del método
   routes?: RouteDefinition[]; // Para almacenar información de rutas a nivel de método (método HTTP, path, etc.)

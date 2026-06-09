@@ -21,12 +21,52 @@ export function Inject<T>(
     }
 
     // Usamos el objeto metadata de Stage 3 para registrar las inyecciones.
-    // Este objeto es compartido entre todos los decoradores de la misma clase.
     const metadata = context.metadata as FastifyKitMetadata;
     metadata.injections = metadata.injections || [];
-    metadata.injections.push({
-      propertyName: context.name,
-      contractOrResolver,
-    });
+
+    // Buscamos si ya existe una entrada para esta propiedad (por si se aplicó @Optional antes)
+    let injection = metadata.injections.find(
+      (i) => i.propertyName === context.name,
+    );
+
+    if (!injection) {
+      injection = {
+        propertyName: context.name,
+        contractOrResolver: undefined as any,
+      };
+      metadata.injections.push(injection);
+    }
+
+    injection.contractOrResolver = contractOrResolver;
+  };
+}
+
+/**
+ * @description El decorador @Optional marca una inyección como opcional.
+ * Si la dependencia no está registrada en el contenedor, se inyectará undefined en lugar de lanzar un error.
+ * Debe usarse junto con @Inject.
+ */
+export function Optional() {
+  return function (_value: undefined, context: ClassFieldDecoratorContext) {
+    if (context.kind !== "field") {
+      throw new Error("@Optional solo puede ser aplicado a campos de clase");
+    }
+
+    const metadata = context.metadata as FastifyKitMetadata;
+    metadata.injections = metadata.injections || [];
+
+    let injection = metadata.injections.find(
+      (i) => i.propertyName === context.name,
+    );
+
+    if (!injection) {
+      injection = {
+        propertyName: context.name,
+        contractOrResolver: undefined as any,
+      };
+      metadata.injections.push(injection);
+    }
+
+    injection.optional = true;
   };
 }

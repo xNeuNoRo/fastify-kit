@@ -110,7 +110,7 @@ class DIContainer {
     if (!metadata?.injections) return;
 
     for (const injection of metadata.injections) {
-      const { propertyName, contractOrResolver } = injection;
+      const { propertyName, contractOrResolver, optional } = injection;
 
       // Resolvemos el contrato (soporta forward references)
       // forward reference: quiere decir que el contrato a resolver puede ser una función que retorna el contrato real,
@@ -123,15 +123,30 @@ class DIContainer {
 
       const targetContract = getTargetContract();
 
-      // SI la dependencia está actualmente en el stack de resolución,
-      // significa que hay un ciclo. Debemos usar un Lazy Getter para romperlo.
-      if (this.resolutionStack.has(targetContract)) {
-        this.defineLazyGetter(instance, propertyName, getTargetContract);
-      } else {
-        // Si no hay ciclo, inyectamos AHORA.
-        // Esto hace que la inyección sea inmediata y
-        // no tenga la sobrecarga de un getter, lo cual es mejor para el rendimiento.
-        instance[propertyName] = this.resolve(targetContract);
+      // Si es opcional y no está registrado explícitamente, lo marcamos como undefined.
+      // NO intentamos resolverlo si es una clase para evitar el auto-registro
+      // que el contenedor hace por defecto, ya que al ser opcional, el usuario
+      // probablemente NO quiere que se instancie si no fue registrado.
+      if (optional && !this.has(targetContract)) {
+        instance[propertyName] = undefined;
+        continue;
+      }
+
+      try {
+        // SI la dependencia está actualmente en el stack de resolución,
+        // significa que hay un ciclo. Debemos usar un Lazy Getter para romperlo.
+        if (this.resolutionStack.has(targetContract)) {
+          this.defineLazyGetter(instance, propertyName, getTargetContract);
+        } else {
+          // Si no hay ciclo, inyectamos AHORA.
+          instance[propertyName] = this.resolve(targetContract);
+        }
+      } catch (err) {
+        if (optional) {
+          instance[propertyName] = undefined;
+        } else {
+          throw err;
+        }
       }
     }
   }
