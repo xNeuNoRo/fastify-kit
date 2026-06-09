@@ -21,9 +21,7 @@ let fallbackEventBus: EventBusContract | null = null;
  */
 export function getEventBus(): EventBusContract {
   try {
-    return container.resolve<EventBusContract>(
-      EVENT_BUS_TOKEN as unknown as Contract<EventBusContract>,
-    );
+    return container.resolve<EventBusContract>(EVENT_BUS_TOKEN);
   } catch (error) {
     fallbackEventBus ??= new DefaultEventBus();
     getLogger().warn(

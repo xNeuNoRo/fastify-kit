@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-import { ConfigRegistry } from "../../../src/config/ConfigRegistry.js";
+import { InternalConfig } from "../../../src/config/InternalConfig.js";
 import { container } from "../../../src/container/DIContainer.js";
 import { DefaultInProcessAdapter } from "../../../src/queues/adapters/DefaultInProcessAdapter.js";
 import { LocalWorkerAdapter } from "../../../src/queues/adapters/LocalWorkerAdapter.js";
@@ -17,7 +17,7 @@ describe("QueueFactory (getQueueAdapter)", () => {
 
   it("Debería registrar e inyectar DefaultInProcessAdapter si no hay configuración explícita", () => {
     // Simulamos que el usuario no pasó configuración o pasó un objeto vacío
-    const getSpy = vi.spyOn(ConfigRegistry, "get").mockReturnValue({});
+    const getSpy = vi.spyOn(InternalConfig, "get").mockReturnValue({});
 
     // Simulamos que no hay ningún adaptador registrado en el contenedor
     // para forzar que la factory decida el default
@@ -34,7 +34,7 @@ describe("QueueFactory (getQueueAdapter)", () => {
     const adapter = getQueueAdapter();
 
     // Validamos que tomó la decisión correcta
-    expect(getSpy).toHaveBeenCalledWith("queue_user_config");
+    expect(getSpy).toHaveBeenCalledWith("queue");
     expect(registerSpy).toHaveBeenCalledWith(
       QUEUE_ADAPTER_TOKEN,
       DefaultInProcessAdapter,
@@ -44,7 +44,7 @@ describe("QueueFactory (getQueueAdapter)", () => {
 
   it("Debería registrar e inyectar LocalWorkerAdapter si la estrategia es 'worker-pool'", () => {
     // Simulamos que el usuario pidió explícitamente el motor multihilo
-    vi.spyOn(ConfigRegistry, "get").mockReturnValue({
+    vi.spyOn(InternalConfig, "get").mockReturnValue({
       strategy: "worker-pool",
     });
 

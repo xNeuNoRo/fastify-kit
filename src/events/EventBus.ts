@@ -1,8 +1,18 @@
 import { EventEmitter } from "node:events";
 
+export interface EmitOptions {
+  /**
+   * Destino del evento:
+   * - "local": Solo se emite en la instancia actual (comportamiento por defecto).
+   * - "global": Se emite en todas las instancias conectadas a Redis.
+   * - "string (instanceId)": Se emite específicamente a la instancia con ese ID.
+   */
+  target?: "local" | "global" | (string & {});
+}
+
 // Interfaz que define el contrato para el EventBus
 export interface EventBusContract {
-  emit(eventName: string, payload?: any): void;
+  emit(eventName: string, payload?: any, options?: EmitOptions): void;
   on(eventName: string, listener: (payload: any) => void | Promise<void>): void;
   off(
     eventName: string,
@@ -24,6 +34,8 @@ export class DefaultEventBus implements EventBusContract {
    * @description Emite un evento con un nombre específico y un payload opcional. Los listeners registrados para ese evento serán ejecutados con el payload proporcionado. Todos los listeners se pueden subscribir con el decorador `@OnEvent` o `@OnceEvent` en sus respectivos métodos. El método `emit` es utilizado para disparar eventos desde cualquier parte de la aplicación, permitiendo una comunicación eficiente entre diferentes componentes sin acoplarlos directamente.
    * @param eventName El nombre del evento a emitir. Este es un string que identifica el tipo de evento que se está emitiendo.
    * @param payload Opcional. Cualquier dato que se desee pasar a los listeners del evento. Puede ser de cualquier tipo (objeto, string, número, etc.) y será recibido por los listeners registrados para ese evento.
+   * @param options Opcional. Configuración adicional para la emisión del evento,
+   * como el destino (local, global o dirigido a una instancia específica).
    * @example
    * ```typescript
    * // Emitiendo un evento de usuario registrado
@@ -31,9 +43,15 @@ export class DefaultEventBus implements EventBusContract {
    *
    * // Emitiendo un evento de orden creada
    * eventBus.emit("order.created", { orderId: 456, amount: 99.99 });
+   *
+   * // Emitiendo un evento global que será recibido por todas las instancias conectadas a Redis
+   * eventBus.emit("system.maintenance", { scheduledAt: "2024-12-01T00:00:00Z" }, { target: "global" });
+   *
+   * // Emitiendo un evento dirigido a una instancia específica
+   * eventBus.emit("cache.clear", null, { target: "instance-abc123" });
    * ```
    */
-  emit(eventName: string, payload?: any): void {
+  emit(eventName: string, payload?: any, options?: EmitOptions): void {
     this.emitter.emit(eventName, payload);
   }
 

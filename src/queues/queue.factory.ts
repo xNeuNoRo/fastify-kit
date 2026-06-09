@@ -1,13 +1,12 @@
-// src/queues/queue.factory.ts
 import { container } from "../container/DIContainer.js";
 import {
   QUEUE_ADAPTER_TOKEN,
   type QueueAdapter,
 } from "./interfaces/QueueAdapter.js";
 import { LocalWorkerAdapter } from "./adapters/LocalWorkerAdapter.js";
-import { ConfigRegistry } from "../config/ConfigRegistry.js";
-import type { QueueOptions } from "../core/interfaces/queue.interface.js";
+import { InternalConfig } from "../config/InternalConfig.js";
 import { DefaultInProcessAdapter } from "./adapters/DefaultInProcessAdapter.js";
+import { BullMQAdapter } from "./adapters/BullMQAdapter.js";
 
 /**
  * @description Factory para obtener el adaptador de colas activo.
@@ -16,9 +15,11 @@ import { DefaultInProcessAdapter } from "./adapters/DefaultInProcessAdapter.js";
  */
 export function getQueueAdapter(): QueueAdapter {
   if (!container.has(QUEUE_ADAPTER_TOKEN)) {
-    const config = ConfigRegistry.get<QueueOptions>("queue_user_config") || {};
+    const config = InternalConfig.get("queue") || {};
 
-    if (config.strategy === "worker-pool") {
+    if (config.strategy === "redis") {
+      container.registerClass(QUEUE_ADAPTER_TOKEN, BullMQAdapter);
+    } else if (config.strategy === "worker-pool") {
       container.registerClass(QUEUE_ADAPTER_TOKEN, LocalWorkerAdapter);
     } else {
       container.registerClass(QUEUE_ADAPTER_TOKEN, DefaultInProcessAdapter);

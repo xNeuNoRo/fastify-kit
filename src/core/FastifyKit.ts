@@ -33,11 +33,13 @@ import type { TSchema } from "@sinclair/typebox";
 import type { StaticAssetsOptions } from "../http/interfaces/static.interface.js";
 import type { FastifyKitWebRtcConfig } from "./interfaces/webrtc.interface.js";
 import { TypeCompiler } from "@sinclair/typebox/compiler";
+import { InternalConfig } from "../config/InternalConfig.js";
 import { ConfigRegistry } from "../config/ConfigRegistry.js";
 import { Value } from "@sinclair/typebox/value";
 import { QueueOptions } from "./interfaces/queue.interface.js";
 import { Mediator } from "../cqrs/Mediator.js";
 import { cronContext, CronContext } from "../scheduling/context/cronContext.js";
+import { DistributedOptions } from "./interfaces/distributed.interface.js";
 
 export interface FastifyKitOptions {
   /**
@@ -124,6 +126,10 @@ export interface FastifyKitOptions {
    * Configuracion para el motor de BackgroundJobs (Integrado en el framework)
    */
   queue?: QueueOptions;
+  /**
+   * Configuracion para el sistema distribuido a lo largo de funciones del framework
+   */
+  distributed?: DistributedOptions;
 }
 
 type LifecycleHookName =
@@ -205,6 +211,9 @@ export class FastifyKit {
   static async create(
     options: FastifyKitOptions,
   ): Promise<FastifyInstance<any, any, any, any, TypeBoxTypeProvider>> {
+    // Registramos la configuracion distribuida en el registry interno para que los adapters/managers puedan usarla
+    InternalConfig.set("distributed", options.distributed || {});
+
     if (options.envSchema) {
       this.validateAndLoadEnvironment(options.envSchema);
     }
@@ -241,6 +250,9 @@ export class FastifyKit {
 
     // Inicializamos el módulo de colas (BackgroundJobs)
     await this.initializeQueueModule(options, allControllers, allProviders);
+
+    // Inicializamos el módulo distribuido (EventBus, etc.)
+    await this.initializeDistributedModule(options, allProviders);
 
     // Registramos la instancia de Fastify en el contenedor de inyección de dependencias para que pueda ser inyectada en cualquier controlador o proveedor utilizando el token FASTIFY_INSTANCE_TOKEN.
     container.registerInstance(FASTIFY_INSTANCE_TOKEN, app);
@@ -685,8 +697,8 @@ export class FastifyKit {
       const webrtcConfig =
         typeof options.webrtc === "object" ? options.webrtc : {};
 
-      // Guardamos la configuración de WebRTC en el ConfigRegistry
-      ConfigRegistry.set("webrtc_user_config", webrtcConfig);
+      // Guardamos la configuración de WebRTC en el InternalConfig
+      InternalConfig.set("webrtc", webrtcConfig);
 
       const { SFU_ROOM_MANAGER_TOKEN } =
         await import("../webrtc/interfaces/SfuRoomManager.js");
@@ -734,6 +746,33 @@ export class FastifyKit {
   }
 
   /**
+   * @description Método privado para inicializar el módulo distribuido de FastifyKit.
+   */
+  private static async initializeDistributedModule(
+    options: FastifyKitOptions,
+    allProviders: { token: any; implementation: Constructor }[],
+  ) {
+    const distributed = options.distributed;
+    if (!distributed?.redis) return;
+
+    if (distributed.features?.eventBus) {
+      try {
+        await this.registerRedisEventBus(allProviders);
+      } catch (error) {
+        console.error(error);
+        console.error(
+          "[FastifyKit Boot Error] Has configurado distributed.features.eventBus, pero faltan dependencias.",
+        );
+        console.error(
+          "Para usar esta característica avanzada, por favor instala 'ioredis':",
+        );
+        console.error("\nnpm install ioredis\n");
+        process.exit(1);
+      }
+    }
+  }
+
+  /**
    * @description Método privado para inicializar el módulo de colas (BackgroundJobs) integrado en FastifyKit.
    * @param options Las opciones de configuración para FastifyKit, que incluyen la configuración del motor
    * de colas en la propiedad "queue". Si esta propiedad está presente, se inicializará el módulo de colas.
@@ -745,25 +784,71 @@ export class FastifyKit {
     allControllers: Constructor[],
     allProviders: { token: any; implementation: Constructor }[],
   ) {
-    // Guardamos la configuración del motor de BackgroundJobs en el ConfigRegistry
+    // Guardamos la configuración del motor de BackgroundJobs en el InternalConfig
     const queueConfig: QueueOptions = options.queue || {
       strategy: "in-process",
     };
 
-    ConfigRegistry.set("queue_user_config", queueConfig);
+    // Guardamos la configuración de colas en el InternalConfig
+    InternalConfig.set("queue", queueConfig);
 
     if (!options.queue) return;
 
     // Lazy-loading para no cargar nada relacionado con colas si el usuario no ha configurado la opción de queue
     const { QueueRegistry } = await import("../queues/QueueRegistry.js");
     const { QueueManager } = await import("../queues/QueueManager.js");
-    const { getQueueAdapter } = await import("../queues/queue.factory.js");
 
-    // Invocamos la Factory para resolver el Adaptador (In-Process o WorkerPool)
+    // Importamos el token de forma dinámica para mantener el lazy loading
+    const adapterInterfaces =
+      await import("../queues/interfaces/QueueAdapter.js");
+    const ADAPTER_TOKEN = adapterInterfaces.QUEUE_ADAPTER_TOKEN;
+    // Invocamos la Factory para resolver el Adaptador (In-Process, WorkerPool o Redis) según la configuración del usuario.
     // Esto registra automáticamente el QUEUE_ADAPTER_TOKEN en el contenedor (En caso de no tener una impl custom)
-    getQueueAdapter();
+    await this.registerQueueAdapter(ADAPTER_TOKEN, allProviders);
 
     // Registramos el QueueManager en el contenedor para que sea inyectable
+    await this.registerQueueManager(QueueManager, allProviders);
+
+    // Registrar configuración específica según la estrategia
+    await this.registerQueueStrategySpecificServices(
+      options,
+      queueConfig,
+      allProviders,
+    );
+
+    // Escaneamos para buscar todos los Procesadores
+    await this.registerQueueProcessors(
+      allControllers,
+      allProviders,
+      QueueRegistry,
+    );
+  }
+
+  /**
+   * @description Registra el adaptador de colas en el contenedor y en la lista de proveedores.
+   */
+  private static async registerQueueAdapter(
+    ADAPTER_TOKEN: symbol | string,
+    allProviders: { token: any; implementation: Constructor }[],
+  ): Promise<void> {
+    const { getQueueAdapter } = await import("../queues/queue.factory.js");
+    const adapter_instance = getQueueAdapter();
+
+    if (!allProviders.some((p) => p.token === ADAPTER_TOKEN)) {
+      allProviders.push({
+        token: ADAPTER_TOKEN,
+        implementation: adapter_instance.constructor as Constructor,
+      });
+    }
+  }
+
+  /**
+   * @description Registra el QueueManager en el contenedor y en la lista de proveedores.
+   */
+  private static async registerQueueManager(
+    QueueManager: Constructor,
+    allProviders: { token: any; implementation: Constructor }[],
+  ): Promise<void> {
     container.registerClass(QueueManager, QueueManager);
 
     // Lo añadimos a la lista de providers para asegurar su ciclo de vida
@@ -773,28 +858,121 @@ export class FastifyKit {
         implementation: QueueManager,
       });
     }
+  }
 
-    // Si el usuario ha elegido la estrategia de "worker-pool",
-    // registramos el WorkerPool y lo añadimos a los providers para que el scanner de lifecycle hooks lo tenga en cuenta.
+  /**
+   * @description Registra los servicios específicos según la estrategia de colas configurada.
+   */
+  private static async registerQueueStrategySpecificServices(
+    options: FastifyKitOptions,
+    queueConfig: QueueOptions,
+    allProviders: { token: any; implementation: Constructor }[],
+  ): Promise<void> {
     if (queueConfig.strategy === "worker-pool") {
-      const { WorkerPool } = await import("../queues/workers/WorkerPool.js");
+      await this.registerWorkerPoolStrategy(allProviders);
+    } else if (queueConfig.strategy === "redis") {
+      await this.registerRedisStrategy(options, allProviders);
+    }
+  }
 
-      // Nos aseguramos de que esté en el contenedor
-      if (!container.has(WorkerPool)) {
-        container.registerClass(WorkerPool, WorkerPool);
-      }
+  /**
+   * @description Registra los servicios necesarios para la estrategia worker-pool.
+   */
+  private static async registerWorkerPoolStrategy(
+    allProviders: { token: any; implementation: Constructor }[],
+  ): Promise<void> {
+    const { WorkerPool } = await import("../queues/workers/WorkerPool.js");
 
-      // Lo empujamos a allProviders para que el scanner de ciclo de vida lo vea
-      if (!allProviders.some((p) => p.token === WorkerPool)) {
-        allProviders.push({
-          token: WorkerPool,
-          implementation: WorkerPool,
-        });
-      }
+    this.registerProvider(WorkerPool, allProviders);
+  }
+
+  /**
+   * @description Registra los servicios necesarios para la estrategia redis.
+   */
+  private static async registerRedisStrategy(
+    options: FastifyKitOptions,
+    allProviders: { token: any; implementation: Constructor }[],
+  ): Promise<void> {
+    if (!options.distributed?.features?.eventBus) {
+      console.error(
+        "\n❌ [FastifyKit Boot Error] Has activado la estrategia de colas 'redis', la cual requiere comunicación entre servidores para reportar los resultados de las tareas.",
+      );
+      console.error(
+        "Solución: Debes habilitar explícitamente el EventBus distribuido en tu configuración:",
+      );
+      console.error("distributed: { features: { eventBus: true } }\n");
+      process.exit(1);
     }
 
-    // Escaneamos para buscar todos los Procesadores
-    // Unimos controladores y proveedores para buscar clases decoradas (@Processor)
+    try {
+      const { QueueWorkerManager } =
+        await import("../queues/QueueWorkerManager.js");
+
+      this.registerProvider(QueueWorkerManager, allProviders);
+
+      const { WorkerPool } = await import("../queues/workers/WorkerPool.js");
+      this.registerProvider(WorkerPool, allProviders);
+    } catch (error) {
+      console.error(error);
+      console.error(
+        "[FastifyKit Boot Error] Has activado la estrategia de colas 'redis', pero faltan dependencias.",
+      );
+      console.error(
+        "Para usar esta característica avanzada, por favor instala 'bullmq' e 'ioredis':",
+      );
+      console.error("\nnpm install bullmq ioredis\n");
+      process.exit(1);
+    }
+  }
+
+  /**
+   * @description Registra el RedisEventBus en el contenedor y en la lista de proveedores.
+   */
+  private static async registerRedisEventBus(
+    allProviders: { token: any; implementation: Constructor }[],
+  ): Promise<void> {
+    const { RedisEventBus } = await import("../events/RedisEventBus.js");
+    const { EVENT_BUS_TOKEN } = await import("../events/EventBus.js");
+
+    if (!container.has(EVENT_BUS_TOKEN)) {
+      container.registerClass(EVENT_BUS_TOKEN, RedisEventBus);
+    }
+
+    if (!allProviders.some((p) => p.token === RedisEventBus)) {
+      allProviders.push({
+        token: RedisEventBus,
+        implementation: RedisEventBus,
+      });
+    }
+  }
+
+  /**
+   * @description Registra un proveedor en el contenedor y en la lista de proveedores.
+   */
+  private static registerProvider(
+    ProviderClass: Constructor,
+    allProviders: { token: any; implementation: Constructor }[],
+  ): void {
+    if (!container.has(ProviderClass)) {
+      container.registerClass(ProviderClass, ProviderClass);
+    }
+
+    if (!allProviders.some((p) => p.token === ProviderClass)) {
+      allProviders.push({
+        token: ProviderClass,
+        implementation: ProviderClass,
+      });
+    }
+  }
+
+  /**
+   * @description Escanea y registra todos los procesadores de colas encontrados.
+   */
+  private static async registerQueueProcessors(
+    allControllers: Constructor[],
+    allProviders: { token: any; implementation: Constructor }[],
+    QueueRegistry: any,
+  ): Promise<void> {
     const allClasses = [
       ...allControllers,
       ...allProviders.map((p) => p.implementation),
@@ -1115,7 +1293,7 @@ export class FastifyKit {
         })();
       };
 
-      // Guardamos el handler en el map para poder removerlo si es necesario
+      // Guardamos el handler en el map para poder removerlos si es necesario
       handlers.set(signal, handler);
       // Iniciamos el proceso de apagado llamando al handler una sola vez
       process.once(signal, handler);

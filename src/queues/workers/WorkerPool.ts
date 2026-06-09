@@ -1,8 +1,7 @@
 import os from "node:os";
 import { randomUUID } from "node:crypto";
 import { Worker } from "node:worker_threads";
-import { ConfigRegistry } from "../../config/ConfigRegistry.js";
-import { QueueOptions } from "../../core/interfaces/queue.interface.js";
+import { InternalConfig } from "../../config/InternalConfig.js";
 import {
   WorkerIncomingMessage,
   WorkerOutgoingMessage,
@@ -49,7 +48,7 @@ export class WorkerPool implements BeforeApplicationShutdown {
 
   constructor() {
     // Cargamos configuración global para el pool de workers
-    const config = ConfigRegistry.get<QueueOptions>("queue_user_config") || {};
+    const config = InternalConfig.get("queue") || {};
 
     // Aplicamos valores por defecto si no se proporcionan en la configuración
     this.poolSize = config.poolSize ?? Math.max(1, os.cpus().length - 1);
