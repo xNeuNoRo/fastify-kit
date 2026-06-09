@@ -16,7 +16,7 @@ import { FastifyKitMetadata } from "../http/decorators/types.js";
  *   \@Inject(DatabaseService) // Inyecta DatabaseService directamente
  *   private db!: DatabaseService;
  * }
- * @param contract El contrato (puede ser una clase concreta o abstracta) que se desea resolver e inyectar.
+ * @param contractOrResolver El contrato (puede ser una clase concreta o abstracta) que se desea resolver e inyectar o una función resolver.
  * @returns Una función que se ejecutará cada vez que se acceda al campo decorado, resolviendo la dependencia desde el contenedor de inyección de dependencias.
  */
 export function Inject<T>(

@@ -181,10 +181,14 @@ export function instantiate<T>(
       if (typeof method === "function") {
         const result = method.apply(instance);
         if (result instanceof Promise) {
-          result.catch((err) => {
-            throw new Error(
-              `[FastifyKit DI] Error fatal en @PostConstruct de ${Implementation.name}: ${err.message}`,
-            );
+          void result.catch((err) => {
+            // queueMicrotask es para evitar que el error se pierda en un contexto asíncrono,
+            // y así garantizar que se propague correctamente como un error no manejado si no se captura.
+            queueMicrotask(() => {
+              throw new Error(
+                `[FastifyKit DI] Error fatal en @PostConstruct de ${Implementation.name}: ${err.message}`,
+              );
+            });
           });
         }
       }
