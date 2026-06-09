@@ -11,6 +11,7 @@ import type { RouteDefinition } from "../routing/types.js";
 import type { Interceptor } from "../interceptors/Interceptor.js";
 import type { TSchema } from "@sinclair/typebox";
 import type { StaticAssetsOptions } from "../interfaces/static.interface.js";
+import type { Contract } from "../../container/DIContainer.js";
 import { QueueProcessorMetadata } from "../../queues/interfaces/queue-options.js";
 
 /**
@@ -118,6 +119,10 @@ export interface RateLimitOptions {
  * @description Interfaz que define la metadata compartida por todos los decoradores en FastifyKit. Esta metadata incluye información sobre los guardias a nivel de clase y de ruta, así como cualquier otra información común que pueda ser utilizada por diferentes tipos de decoradores (controladores, módulos, etc.). Esta interfaz se extiende en FastifyKitMetadata para incluir información específica de controladores, rutas, módulos, etc.
  */
 export type FastifyKitMetadata = DecoratorMetadata & {
+  injections?: {
+    propertyName: string | symbol;
+    contractOrResolver: Contract<unknown> | (() => Contract<unknown>);
+  }[]; // Metadata para inyecciones de dependencias con @Inject
   parameters?: Record<string | symbol, ParameterMetadata[]>; // Metadata de parámetros, mapeada por el nombre del método
   routes?: RouteDefinition[]; // Para almacenar información de rutas a nivel de método (método HTTP, path, etc.)
   prefix?: string; // Para controladores, el prefijo de ruta (Ej: "books" para rutas como "/books", "/books/:id", etc.)

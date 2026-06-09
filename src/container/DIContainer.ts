@@ -4,12 +4,21 @@ export type Contract<T> =
   | (abstract new (...args: any[]) => T)
   | symbol;
 
+/**
+ * @description Symbol para acceder a la metadata
+ */
+const metadataSymbol: symbol =
+  (Symbol as any).metadata ?? Symbol.for("Symbol.metadata");
+
 class DIContainer {
   private readonly registry = new Map<
     Contract<unknown>, // El contrato (puede ser una clase concreta o abstracta)
     new (...args: any[]) => unknown // El constructor de la clase concreta que implementa el contrato
   >();
   private readonly instances = new Map<Contract<unknown>, unknown>();
+
+  // Stack de resolución actual para detectar dependencias circulares.
+  private readonly resolutionStack = new Set<Contract<any>>();
 
   /**
    * @description Registra una implementación concreta para un contrato específico en el contenedor de inyección de dependencias.
@@ -38,32 +47,130 @@ class DIContainer {
   }
 
   resolve<T>(contract: Contract<T>): T {
-    // Verificamos si ya existe una instancia para el contrato solicitado
-    if (this.instances.has(contract)) {
-      return this.instances.get(contract) as T;
-    }
+    // Verificamos si ya existe una instancia registrada para
+    // este contrato para asi evitar resolverlo de nuevo
+    const existing = this.instances.get(contract);
+    if (existing !== undefined) return existing as T;
 
-    // Si no existe una instancia, verificamos si hay una implementación registrada para el contrato
+    // Buscamos la implementación
     const Implementation = this.registry.get(contract);
+
+    // Si no está registrada pero es una clase, intentamos registrarla on-the-fly
     if (!Implementation) {
       // Si el contrato es una clase concreta (no abstracta), intentamos instanciarlo directamente sin registro previo
       if (typeof contract === "function") {
-        // Creamos una nueva instancia de la clase concreta y la almacenamos en el contenedor para futuras resoluciones
-        const instance = new (contract as any)();
-        this.instances.set(contract, instance);
-        return instance as T;
+        return this.instantiate(contract as any, contract as any);
       }
       throw new Error(
         `No se ha registrado una implementación para el contrato: ${String(contract)}`,
       );
     }
 
-    // Creamos una nueva instancia de la implementación concreta
-    const instance = new Implementation();
-    // Almacenamos la instancia creada en el contenedor para futuras resoluciones
-    this.instances.set(contract, instance);
-    // Devolvemos la instancia creada
-    return instance as T;
+    return this.instantiate(contract, Implementation) as T;
+  }
+
+  /**
+   * @description Crea la instancia y gestiona el ciclo de vida de resolución.
+   */
+  private instantiate<T>(
+    contract: Contract<T>,
+    Implementation: new (...args: any[]) => T,
+  ): T {
+    // Prevenimos recursion infinita en el constructor (aunque con @Inject ya no debería pasar)
+    if (this.resolutionStack.has(contract)) {
+      throw new Error(
+        `Dependencia circular detectada en el constructor de ${String(contract)}. ` +
+          `Usa @Inject() para inyecciones circulares.`,
+      );
+    }
+
+    this.resolutionStack.add(contract);
+
+    try {
+      // Creamos la instancia. Los campos se inicializan con sus valores por defecto aquí.
+      const instance = new Implementation();
+
+      // Aplicamos las inyecciones de la metadata
+      this.applyInjections(instance, Implementation);
+
+      // Guardamos en el map de instancias
+      this.instances.set(contract, instance);
+
+      return instance;
+    } finally {
+      this.resolutionStack.delete(contract);
+    }
+  }
+
+  /**
+   * @description Analiza la metadata e inyecta las dependencias.
+   */
+  private applyInjections(instance: any, ClassDefinition: any): void {
+    const metadata = ClassDefinition[metadataSymbol];
+    if (!metadata?.injections) return;
+
+    for (const injection of metadata.injections) {
+      const { propertyName, contractOrResolver } = injection;
+
+      // Resolvemos el contrato (soporta forward references)
+      // forward reference: quiere decir que el contrato a resolver puede ser una función que retorna el contrato real,
+      // lo cual es útil para resolver dependencias circulares sin necesidad de usar @Inject en el campo.
+      const getTargetContract = () =>
+        typeof contractOrResolver === "function" &&
+        !contractOrResolver.prototype
+          ? (contractOrResolver as Function)()
+          : contractOrResolver;
+
+      const targetContract = getTargetContract();
+
+      // SI la dependencia está actualmente en el stack de resolución,
+      // significa que hay un ciclo. Debemos usar un Lazy Getter para romperlo.
+      if (this.resolutionStack.has(targetContract)) {
+        this.defineLazyGetter(instance, propertyName, getTargetContract);
+      } else {
+        // Si no hay ciclo, inyectamos AHORA.
+        // Esto hace que la inyección sea inmediata y
+        // no tenga la sobrecarga de un getter, lo cual es mejor para el rendimiento.
+        instance[propertyName] = this.resolve(targetContract);
+      }
+    }
+  }
+
+  /**
+   * @description Define un getter perezoso que se auto-optimiza al primer acceso.
+   */
+  private defineLazyGetter(
+    instance: any,
+    propertyName: string | symbol,
+    getContract: () => Contract<any>,
+  ): void {
+    Object.defineProperty(instance, propertyName, {
+      get: () => {
+        const contract = getContract();
+        const resolvedInstance = this.resolve(contract);
+
+        // Sobrescribimos con el valor real
+        Object.defineProperty(instance, propertyName, {
+          value: resolvedInstance,
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+
+        return resolvedInstance;
+      },
+      set: (value: any) => {
+        if (value === undefined) return;
+        Object.defineProperty(instance, propertyName, {
+          value,
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+      },
+      configurable: true,
+      enumerable: true,
+    });
   }
 
   /**

@@ -18,7 +18,8 @@ export function CommandHandler(commandClass: Constructor) {
       );
     }
 
-    (context.metadata as FastifyKitMetadata).cqrsHandler = true;
+    const metadata = context.metadata as FastifyKitMetadata;
+    metadata.cqrsHandler = true;
 
     const token = getCqrsHandlerToken(commandClass);
     container.registerClass(token, target);
@@ -40,7 +41,8 @@ export function QueryHandler(queryClass: Constructor) {
       );
     }
 
-    (context.metadata as FastifyKitMetadata).cqrsHandler = true;
+    const metadata = context.metadata as FastifyKitMetadata;
+    metadata.cqrsHandler = true;
 
     const token = getCqrsHandlerToken(queryClass);
     container.registerClass(token, target);
