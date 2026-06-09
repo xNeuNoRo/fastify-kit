@@ -1,3 +1,5 @@
+import { requestContext } from "../http/context/requestContext.js";
+
 // El contrato puede ser una clase concreta o una clase abstracta.
 export type Contract<T> =
   | (new (...args: any[]) => T)
@@ -67,9 +69,32 @@ class DIContainer {
       const metadata = (Implementation as any)[metadataSymbol];
       const scope = metadata?.scope ?? Scope.Singleton;
 
-      // Si el scope es Transient, ignoramos el caché y fabricamos una instancia nueva siempre
+      // --- MANEJO DE SCOPES DINÁMICOS ---
+
+      // Scope Transient (Siempre instancia nueva)
       if (scope === Scope.Transient) {
         return this.instantiate(contract, Implementation) as T;
+      }
+
+      // Scope Request (Instancia por cada petición HTTP)
+      if (scope === Scope.Request) {
+        const store = requestContext.getStore();
+        if (!store) {
+          throw new Error(
+            `[FastifyKit DI] No se puede resolver el contrato ${String(contract)} con scope 'Request' fuera de un contexto de petición HTTP.`,
+          );
+        }
+
+        // Inicializamos el mapa de instancias si no existe
+        store.diInstances = store.diInstances || new Map();
+
+        const existingReqInstance = store.diInstances.get(contract);
+        if (existingReqInstance !== undefined) return existingReqInstance as T;
+
+        // Si no existe, la creamos y la guardamos en el store de la petición
+        const instance = this.instantiate(contract, Implementation) as T;
+        store.diInstances.set(contract, instance);
+        return instance;
       }
     }
 
@@ -81,13 +106,8 @@ class DIContainer {
     if (!Implementation) {
       // Si el contrato es una clase concreta (no abstracta), intentamos instanciarlo directamente sin registro previo
       if (typeof contract === "function") {
-        // En auto-descubrimiento, primero instanciamos para ver si la clase tiene metadata de scope
-        const instance = this.instantiate(contract as any, contract as any);
-
-        // Si después de instanciar vemos que tiene un scope Singleton, la guardamos
-        // (instantiate ya aplica las inyecciones pero no guarda en 'instances' si el scope es dinámico)
-        // Para auto-descubrimiento el default siempre es Singleton a menos que se use @Scope
-        return instance as T;
+        // En auto-descubrimiento, delegamos a instantiate
+        return this.instantiate(contract as any, contract as any) as T;
       }
       throw new Error(
         `No se ha registrado una implementación para el contrato: ${String(contract)}`,

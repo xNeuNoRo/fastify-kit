@@ -2,6 +2,8 @@ import { AlsStore } from "./AlsStore.js";
 
 export interface RequestContext {
   requestId: string;
+  /** Mapa interno para almacenar instancias de Request Scope en el DI Container */
+  diInstances?: Map<any, any>;
 }
 
 /**
