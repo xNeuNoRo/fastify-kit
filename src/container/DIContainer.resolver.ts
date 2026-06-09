@@ -1,4 +1,4 @@
-import { type Contract, DIContainer, Scope } from "./DIContainer.js";
+import { type Contract, DIContainer, ScopeType } from "./DIContainer.js";
 import { requestContext } from "../http/context/requestContext.js";
 
 /**
@@ -15,14 +15,14 @@ export function resolveFactory<T>(
   contract: Contract<T>,
   factoryEntry: {
     factory: (container: DIContainer) => T;
-    scope: Scope;
+    scope: ScopeType;
   },
 ): T {
   const { factory, scope } = factoryEntry;
 
-  if (scope === Scope.Transient) return factory(this);
+  if (scope === ScopeType.Transient) return factory(this);
 
-  if (scope === Scope.Request) {
+  if (scope === ScopeType.Request) {
     return resolveFactoryRequest.call(this, contract, factory) as T;
   }
 
@@ -78,13 +78,13 @@ export function resolveByScope<T>(
   Implementation: new (...args: any[]) => T,
 ): T {
   const metadata = (Implementation as any)[metadataSymbol];
-  const scope = metadata?.scope ?? Scope.Singleton;
+  const scope = metadata?.scope ?? ScopeType.Singleton;
 
-  if (scope === Scope.Transient) {
+  if (scope === ScopeType.Transient) {
     return instantiate.call(this, contract, Implementation) as T;
   }
 
-  if (scope === Scope.Request) {
+  if (scope === ScopeType.Request) {
     return resolveScopeRequest.call(this, contract, Implementation) as T;
   }
 
@@ -195,9 +195,9 @@ export function instantiate<T>(
     }
 
     // Verificamos el scope antes de guardar en el mapa de instancias (Singleton)
-    const scope = metadata?.scope ?? Scope.Singleton;
+    const scope = metadata?.scope ?? ScopeType.Singleton;
 
-    if (scope === Scope.Singleton) {
+    if (scope === ScopeType.Singleton) {
       (this as any).instances.set(contract, instance);
     }
 

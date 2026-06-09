@@ -13,7 +13,7 @@ export type Contract<T> =
 /**
  * @description Define los tipos de ciclo de vida (scope) de una instancia en el contenedor.
  */
-export enum Scope {
+export enum ScopeType {
   /** Una sola instancia para toda la aplicación (Por defecto) */
   Singleton = 0,
   /** Una instancia nueva cada vez que se solicita */
@@ -30,7 +30,7 @@ export class DIContainer {
   private readonly instances = new Map<Contract<unknown>, unknown>();
   private readonly factories = new Map<
     Contract<unknown>,
-    { factory: (container: DIContainer) => unknown; scope: Scope }
+    { factory: (container: DIContainer) => unknown; scope: ScopeType }
   >();
 
   // Stack de resolución actual para detectar dependencias circulares.
@@ -63,7 +63,7 @@ export class DIContainer {
   registerFactory<T>(
     contract: Contract<T>,
     factory: (container: DIContainer) => T,
-    scope: Scope = Scope.Singleton,
+    scope: ScopeType = ScopeType.Singleton,
   ): void {
     this.instances.delete(contract);
     this.registry.delete(contract);

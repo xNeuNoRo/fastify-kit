@@ -1,4 +1,4 @@
-import { Scope } from "./DIContainer.js";
+import { ScopeType } from "./DIContainer.js";
 import type { FastifyKitMetadata } from "../http/decorators/types.js";
 
 /**
@@ -11,7 +11,7 @@ import type { FastifyKitMetadata } from "../http/decorators/types.js";
  * @returns Una función que se ejecutará al definir la clase, asignando el scope
  * para que el contenedor DI pueda gestionarlo correctamente.
  */
-export function ScopeDecorator(scope: Scope) {
+export function Scope(scope: ScopeType) {
   return function <T, Args extends any[]>(
     _ClassDefinition: new (...args: Args) => T,
     context: ClassDecoratorContext<new (...args: Args) => T>,
@@ -24,5 +24,3 @@ export function ScopeDecorator(scope: Scope) {
     metadata.scope = scope;
   };
 }
-
-export { ScopeDecorator as Scope };
