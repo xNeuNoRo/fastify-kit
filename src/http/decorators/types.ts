@@ -11,7 +11,7 @@ import type { RouteDefinition } from "../routing/types.js";
 import type { Interceptor } from "../interceptors/Interceptor.js";
 import type { TSchema } from "@sinclair/typebox";
 import type { StaticAssetsOptions } from "../interfaces/static.interface.js";
-import type { Contract } from "../../container/DIContainer.js";
+import type { Contract, Scope } from "../../container/DIContainer.js";
 import { QueueProcessorMetadata } from "../../queues/interfaces/queue-options.js";
 
 /**
@@ -141,4 +141,5 @@ export type FastifyKitMetadata = DecoratorMetadata & {
   staticAssets?: StaticAssetsOptions; // Opciones para servir archivos estáticos a nivel de clase
   queue?: QueueProcessorMetadata; // Metadata para procesadores de colas a nivel de clase
   cqrsHandler?: boolean; // Indicador de que esta clase es un handler CQRS (Command, Query o Event Handler)
+  scope?: Scope; // Ciclo de vida de la clase en el contenedor DI
 };

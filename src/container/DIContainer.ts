@@ -5,6 +5,18 @@ export type Contract<T> =
   | symbol;
 
 /**
+ * @description Define los tipos de ciclo de vida (scope) de una instancia en el contenedor.
+ */
+export enum Scope {
+  /** Una sola instancia para toda la aplicación (Por defecto) */
+  Singleton = 0,
+  /** Una instancia nueva cada vez que se solicita */
+  Transient = 1,
+  /** Una instancia nueva por cada petición HTTP */
+  Request = 2,
+}
+
+/**
  * @description Symbol para acceder a la metadata
  */
 const metadataSymbol: symbol =
@@ -47,19 +59,35 @@ class DIContainer {
   }
 
   resolve<T>(contract: Contract<T>): T {
-    // Verificamos si ya existe una instancia registrada para
-    // este contrato para asi evitar resolverlo de nuevo
+    // Buscamos la implementación para verificar el scope
+    const Implementation = this.registry.get(contract);
+
+    // Si la implementación existe, verificamos su scope en la metadata
+    if (Implementation) {
+      const metadata = (Implementation as any)[metadataSymbol];
+      const scope = metadata?.scope ?? Scope.Singleton;
+
+      // Si el scope es Transient, ignoramos el caché y fabricamos una instancia nueva siempre
+      if (scope === Scope.Transient) {
+        return this.instantiate(contract, Implementation) as T;
+      }
+    }
+
+    // Para Singleton (por defecto), verificamos si ya existe una instancia resuelta
     const existing = this.instances.get(contract);
     if (existing !== undefined) return existing as T;
 
-    // Buscamos la implementación
-    const Implementation = this.registry.get(contract);
-
-    // Si no está registrada pero es una clase, intentamos registrarla on-the-fly
+    // Si no hay implementación registrada, intentamos el auto-descubrimiento (si es una clase)
     if (!Implementation) {
       // Si el contrato es una clase concreta (no abstracta), intentamos instanciarlo directamente sin registro previo
       if (typeof contract === "function") {
-        return this.instantiate(contract as any, contract as any);
+        // En auto-descubrimiento, primero instanciamos para ver si la clase tiene metadata de scope
+        const instance = this.instantiate(contract as any, contract as any);
+
+        // Si después de instanciar vemos que tiene un scope Singleton, la guardamos
+        // (instantiate ya aplica las inyecciones pero no guarda en 'instances' si el scope es dinámico)
+        // Para auto-descubrimiento el default siempre es Singleton a menos que se use @Scope
+        return instance as T;
       }
       throw new Error(
         `No se ha registrado una implementación para el contrato: ${String(contract)}`,
@@ -93,8 +121,13 @@ class DIContainer {
       // Aplicamos las inyecciones de la metadata
       this.applyInjections(instance, Implementation);
 
-      // Guardamos en el map de instancias
-      this.instances.set(contract, instance);
+      // Verificamos el scope antes de guardar en el mapa de instancias
+      const metadata = (Implementation as any)[metadataSymbol];
+      const scope = metadata?.scope ?? Scope.Singleton;
+
+      if (scope === Scope.Singleton) {
+        this.instances.set(contract, instance);
+      }
 
       return instance;
     } finally {
