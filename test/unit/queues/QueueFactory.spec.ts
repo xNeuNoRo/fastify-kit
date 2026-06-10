@@ -15,7 +15,7 @@ describe("QueueFactory (getQueueAdapter)", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
-  it("Debería registrar e inyectar DefaultInProcessAdapter si no hay configuración explícita", () => {
+  it("Debería registrar e inyectar DefaultInProcessAdapter si no hay configuración explícita", async () => {
     // Simulamos que el usuario no pasó configuración o pasó un objeto vacío
     const getSpy = vi.spyOn(InternalConfig, "get").mockReturnValue({});
 
@@ -31,7 +31,7 @@ describe("QueueFactory (getQueueAdapter)", () => {
     vi.spyOn(container, "resolve").mockReturnValue(dummyInProcess);
 
     // Ejecutamos la factory
-    const adapter = getQueueAdapter();
+    const adapter = await getQueueAdapter();
 
     // Validamos que tomó la decisión correcta
     expect(getSpy).toHaveBeenCalledWith("queue");
@@ -42,7 +42,7 @@ describe("QueueFactory (getQueueAdapter)", () => {
     expect(adapter).toBe(dummyInProcess);
   });
 
-  it("Debería registrar e inyectar LocalWorkerAdapter si la estrategia es 'worker-pool'", () => {
+  it("Debería registrar e inyectar LocalWorkerAdapter si la estrategia es 'worker-pool'", async () => {
     // Simulamos que el usuario pidió explícitamente el motor multihilo
     vi.spyOn(InternalConfig, "get").mockReturnValue({
       strategy: "worker-pool",
@@ -57,7 +57,7 @@ describe("QueueFactory (getQueueAdapter)", () => {
     const dummyWorkerAdapter = { dispatch: vi.fn() };
     vi.spyOn(container, "resolve").mockReturnValue(dummyWorkerAdapter);
 
-    const adapter = getQueueAdapter();
+    const adapter = await getQueueAdapter();
 
     expect(registerSpy).toHaveBeenCalledWith(
       QUEUE_ADAPTER_TOKEN,
@@ -66,7 +66,7 @@ describe("QueueFactory (getQueueAdapter)", () => {
     expect(adapter).toBe(dummyWorkerAdapter);
   });
 
-  it("No debería registrar nada si ya existe un adaptador en el contenedor (Custom Adapter)", () => {
+  it("No debería registrar nada si ya existe un adaptador en el contenedor (Custom Adapter)", async () => {
     // Simulamos que el usuario inyectó su propio adaptador (ej. RedisQueueAdapter) en su @Module
     vi.spyOn(container, "has").mockImplementation(
       (token) => token === QUEUE_ADAPTER_TOKEN,
@@ -76,7 +76,7 @@ describe("QueueFactory (getQueueAdapter)", () => {
     const customAdapter = { dispatch: vi.fn() };
     vi.spyOn(container, "resolve").mockReturnValue(customAdapter);
 
-    const adapter = getQueueAdapter();
+    const adapter = await getQueueAdapter();
 
     // Validamos que la factory respeta el adaptador del usuario y no sobrescribe nada
     expect(registerSpy).not.toHaveBeenCalled();

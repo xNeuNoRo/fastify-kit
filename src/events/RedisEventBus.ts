@@ -110,8 +110,8 @@ export class RedisEventBus
       super.emit(eventName, payload);
     }
 
-    // Si solo era local, retornamos aquí para evitar propagar a Redis.
-    if (target === "local") return;
+    // Si solo era local o dirigido a esta instancia, retornamos aquí para evitar propagar a Redis.
+    if (target === "local" || target === this.instanceId) return;
 
     // Propagamos via Redis (Global o Dirigida) detectando si hay instancias de Buffer para codificarlas a Base64
     const message = JSON.stringify(

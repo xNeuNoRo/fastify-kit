@@ -2,7 +2,6 @@ import { Queue } from "bullmq";
 import { container } from "../../container/DIContainer.js";
 import { REDIS_CONNECTION_TOKEN } from "../../distributed/redis.factory.js";
 import type { QueueAdapter } from "../interfaces/QueueAdapter.js";
-import { getLogger } from "../../logger/logger.factory.js";
 import { BeforeApplicationShutdown } from "../../core/interfaces/lifecycle.interface.js";
 
 /**
@@ -12,7 +11,6 @@ import { BeforeApplicationShutdown } from "../../core/interfaces/lifecycle.inter
  */
 export class BullMQAdapter implements QueueAdapter, BeforeApplicationShutdown {
   private readonly queues = new Map<string, Queue>();
-  private readonly logger = getLogger();
 
   /**
    * @description Obtiene la conexión compartida de Redis desde el contenedor.
@@ -36,7 +34,13 @@ export class BullMQAdapter implements QueueAdapter, BeforeApplicationShutdown {
       removeOnFail: false,
     });
 
-    return job.id || "";
+    if (job.id === undefined || job.id === null) {
+      throw new Error(
+        `[FastifyKit BullMQAdapter] BullMQ no retornó un job.id válido para la cola '${queueName}'.`,
+      );
+    }
+
+    return String(job.id);
   }
 
   /**

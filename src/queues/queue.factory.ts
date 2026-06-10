@@ -6,18 +6,20 @@ import {
 import { LocalWorkerAdapter } from "./adapters/LocalWorkerAdapter.js";
 import { InternalConfig } from "../config/InternalConfig.js";
 import { DefaultInProcessAdapter } from "./adapters/DefaultInProcessAdapter.js";
-import { BullMQAdapter } from "./adapters/BullMQAdapter.js";
 
 /**
  * @description Factory para obtener el adaptador de colas activo.
  * Intenta resolverlo desde el contenedor (por si implementas un RedisAdapter u otro custom).
  * Si no hay ninguno, evalúa las opciones para decidir el mejor default.
  */
-export function getQueueAdapter(): QueueAdapter {
+export async function getQueueAdapter(): Promise<QueueAdapter> {
   if (!container.has(QUEUE_ADAPTER_TOKEN)) {
     const config = InternalConfig.get("queue") || {};
 
     if (config.strategy === "redis") {
+      // Importación dinámica de BullMQAdapter para no forzar la dependencia de 'bullmq'
+      // a menos que sea estrictamente necesario.
+      const { BullMQAdapter } = await import("./adapters/BullMQAdapter.js");
       container.registerClass(QUEUE_ADAPTER_TOKEN, BullMQAdapter);
     } else if (config.strategy === "worker-pool") {
       container.registerClass(QUEUE_ADAPTER_TOKEN, LocalWorkerAdapter);

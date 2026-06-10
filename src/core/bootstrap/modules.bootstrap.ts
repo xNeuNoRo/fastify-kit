@@ -156,9 +156,12 @@ export async function initializeDistributedModule(
   if (!distributed?.redis) return;
 
   // Registramos la conexión centralizada de Redis
-  const { registerRedisConnection } =
+  const { registerRedisConnection, RedisConnectionManager } =
     await import("../../distributed/redis.factory.js");
   registerRedisConnection();
+
+  // Registramos el gestor de cierre de conexión para el ciclo de vida
+  registerProvider(RedisConnectionManager, allProviders);
 
   if (distributed.features?.eventBus) {
     try {
@@ -185,7 +188,7 @@ export async function registerQueueAdapter(
   allProviders: { token: any; implementation: Constructor }[],
 ): Promise<void> {
   const { getQueueAdapter } = await import("../../queues/queue.factory.js");
-  const adapter_instance = getQueueAdapter();
+  const adapter_instance = await getQueueAdapter();
 
   if (!allProviders.some((p) => p.token === ADAPTER_TOKEN)) {
     allProviders.push({
@@ -224,9 +227,10 @@ export async function registerQueueStrategySpecificServices(
   if (queueConfig.strategy === "worker-pool") {
     await registerWorkerPoolStrategy(allProviders);
   } else if (queueConfig.strategy === "redis") {
-    const { registerRedisConnection } =
+    const { registerRedisConnection, RedisConnectionManager } =
       await import("../../distributed/redis.factory.js");
     registerRedisConnection();
+    registerProvider(RedisConnectionManager, allProviders);
     await registerRedisStrategy(options, allProviders);
   }
 }
@@ -294,9 +298,13 @@ export async function registerRedisEventBus(
     container.registerClass(EVENT_BUS_TOKEN, RedisEventBus);
   }
 
-  if (!allProviders.some((p) => p.token === RedisEventBus)) {
+  if (!container.has(RedisEventBus)) {
+    container.registerFactory(RedisEventBus, (c) => c.resolve(EVENT_BUS_TOKEN));
+  }
+
+  if (!allProviders.some((p) => p.token === EVENT_BUS_TOKEN)) {
     allProviders.push({
-      token: RedisEventBus,
+      token: EVENT_BUS_TOKEN,
       implementation: RedisEventBus,
     });
   }

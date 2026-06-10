@@ -294,6 +294,14 @@ export class FastifyKit {
     // pasando la señal recibida para que las instancias puedan realizar tareas de limpieza
     // o sacar el nodo de un Load Balancer antes de que deje de aceptar nuevas peticiones.
     app.addHook("onClose", async () => {
+      // Primero ejecutamos el hook "before" para limpieza de infraestructura
+      await executeLifecycleHook(
+        lifecycleInstances,
+        "beforeApplicationShutdown",
+        receivedSignal,
+      );
+
+      // Luego el hook final de apagado
       await executeLifecycleHook(
         lifecycleInstances,
         "onApplicationShutdown",
@@ -302,8 +310,8 @@ export class FastifyKit {
     });
 
     // Configuración para interceptar SIGTERM/SIGINT antes de que Fastify cierre el servidor,
-    // para ejecutar el hook beforeApplicationShutdown en ese momento.
-    setupGracefulShutdown(app, lifecycleInstances, (signal) => {
+    // Esto disparará app.close() que a su vez ejecutará los hooks de arriba.
+    setupGracefulShutdown(app, (signal) => {
       receivedSignal = signal;
     });
 

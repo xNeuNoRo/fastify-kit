@@ -85,7 +85,6 @@ export async function executeLifecycleHook(
  */
 export function setupGracefulShutdown(
   app: FastifyInstance<any, any, any, any, TypeBoxTypeProvider>,
-  instances: Set<object>,
   onSignalReceived: (signal: string) => void,
 ): void {
   // Guardamos las señales que queremos escuchar para el apagado
@@ -102,16 +101,11 @@ export function setupGracefulShutdown(
           // Pasamos la señal recibida al callback
           onSignalReceived(signal);
 
-          // Ejecutamos el hook beforeApplicationShutdown en las instancias que lo implementen, pasando la señal como argumento para que puedan realizar tareas de limpieza o sacar el nodo de un Load Balancer antes de que el servidor deje de aceptar nuevas peticiones.
-          await executeLifecycleHook(
-            instances,
-            "beforeApplicationShutdown",
-            signal,
-          );
-
-          // Finalmente cerramos la instancia de Fastify
+          // Cerramos la app. Esto disparará los hooks onClose registrados
+          // en FastifyKit.ts (que ejecutan beforeApplicationShutdown y onApplicationShutdown).
           await app.close();
-          // Si el cierre es exitoso, salimos del proceso con código 0
+
+          // Una vez cerrada la app y ejecutados los hooks, salimos del proceso
           process.exit(0);
         } catch (error) {
           console.error(
@@ -129,7 +123,8 @@ export function setupGracefulShutdown(
     process.once(signal, handler);
   }
 
-  // Removemos los listeners de las signals cuando la app se cierre para evitar memory leaks en caso de reinicios o cierres múltiples (mas que nada en tests)
+  // Removemos los listeners de las signals cuando la app se cierre
+  // para evitar memory leaks en caso de reinicios o cierres múltiples
   app.addHook("onClose", async () => {
     for (const [signal, handler] of handlers.entries()) {
       process.removeListener(signal, handler);
