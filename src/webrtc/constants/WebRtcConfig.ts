@@ -8,7 +8,7 @@ import type {
   RouterOptions,
 } from "mediasoup/types";
 import { IceServer } from "../interfaces/IceServer.js";
-import { ConfigRegistry } from "../../config/ConfigRegistry.js";
+import { InternalConfig } from "../../config/InternalConfig.js";
 import { FastifyKitWebRtcConfig } from "../../core/interfaces/webrtc.interface.js";
 
 /**
@@ -89,8 +89,7 @@ export const DEFAULT_SIMULCAST_ENCODINGS: RtpEncodingParameters[] = [
  * @description Obtiene las codificaciones de simulcast configuradas o las por defecto.
  */
 export const getSimulcastEncodings = (): RtpEncodingParameters[] => {
-  const config =
-    ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_user_config");
+  const config = InternalConfig.get("webrtc");
   return config?.simulcastEncodings || DEFAULT_SIMULCAST_ENCODINGS;
 };
 
@@ -111,8 +110,7 @@ export const DEFAULT_SCREEN_SHARING_ENCODINGS: RtpEncodingParameters[] = [
  * @description Obtiene las codificaciones para compartir pantalla configuradas o las por defecto.
  */
 export const getScreenSharingEncodings = (): RtpEncodingParameters[] => {
-  const config =
-    ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_user_config");
+  const config = InternalConfig.get("webrtc");
   return config?.screenSharingEncodings || DEFAULT_SCREEN_SHARING_ENCODINGS;
 };
 
@@ -138,12 +136,9 @@ export const DEFAULT_TRANSPORT_OPTIONS: Partial<WebRtcTransportOptions> = {
 /**
  * @description Configuración del Servidor WebRTC para compartir puertos.
  * announcedIp debe ser la IP pública real del servidor para que el handshake ICE funcione.
- * Estos valores se pueden sobrescribir dinámicamente a través del ConfigRegistry,
- * lo que permite una configuración flexible en diferentes entornos de despliegue sin necesidad de recompilar el código.
  */
 export const getWebRtcServerOptions = (): WebRtcServerOptions => {
-  const config =
-    ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_user_config") || {};
+  const config = InternalConfig.get("webrtc") || {};
 
   // Valores dinámicos con fallback a los defaults de siempre
   const listenIp = config.listenIp || "0.0.0.0";
@@ -189,8 +184,7 @@ export const DEFAULT_ICE_SERVERS: IceServer[] = [
  * Si el usuario no definió ninguno en FastifyKit.create(), devuelve los defaults.
  */
 export const getIceServers = (): IceServer[] => {
-  const config =
-    ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_user_config");
+  const config = InternalConfig.get("webrtc");
   // Si el usuario configuró servidores propios, los usamos; si no, los públicos de Google/Cloudflare
   return config?.iceServers || DEFAULT_ICE_SERVERS;
 };
@@ -215,8 +209,7 @@ export const DEFAULT_AUDIO_LEVEL_OBSERVER_OPTIONS: AudioLevelObserverOptions = {
  * @description Obtiene las opciones del observador de audio configuradas o las por defecto.
  */
 export const getAudioLevelObserverOptions = (): AudioLevelObserverOptions => {
-  const config =
-    ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_user_config");
+  const config = InternalConfig.get("webrtc");
   return (
     config?.audioLevelObserverOptions || DEFAULT_AUDIO_LEVEL_OBSERVER_OPTIONS
   );

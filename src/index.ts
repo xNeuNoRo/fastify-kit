@@ -1,10 +1,4 @@
-/**
- * Soporte para Stage 3 Decorators Metadata.
- * Garantiza que Symbol.metadata exista en el entorno de ejecución (Bun/Node/V8).
- */
-if ((Symbol as any).metadata === undefined) {
-  (Symbol as any).metadata = Symbol.for("Symbol.metadata");
-}
+import "./core/constants/symbols.js";
 
 // ----------------------------------------------
 // Core & Bootstrap
@@ -177,7 +171,9 @@ export {
   EVENT_BUS_TOKEN,
   type EventBusContract,
   DefaultEventBus,
+  type EmitOptions,
 } from "./events/EventBus.js";
+export { RedisEventBus } from "./events/RedisEventBus.js";
 export { getEventBus } from "./events/eventbus.factory.js";
 
 // ----------------------------------------------
@@ -194,11 +190,16 @@ export {
 // ----------------------------------------------
 
 export { Processor } from "./queues/decorators/processor.js";
+export { OnQueueSuccess } from "./queues/decorators/on-queue-success.js";
+export { OnQueueFailure } from "./queues/decorators/on-queue-failure.js";
 export { QueueManager } from "./queues/QueueManager.js";
+export { QueueEvents, type QueueJobEvent } from "./queues/interfaces/queue-events.js";
 export type { JobHandler } from "./queues/interfaces/JobHandler.js";
 export type { QueueOptions } from "./core/interfaces/queue.interface.js";
+export type { DistributedOptions } from "./core/interfaces/distributed.interface.js";
 export type { QueueType } from "./queues/interfaces/queue-options.js";
 
+export { REDIS_CONNECTION_TOKEN } from "./distributed/redis.factory.js";
 export { QUEUE_ADAPTER_TOKEN } from "./queues/interfaces/QueueAdapter.js";
 export type { QueueAdapter } from "./queues/interfaces/QueueAdapter.js";
 

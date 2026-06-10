@@ -30,8 +30,7 @@ import {
   WEBRTC_WORKER_LOAD_PAYLOAD,
 } from "../constants/WebRtcEvents.js";
 import { getEventBus } from "../../events/eventbus.factory.js";
-import { ConfigRegistry } from "../../config/ConfigRegistry.js";
-import { FastifyKitWebRtcConfig } from "../../core/interfaces/webrtc.interface.js";
+import { InternalConfig } from "../../config/InternalConfig.js";
 
 type WorkerAppData = {
   workerIndex: number;
@@ -60,8 +59,7 @@ export class AdvancedSfuRoomManager
   private readonly workerRoomBundles = new Map<number, Set<string>>();
   // Porcentaje de CPU a partir del cual consideramos que el sistema está saturado
   private readonly SATURATION_THRESHOLD =
-    ConfigRegistry.get<FastifyKitWebRtcConfig>("webrtc_user_config")
-      ?.saturationThreshold || 90;
+    InternalConfig.get("webrtc")?.saturationThreshold || 90;
 
   /**
    * @description Inicializa el gestor avanzado de salas SFU creando un pool de workers de mediasoup

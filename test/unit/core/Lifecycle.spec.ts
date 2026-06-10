@@ -85,7 +85,11 @@ describe("Ganchos de Ciclo de Vida (Lifecycle Hooks)", () => {
       executionOrder.push("onServerReady");
     }
     beforeApplicationShutdown(signal?: string) {
-      executionOrder.push(`beforeApplicationShutdown:${signal}`);
+      executionOrder.push(
+        signal
+          ? `beforeApplicationShutdown:${signal}`
+          : "beforeApplicationShutdown",
+      );
     }
     onApplicationShutdown() {
       executionOrder.push("onApplicationShutdown");
@@ -118,11 +122,13 @@ describe("Ganchos de Ciclo de Vida (Lifecycle Hooks)", () => {
     // Cerramos el servidor manualmente (ej. durante un test)
     await app.close();
 
-    // Al hacer app.close(), Fastify dispara su hook 'onClose' (Fase 5)
+    // Al hacer app.close(), Fastify dispara su hook 'onClose'
+    // Ahora ejecutamos siempre beforeApplicationShutdown y onApplicationShutdown
     expect(executionOrder).toEqual([
       "onModuleInit",
       "onApplicationBootstrap",
       "onServerReady",
+      "beforeApplicationShutdown",
       "onApplicationShutdown",
     ]);
   });
