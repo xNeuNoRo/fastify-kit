@@ -41,14 +41,18 @@ describe("Integración Sistema Distribuido (Redis)", () => {
   });
 
   let hasRedis = false;
+
   beforeAll(async () => {
     hasRedis = await isRedisAvailable();
+    if (!hasRedis) {
+      console.warn(
+        "[FastifyKit Redis Test] Saltando pruebas de integración distribuida (No se detectó un servidor local en 6379)",
+      );
+    }
   });
 
   it("Debería sincronizar eventos entre dos instancias independientes", async () => {
-    if (!hasRedis) {
-      return;
-    }
+    if (!hasRedis) return;
 
     container.clearAll();
     QueueRegistry.clear();
@@ -145,6 +149,77 @@ describe("Integración Sistema Distribuido (Redis)", () => {
     expect(finalResult.status).toBe("success");
     expect(finalResult.result.processed).toBe(true);
 
+    await app.close();
+  });
+
+  it("Debería sincronizar eventos entre dos apps FastifyKit reales (Multi-Instance)", async () => {
+    if (!hasRedis) return;
+
+    const { Worker } = await import("node:worker_threads");
+    const workerPath = path.resolve(
+      process.cwd(),
+      "test/integration/distributed/fixtures/SecondaryNode.ts",
+    );
+
+    // Iniciamos Instancia Secundaria en un hilo aparte (Aislamiento de Memoria/Container)
+    const secondaryNode = new Worker(workerPath);
+
+    // Esperamos a que el nodo secundario esté listo
+    await new Promise((resolve) => {
+      secondaryNode.on("message", (msg) => {
+        if (msg.type === "ready") resolve(true);
+      });
+    });
+
+    // Iniciamos Instancia Primaria en este hilo
+    container.clearAll();
+    QueueRegistry.clear();
+
+    @Module({})
+    class PrimaryModule {}
+
+    const app = await FastifyKit.create({
+      module: PrimaryModule,
+      distributed: {
+        redis: { host: "localhost", port: 6379 },
+        features: { eventBus: true },
+      },
+    });
+
+    const eventBus = container.resolve(RedisEventBus);
+
+    // Emitimos evento desde Primaria hacia Global
+    let eventReceivedBySecondary = false;
+    let receivedPayload: any = null;
+
+    secondaryNode.on("message", (msg) => {
+      if (msg.type === "event_received") {
+        eventReceivedBySecondary = true;
+        receivedPayload = msg.payload;
+      }
+    });
+
+    // Esperar un poco para que el bus de la instancia primaria se conecte
+    await new Promise((r) => setTimeout(r, 300));
+
+    eventBus.emit(
+      "distributed.sync.test",
+      { data: "from-primary" },
+      { target: "global" },
+    );
+
+    // Verificamos recepción en la otra instancia
+    let attempts = 0;
+    while (!eventReceivedBySecondary && attempts < 30) {
+      await new Promise((r) => setTimeout(r, 100));
+      attempts++;
+    }
+
+    expect(eventReceivedBySecondary).toBe(true);
+    expect(receivedPayload).toEqual({ data: "from-primary" });
+
+    // Cleanup
+    secondaryNode.postMessage("shutdown");
     await app.close();
   });
 });
