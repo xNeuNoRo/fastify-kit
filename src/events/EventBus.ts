@@ -14,6 +14,11 @@ type EventListener = (payload: any) => void | Promise<void>;
 
 // Interfaz que define el contrato para el EventBus
 export interface EventBusContract {
+  /**
+   * @description El identificador único de esta instancia de aplicación.
+   * En modo local será "local", en modo distribuido será un hash único generado al arranque.
+   */
+  readonly instanceId: string;
   emit(eventName: string, payload?: any, options?: EmitOptions): void;
   on(eventName: string, listener: EventListener): void;
   off(eventName: string, listener: EventListener): void;
@@ -31,7 +36,11 @@ class EventNode {
   public children = new Map<string, EventNode>();
 }
 
+/**
+ * @description Implementación por defecto del EventBus para uso local.
+ */
 export class DefaultEventBus implements EventBusContract {
+  public readonly instanceId = "local";
   private readonly root = new EventNode();
   private catchAllListeners: EventListener[] = [];
   private readonly maxListeners = 100;

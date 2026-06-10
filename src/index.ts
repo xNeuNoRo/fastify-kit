@@ -171,7 +171,9 @@ export {
   EVENT_BUS_TOKEN,
   type EventBusContract,
   DefaultEventBus,
+  type EmitOptions,
 } from "./events/EventBus.js";
+export { RedisEventBus } from "./events/RedisEventBus.js";
 export { getEventBus } from "./events/eventbus.factory.js";
 
 // ----------------------------------------------
@@ -191,8 +193,10 @@ export { Processor } from "./queues/decorators/processor.js";
 export { QueueManager } from "./queues/QueueManager.js";
 export type { JobHandler } from "./queues/interfaces/JobHandler.js";
 export type { QueueOptions } from "./core/interfaces/queue.interface.js";
+export type { DistributedOptions } from "./core/interfaces/distributed.interface.js";
 export type { QueueType } from "./queues/interfaces/queue-options.js";
 
+export { REDIS_CONNECTION_TOKEN } from "./distributed/redis.factory.js";
 export { QUEUE_ADAPTER_TOKEN } from "./queues/interfaces/QueueAdapter.js";
 export type { QueueAdapter } from "./queues/interfaces/QueueAdapter.js";
 
