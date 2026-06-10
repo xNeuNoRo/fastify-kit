@@ -3,6 +3,7 @@ import { container } from "../../container/DIContainer.js";
 import { REDIS_CONNECTION_TOKEN } from "../../distributed/redis.factory.js";
 import type { QueueAdapter } from "../interfaces/QueueAdapter.js";
 import { BeforeApplicationShutdown } from "../../core/interfaces/lifecycle.interface.js";
+import { EVENT_BUS_TOKEN, EventBusContract } from "../../events/EventBus.js";
 
 /**
  * @description Adaptador para BullMQ que permite el uso de colas distribuidas basadas en Redis.
@@ -29,7 +30,18 @@ export class BullMQAdapter implements QueueAdapter, BeforeApplicationShutdown {
       this.queues.set(queueName, queue);
     }
 
-    const job = await queue.add(queueName, payload, {
+    // Resolvemos el bus para obtener nuestro instanceId y poder recibir la respuesta dirigida
+    const eventBus = container.resolve<EventBusContract>(EVENT_BUS_TOKEN);
+
+    // Envolvemos el payload con metadata interna de FastifyKit
+    const wrappedPayload = {
+      _fk_metadata: {
+        sourceId: eventBus.instanceId,
+      },
+      data: payload,
+    };
+
+    const job = await queue.add(queueName, wrappedPayload, {
       removeOnComplete: true,
       removeOnFail: false,
     });

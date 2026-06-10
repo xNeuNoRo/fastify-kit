@@ -41,10 +41,20 @@ export class QueueWorkerManager
       const worker = new Worker(
         queueName,
         async (job) => {
-          // Delegamos la ejecución al WorkerPool local (hilos paralelos)
-          const result = await workerPool.execute(queueName, job.data);
+          // Extraemos metadata interna si existe, manteniendo compatibilidad con payloads antiguos
+          const rawData = job.data;
+          const isFkPayload =
+            rawData && typeof rawData === "object" && "_fk_metadata" in rawData;
 
-          // Emitimos un evento global con el resultado
+          const payload = isFkPayload ? rawData.data : rawData;
+          const sourceId = isFkPayload
+            ? rawData._fk_metadata?.sourceId
+            : "global";
+
+          // Delegamos la ejecución al WorkerPool local (hilos paralelos) con los datos limpios
+          const result = await workerPool.execute(queueName, payload);
+
+          // Emitimos un evento dirigido al servidor de origen (o global si no se conoce)
           const eventBus = getEventBus();
           eventBus.emit(
             `queue.${queueName}.done.${job.id}`,
@@ -54,7 +64,7 @@ export class QueueWorkerManager
               result,
               status: "success",
             },
-            { target: "global" },
+            { target: sourceId },
           );
 
           return result;
@@ -72,7 +82,11 @@ export class QueueWorkerManager
           err,
         );
 
-        // Emitimos evento global de error
+        // Extraemos sourceId para el fallo también
+        const rawData = job?.data;
+        const sourceId = rawData?._fk_metadata?.sourceId || "global";
+
+        // Emitimos evento de error dirigido
         const eventBus = getEventBus();
         eventBus.emit(
           `queue.${queueName}.failed.${job?.id}`,
@@ -82,7 +96,7 @@ export class QueueWorkerManager
             error: err.message,
             status: "failed",
           },
-          { target: "global" },
+          { target: sourceId },
         );
       });
 
