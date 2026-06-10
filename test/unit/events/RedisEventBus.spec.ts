@@ -1,32 +1,36 @@
+import * as ioredis from "ioredis";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { container } from "../../../src/container/DIContainer.js";
 import { REDIS_CONNECTION_TOKEN } from "../../../src/distributed/redis.factory.js";
 import { RedisEventBus } from "../../../src/events/RedisEventBus.js";
 
-// Mock de ioredis
-vi.mock("ioredis", () => {
-  return {
-    Redis: vi.fn().mockImplementation(() => ({
-      on: vi.fn(),
-      subscribe: vi.fn().mockResolvedValue(undefined),
-      publish: vi.fn().mockResolvedValue(1),
-      quit: vi.fn().mockResolvedValue("OK"),
-    })),
-  };
-});
-
 describe("RedisEventBus - Eventos Distribuidos (Unit Test)", () => {
   let bus: RedisEventBus;
   let mockPub: any;
+  let mockSub: any;
 
   beforeEach(() => {
     container.clearAll();
+
+    // Mock del cliente PUB
     mockPub = {
       publish: vi.fn().mockResolvedValue(1),
       on: vi.fn(),
+      quit: vi.fn().mockResolvedValue("OK"),
     };
     container.registerInstance(REDIS_CONNECTION_TOKEN, mockPub);
+
+    // Mock del cliente SUB
+    mockSub = {
+      subscribe: vi.fn().mockResolvedValue(undefined),
+      on: vi.fn(),
+      quit: vi.fn().mockResolvedValue("OK"),
+    };
+
+    // Usamos vi.spyOn para interceptar el constructor de Redis sin mockear el módulo globalmente.
+    vi.spyOn(ioredis, "Redis").mockImplementation(() => mockSub);
+
     bus = new RedisEventBus();
   });
 
@@ -78,7 +82,7 @@ describe("RedisEventBus - Eventos Distribuidos (Unit Test)", () => {
     bus.on("eco-test", listener);
 
     // Simulamos llegada de mensaje desde Redis
-    const onMessageCallback = (bus as any).sub.on.mock.calls.find(
+    const onMessageCallback = mockSub.on.mock.calls.find(
       (c: any) => c[0] === "message",
     )[1];
 
