@@ -15,7 +15,10 @@ export class RedisEventBus
   implements EventBusContract, BeforeApplicationShutdown
 {
   // ID unico de la instancia
-  public readonly instanceId = Math.random().toString(36).substring(7);
+  private readonly _instanceId = Math.random().toString(36).substring(7);
+  override get instanceId() {
+    return this._instanceId;
+  }
 
   // Funciones pub/sub de Redis para comunicación entre instancias
   private readonly pub: Redis;
@@ -145,7 +148,9 @@ export class RedisEventBus
    * @description Cierra las conexiones de Redis al detener la app
    */
   public async beforeApplicationShutdown(): Promise<void> {
-    this.logger.info("[FastifyKit RedisEventBus] Cerrando suscripción Redis...");
+    this.logger.info(
+      "[FastifyKit RedisEventBus] Cerrando suscripción Redis...",
+    );
     await this.sub.quit();
     // No cerramos 'this.pub' aquí porque es la conexión compartida central
   }

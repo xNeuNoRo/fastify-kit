@@ -40,7 +40,9 @@ class EventNode {
  * @description Implementación por defecto del EventBus para uso local.
  */
 export class DefaultEventBus implements EventBusContract {
-  public readonly instanceId = "local";
+  get instanceId(): string {
+    return "local";
+  }
   private readonly root = new EventNode();
   private catchAllListeners: EventListener[] = [];
   private readonly maxListeners = 100;
