@@ -9,7 +9,6 @@ import type {
 } from "mediasoup/types";
 import { IceServer } from "../interfaces/IceServer.js";
 import { InternalConfig } from "../../config/InternalConfig.js";
-import { FastifyKitWebRtcConfig } from "../../core/interfaces/webrtc.interface.js";
 
 /**
  * @description Lista de codecs optimizada para máxima compatibilidad.
@@ -123,13 +122,13 @@ export const getScreenSharingEncodings = (): RtpEncodingParameters[] => {
 export const DEFAULT_TRANSPORT_OPTIONS: Partial<WebRtcTransportOptions> = {
   // 1 Mbps inicial para evitar lag al conectar y permitir una adaptación rápida a la calidad de la red
   initialAvailableOutgoingBitrate: 1000000,
-  // Configuración de SCTP para DataChannels optimizada para la mayoría de los casos de uso sin sobrecargar la conexión
-  numSctpStreams: { OS: 1024, MIS: 1024 },
-  // Tamaño máximo para DataChannels (mensajes) en 256 KB, lo que es suficiente para la mayoría de los casos de uso sin sobrecargar la conexión
-  maxSctpMessageSize: 262144,
-  // Tamaño del buffer de envío SCTP para DataConsumers, también configurado en 256 KB para mantener la eficiencia sin saturar la conexión
+  // Tamaño máximo para mensajes SCTP enviados por DataConsumers
+  maxSendMessageSize: 262144,
+  // Tamaño máximo para mensajes SCTP recibidos por DataProducers
+  maxReceiveMessageSize: 262144,
+  // Tamaño del buffer de envío SCTP para DataConsumers
   sctpSendBufferSize: 262144,
-  // Habilitar SCTP para permitir el uso de DataChannels, lo que es esencial para la comunicación de datos en tiempo real en WebRTC
+  // Habilitar SCTP para permitir el uso de DataChannels
   enableSctp: true,
 };
 
