@@ -63,6 +63,7 @@ export class QueueWorkerManager
               queueName,
               result,
               status: "success",
+              data: payload,
             },
             { target: sourceId },
           );
@@ -82,9 +83,15 @@ export class QueueWorkerManager
           err,
         );
 
-        // Extraemos sourceId para el fallo también
+        // Extraemos sourceId y data para el fallo también
         const rawData = job?.data;
-        const sourceId = rawData?._fk_metadata?.sourceId || "global";
+        const isFkPayload =
+          rawData && typeof rawData === "object" && "_fk_metadata" in rawData;
+
+        const payload = isFkPayload ? rawData.data : rawData;
+        const sourceId = isFkPayload
+          ? rawData._fk_metadata?.sourceId
+          : "global";
 
         // Emitimos evento de error dirigido
         const eventBus = getEventBus();
@@ -95,6 +102,7 @@ export class QueueWorkerManager
             queueName,
             error: err.message,
             status: "failed",
+            data: payload,
           },
           { target: sourceId },
         );

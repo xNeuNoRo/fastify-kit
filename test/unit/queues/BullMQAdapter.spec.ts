@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { container } from "../../../src/container/DIContainer.js";
 import { REDIS_CONNECTION_TOKEN } from "../../../src/distributed/redis.factory.js";
+import { EVENT_BUS_TOKEN } from "../../../src/events/EventBus.js";
 import { BullMQAdapter } from "../../../src/queues/adapters/BullMQAdapter.js";
 
 // Mock de BullMQ
@@ -28,6 +29,10 @@ describe("BullMQAdapter - Adaptador de Colas para BullMQ (Unit Test)", () => {
       quit: vi.fn().mockResolvedValue("OK"),
       on: vi.fn(),
     };
+
+    // Mock del EventBus para el instanceId requerido por el ruteo dirigido
+    const mockEventBus = { instanceId: "test-instance" };
+    container.registerInstance(EVENT_BUS_TOKEN, mockEventBus);
 
     container.registerInstance(REDIS_CONNECTION_TOKEN, mockRedis);
     adapter = new BullMQAdapter();

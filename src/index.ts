@@ -190,7 +190,10 @@ export {
 // ----------------------------------------------
 
 export { Processor } from "./queues/decorators/processor.js";
+export { OnQueueSuccess } from "./queues/decorators/on-queue-success.js";
+export { OnQueueFailure } from "./queues/decorators/on-queue-failure.js";
 export { QueueManager } from "./queues/QueueManager.js";
+export { QueueEvents, type QueueJobEvent } from "./queues/interfaces/queue-events.js";
 export type { JobHandler } from "./queues/interfaces/JobHandler.js";
 export type { QueueOptions } from "./core/interfaces/queue.interface.js";
 export type { DistributedOptions } from "./core/interfaces/distributed.interface.js";
