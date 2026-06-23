@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { LocalWorkerAdapter } from "../../../../src/queues/adapters/LocalWorkerAdapter.js";
 import { WorkerPool } from "../../../../src/queues/workers/WorkerPool.js";
+import { WorkerLifecycleManager } from "../../../../src/queues/workers/WorkerLifecycleManager.js";
 
 describe("Adaptador Multihilo (LocalWorkerAdapter)", () => {
   let adapter: LocalWorkerAdapter;
@@ -17,7 +18,7 @@ describe("Adaptador Multihilo (LocalWorkerAdapter)", () => {
 
     // Interceptamos la creación del WorkerPool para evitar levantar hilos reales durante los tests
     initPoolSpy = vi
-      .spyOn(WorkerPool.prototype as any, "initializePool")
+      .spyOn(WorkerLifecycleManager.prototype as any, "initializePool")
       .mockImplementation(() => {});
 
     // Interceptamos el método execute para simular su comportamiento sin ejecutar código real en los hilos

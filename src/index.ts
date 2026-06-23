@@ -202,6 +202,11 @@ export {
   QueueRegistryService,
   QUEUE_REGISTRY_TOKEN,
 } from "./queues/QueueRegistryService.js";
+export { WorkerPool } from "./queues/workers/WorkerPool.js";
+export { TaskScheduler } from "./queues/workers/TaskScheduler.js";
+export { WorkerLifecycleManager } from "./queues/workers/WorkerLifecycleManager.js";
+export { WorkerProtocolHandler } from "./queues/workers/WorkerProtocolHandler.js";
+export { WorkerEventHandler } from "./queues/workers/WorkerEventHandler.js";
 export { QueueEvents, type QueueJobEvent } from "./queues/interfaces/queue-events.js";
 export type { JobHandler } from "./queues/interfaces/JobHandler.js";
 export type { QueueOptions } from "./core/interfaces/queue.interface.js";
