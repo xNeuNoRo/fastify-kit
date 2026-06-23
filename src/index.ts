@@ -241,6 +241,13 @@ export {
 } from "./websockets/decorators/events.js";
 export type { WebSocketGatewayOptions } from "./websockets/decorators/types.js";
 
+// Servicios de WebSockets (Gateway Registry y sub-servicios)
+export { WsGatewayRegistry } from "./websockets/WsGatewayRegistry.js";
+export { WsConnectionManager } from "./websockets/WsConnectionManager.js";
+export { WsMessageRouter } from "./websockets/WsMessageRouter.js";
+export { WsGuardExecutor } from "./websockets/WsGuardExecutor.js";
+export { WsLifecycleHandler } from "./websockets/WsLifecycleHandler.js";
+
 // Adaptadores y Contratos
 export { JsonWsAdapter } from "./websockets/adapters/JsonWsAdapter.js";
 export type {
