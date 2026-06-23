@@ -5,6 +5,10 @@ import {
   CONFIG_SERVICE_TOKEN,
   type ConfigService,
 } from "../../config/ConfigService.js";
+import {
+  QUEUE_REGISTRY_TOKEN,
+  type QueueRegistryService,
+} from "../../queues/QueueRegistryService.js";
 import { QueueOptions } from "../interfaces/queue.interface.js";
 import { Mediator } from "../../cqrs/Mediator.js";
 import {
@@ -125,7 +129,6 @@ export async function initializeQueueModule(
   if (!options.queue) return;
 
   // Lazy-loading para no cargar nada relacionado con colas si el usuario no ha configurado la opción de queue
-  const { QueueRegistry } = await import("../../queues/QueueRegistry.js");
   const { QueueManager } = await import("../../queues/QueueManager.js");
 
   // Importamos el token de forma dinámica para mantener el lazy loading
@@ -147,7 +150,7 @@ export async function initializeQueueModule(
   );
 
   // Escaneamos para buscar todos los Procesadores
-  await registerQueueProcessors(allControllers, allProviders, QueueRegistry);
+  await registerQueueProcessors(allControllers, allProviders);
 }
 
 /**
@@ -340,7 +343,6 @@ export function registerProvider(
 export async function registerQueueProcessors(
   allControllers: Constructor[],
   allProviders: { token: any; implementation: Constructor }[],
-  QueueRegistry: any,
 ): Promise<void> {
   const allClasses = [
     ...allControllers,
@@ -354,15 +356,19 @@ export async function registerQueueProcessors(
     return !!metadata?.queue;
   });
 
-  // Registramos los Procesadores encontrados en el QueueRegistry
+  // Resolvemos el QueueRegistryService del contenedor DI
+  const queueRegistry =
+    container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN);
+
+  // Registramos los Procesadores encontrados en el QueueRegistryService
   for (const ProcessorClass of processors) {
     const metadata = (ProcessorClass as any)[
       FASTIFY_KIT_METADATA_SYMBOL
     ] as FastifyKitMetadata;
     const queueMeta = metadata.queue!;
 
-    // Registramos en la memoria estática para que el Adaptador sepa qué clase instanciar
-    QueueRegistry.register(queueMeta.name, ProcessorClass, queueMeta.type);
+    // Registramos en el servicio inyectable para que el Adaptador sepa qué clase instanciar
+    queueRegistry.register(queueMeta.name, ProcessorClass, queueMeta.type);
 
     // Nos aseguramos de que la clase esté registrada en el DI Container
     if (!container.has(ProcessorClass)) {
