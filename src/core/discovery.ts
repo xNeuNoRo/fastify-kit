@@ -5,7 +5,11 @@ import { pathToFileURL } from "node:url";
 import type { FastifyKitMetadata } from "../http/decorators/types.js";
 import { Dirent } from "node:fs";
 import { getLogger } from "../logger/logger.factory.js";
-import { QueueRegistry } from "../queues/QueueRegistry.js";
+import { container } from "../container/DIContainer.js";
+import {
+  QUEUE_REGISTRY_TOKEN,
+  type QueueRegistryService,
+} from "../queues/QueueRegistryService.js";
 
 const decoratorMetadataSymbol: symbol =
   (Symbol as any).metadata ?? Symbol.for("Symbol.metadata");
@@ -46,9 +50,10 @@ function iterateModuleExports(
       ] as FastifyKitMetadata | undefined;
       if (metadata) {
         // Si la clase tiene metadata de queue, registramos el archivo
-        // en el QueueRegistry para que luego sepa dónde encontrarlo en los workers aislados
+        // en el QueueRegistryService para que luego sepa dónde encontrarlo en los workers aislados
         if (metadata.queue) {
-          QueueRegistry.addProcessorFile(fileUrl);
+          const queueRegistry = container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN);
+          queueRegistry.addProcessorFile(fileUrl);
         }
 
         // Si la metadata cumple con los criterios definidos, agregamos la clase al array de descubiertas
