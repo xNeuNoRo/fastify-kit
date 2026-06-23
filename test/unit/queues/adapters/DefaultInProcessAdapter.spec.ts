@@ -33,8 +33,8 @@ describe("Adaptador por defecto para colas en proceso (DefaultInProcessAdapter)"
 
     const _trackingId = await adapter.dispatch(queueName, payload);
 
-    expect(typeof trackingId).toBe("string");
-    expect(trackingId.length).toBeGreaterThan(0);
+    expect(typeof _trackingId).toBe("string");
+    expect(_trackingId.length).toBeGreaterThan(0);
   });
 
   it("Debería ejecutar la tarea asíncronamente llamando a la clase correcta", async () => {
