@@ -213,6 +213,12 @@ export type { QueueAdapter } from "./queues/interfaces/QueueAdapter.js";
 // ----------------------------------------------
 export { ConfigRegistry } from "./config/ConfigRegistry.js";
 export { InjectConfig } from "./config/inject-config.decorator.js";
+export {
+  CONFIG_SERVICE_TOKEN,
+  type ConfigService,
+  type InternalFrameworkConfig,
+} from "./config/ConfigService.js";
+export { DefaultConfigService } from "./config/DefaultConfigService.js";
 
 // ----------------------------------------------
 // Validation (TypeBox)
