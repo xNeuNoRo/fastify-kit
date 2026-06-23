@@ -18,7 +18,7 @@ import {
   discoverModules,
 } from "../../../../src/core/discovery.js";
 import { LOGGER_TOKEN } from "../../../../src/logger/LoggerContract.js";
-import { registerGateways } from "../../../../src/websockets/gateway.registry.js";
+import { WsGatewayRegistry } from "../../../../src/websockets/WsGatewayRegistry.js";
 
 describe("Motor de Auto-Descubrimiento (Discovery)", () => {
   let tmpDir: string;
@@ -229,7 +229,7 @@ describe("Motor de Auto-Descubrimiento (Discovery)", () => {
       class NormalClass {
         dummy = true;
       }
-      registerGateways(appMock, [NormalClass]);
+      new WsGatewayRegistry().registerGateways(appMock, [NormalClass]);
       expect(appMock.get).not.toHaveBeenCalled();
     });
 
@@ -237,7 +237,7 @@ describe("Motor de Auto-Descubrimiento (Discovery)", () => {
       // Usamos timers falsos para poder simular el paso del tiempo y verificar el comportamiento del ping/pong
       vi.useFakeTimers();
 
-      registerGateways(appMock, [MockGateway]);
+      new WsGatewayRegistry().registerGateways(appMock, [MockGateway]);
       expect(appMock.addHook).toHaveBeenCalledWith(
         "onClose",
         expect.any(Function),
@@ -254,7 +254,7 @@ describe("Motor de Auto-Descubrimiento (Discovery)", () => {
     });
 
     it("Debería ejecutar correctamente el ciclo de vida (Connect, Message JSON, Firehose Crudo, Disconnect)", async () => {
-      registerGateways(appMock, [MockGateway]);
+      new WsGatewayRegistry().registerGateways(appMock, [MockGateway]);
       const routeHandler = appMock.get.mock.calls[0][2];
 
       // Simulamos la conexión de un cliente WebSocket y capturamos los handlers registrados para cada evento
@@ -321,7 +321,7 @@ describe("Motor de Auto-Descubrimiento (Discovery)", () => {
 
       // Registramos el gateway vacío en el contenedor y lo pasamos al registry para que lo registre normalmente
       container.registerInstance(EmptyGateway, new EmptyGateway());
-      registerGateways(appMock, [EmptyGateway]);
+      new WsGatewayRegistry().registerGateways(appMock, [EmptyGateway]);
 
       // Simulamos la conexión de un cliente WebSocket y capturamos los handlers registrados para cada evento
       const routeHandler = appMock.get.mock.calls[0][2];
