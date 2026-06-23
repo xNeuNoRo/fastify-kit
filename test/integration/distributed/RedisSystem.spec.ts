@@ -3,10 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, it, expect, beforeEach, vi, afterAll } from "vitest";
 
-import {
-  CONFIG_SERVICE_TOKEN,
-  type ConfigService,
-} from "../../../src/config/ConfigService.js";
+import { CONFIG_SERVICE_TOKEN } from "../../../src/config/ConfigService.js";
 import { DefaultConfigService } from "../../../src/config/DefaultConfigService.js";
 import { container } from "../../../src/container/DIContainer.js";
 import { FastifyKit } from "../../../src/core/FastifyKit.js";
