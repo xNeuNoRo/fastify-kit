@@ -4,6 +4,7 @@ import {
   CONFIG_SERVICE_TOKEN,
   type ConfigService,
 } from "../../../config/ConfigService.js";
+import { DefaultConfigService } from "../../../config/DefaultConfigService.js";
 import { validateAndLoadEnvironment } from "../env.bootstrap.js";
 
 /**
@@ -19,6 +20,12 @@ export class PreFlightStep implements BootstrapStep {
   readonly name = "PreFlightStep";
 
   async execute(ctx: BootstrapContext): Promise<void> {
+    // Aseguramos que el ConfigService esté registrado en el contenedor DI
+    // (puede haber sido limpiado por tests que llaman a container.clearAll())
+    if (!container.has(CONFIG_SERVICE_TOKEN)) {
+      container.registerClass(CONFIG_SERVICE_TOKEN, DefaultConfigService);
+    }
+
     // Registramos la configuracion distribuida en el ConfigService para que los adapters/managers puedan usarla
     const configService = container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN);
     configService.set("distributed", ctx.options.distributed || {});

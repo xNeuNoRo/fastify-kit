@@ -5,6 +5,7 @@ import {
   CONFIG_SERVICE_TOKEN,
   type ConfigService,
 } from "../config/ConfigService.js";
+import { DefaultConfigService } from "../config/DefaultConfigService.js";
 import { BeforeApplicationShutdown } from "../core/interfaces/lifecycle.interface.js";
 import { container } from "../container/DIContainer.js";
 import { REDIS_CONNECTION_TOKEN } from "../distributed/redis.factory.js";
@@ -43,6 +44,10 @@ export class RedisEventBus
 
     // Para suscribir (SUB) necesitamos una conexión dedicada que no sea compartida
     // ya que una conexión en modo suscripción no puede ejecutar comandos normales (como PUBLISH)
+    // Aseguramos que el ConfigService esté registrado (tests pueden limpiar el contenedor)
+    if (!container.has(CONFIG_SERVICE_TOKEN)) {
+      container.registerClass(CONFIG_SERVICE_TOKEN, DefaultConfigService);
+    }
     const configService = container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN);
     const distributedConfig = configService.get("distributed") || {};
     const redisConfig = distributedConfig.redis || {};

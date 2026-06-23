@@ -3,7 +3,11 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, it, expect, beforeEach, vi, afterAll } from "vitest";
 
-import { InternalConfig } from "../../../src/config/InternalConfig.js";
+import {
+  CONFIG_SERVICE_TOKEN,
+  type ConfigService,
+} from "../../../src/config/ConfigService.js";
+import { DefaultConfigService } from "../../../src/config/DefaultConfigService.js";
 import { container } from "../../../src/container/DIContainer.js";
 import { FastifyKit } from "../../../src/core/FastifyKit.js";
 import { Module } from "../../../src/core/module.decorator.js";
@@ -70,9 +74,12 @@ describe("Integración Sistema Distribuido (Redis)", () => {
       QueueRegistry.clear();
 
       // Configuramos el framework para que las instancias sepan a qué Redis conectar
-      InternalConfig.set("distributed", {
+      // Registramos el ConfigService inyectable y configuramos los datos distribuidos
+      const configService = new DefaultConfigService();
+      configService.set("distributed", {
         redis: { host: "localhost", port: 6379 },
       });
+      container.registerInstance(CONFIG_SERVICE_TOKEN, configService);
 
       // Registramos la conexión compartida
       registerRedisConnection();
