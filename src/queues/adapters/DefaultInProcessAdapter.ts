@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { QueueAdapter } from "../interfaces/QueueAdapter.js";
 import { container } from "../../container/DIContainer.js";
-import { QueueRegistry } from "../QueueRegistry.js";
+import {
+  QUEUE_REGISTRY_TOKEN,
+  type QueueRegistryService,
+} from "../QueueRegistryService.js";
 import type { JobHandler } from "../interfaces/JobHandler.js";
 import { Injectable } from "../../container/injectable.decorator.js";
 import { getLogger } from "../../logger/logger.factory.js";
@@ -22,7 +25,8 @@ export class DefaultInProcessAdapter implements QueueAdapter {
     setImmediate(async () => {
       try {
         // Obtenemos la clase del procesador registrado para esta cola
-        const ProcessorClass = QueueRegistry.getProcessor(queueName);
+        const queueRegistry = container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN);
+        const ProcessorClass = queueRegistry.getProcessor(queueName);
 
         // Si no hay un procesador registrado para esta cola, lanzamos un error
         if (!ProcessorClass) {

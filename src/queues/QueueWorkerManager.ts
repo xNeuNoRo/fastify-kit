@@ -4,7 +4,10 @@ import {
   CONFIG_SERVICE_TOKEN,
   type ConfigService,
 } from "../config/ConfigService.js";
-import { QueueRegistry } from "./QueueRegistry.js";
+import {
+  QUEUE_REGISTRY_TOKEN,
+  type QueueRegistryService,
+} from "./QueueRegistryService.js";
 import { WorkerPool } from "./workers/WorkerPool.js";
 import { getLogger } from "../logger/logger.factory.js";
 import { Injectable } from "../container/injectable.decorator.js";
@@ -39,7 +42,8 @@ export class QueueWorkerManager
     const workerPool = container.resolve(WorkerPool);
 
     // Obtenemos todas las colas registradas por el scanner
-    const registeredQueues = QueueRegistry.getRegisteredQueues();
+    const queueRegistry = container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN);
+    const registeredQueues = queueRegistry.getRegisteredQueues();
 
     for (const queueName of registeredQueues) {
       const worker = new Worker(

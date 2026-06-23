@@ -11,7 +11,10 @@ import {
 } from "./worker-protocol.js";
 import { getLogger } from "../../logger/logger.factory.js";
 import { QueueType } from "../interfaces/queue-options.js";
-import { QueueRegistry } from "../QueueRegistry.js";
+import {
+  QUEUE_REGISTRY_TOKEN,
+  type QueueRegistryService,
+} from "../QueueRegistryService.js";
 import { container } from "../../container/DIContainer.js";
 import { Injectable } from "../../container/injectable.decorator.js";
 import { BeforeApplicationShutdown } from "../../core/interfaces/lifecycle.interface.js";
@@ -61,9 +64,10 @@ export class WorkerPool implements BeforeApplicationShutdown {
     this.cpuEluThreshold = config.eluThreshold ?? 0.85;
 
     // Obtenemos la lista de archivos de procesadores registrados
-    // en el QueueRegistry, que fueron detectados por el scanner del framework durante el auto-discovery
+    // en el QueueRegistryService, que fueron detectados por el scanner del framework durante el auto-discovery
     // de esa forma los pasamos luego a los workers aislados para que sepan dónde encontrar las clases procesadoras de las colas
-    this.workerBootstraps = QueueRegistry.getProcessorFiles();
+    const queueRegistryService = container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN);
+    this.workerBootstraps = queueRegistryService.getProcessorFiles();
 
     // Creamos la URL del script del worker dependiendo de si estamos en un
     // entorno de desarrollo (TypeScript) o producción (JavaScript)
@@ -238,7 +242,7 @@ export class WorkerPool implements BeforeApplicationShutdown {
         continue;
       }
 
-      const queueType = QueueRegistry.getQueueType(queueName) || "cpu";
+      const queueType = container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN).getQueueType(queueName) || "cpu";
       let availableWorker = this.getBestWorkerFor(queueType);
 
       // Mientras haya un worker disponible y tareas en la cola, seguimos asignando trabajos
@@ -359,7 +363,7 @@ export class WorkerPool implements BeforeApplicationShutdown {
         reject,
       };
 
-      const queueType = QueueRegistry.getQueueType(queueName) || "cpu";
+      const queueType = container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN).getQueueType(queueName) || "cpu";
       const bestWorker = this.getBestWorkerFor(queueType);
 
       if (bestWorker) {
