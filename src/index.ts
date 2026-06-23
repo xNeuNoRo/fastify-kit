@@ -8,6 +8,11 @@ export {
   type FastifyKitOptions,
   FASTIFY_INSTANCE_TOKEN,
 } from "./core/FastifyKit.js";
+export {
+  BootstrapPipeline,
+  type BootstrapContext,
+  type BootstrapStep,
+} from "./core/bootstrap/BootstrapPipeline.js";
 export { Module } from "./core/module.decorator.js";
 export {
   discoverControllers,
