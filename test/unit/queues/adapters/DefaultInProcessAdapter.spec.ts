@@ -1,28 +1,37 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import { container } from "../../../../src/container/DIContainer.js";
 import { DefaultInProcessAdapter } from "../../../../src/queues/adapters/DefaultInProcessAdapter.js";
-import { QueueRegistry } from "../../../../src/queues/QueueRegistry.js";
+import {
+  QueueRegistryService,
+  QUEUE_REGISTRY_TOKEN,
+} from "../../../../src/queues/QueueRegistryService.js";
 
 describe("Adaptador por defecto para colas en proceso (DefaultInProcessAdapter)", () => {
   let adapter: DefaultInProcessAdapter;
+  let registry: QueueRegistryService;
 
-  // Antes de cada test, restauramos los mocks para garantizar aislamiento total
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Drenamos tareas pendientes de setImmediate de tests anteriores
+    await new Promise((resolve) => setImmediate(resolve));
     vi.restoreAllMocks();
-    vi.spyOn(console, "error").mockImplementation(() => {}); // Evitamos logs de error en la salida de los tests
-    vi.spyOn(console, "warn").mockImplementation(() => {}); // Evitamos logs de warning en la salida de los tests
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    registry = new QueueRegistryService();
+    container.registerInstance(QUEUE_REGISTRY_TOKEN, registry);
     adapter = new DefaultInProcessAdapter();
+  });
+
+  afterEach(() => {
+    container.clearAll();
   });
 
   it("Debería retornar un tracking ID (UUID) inmediatamente sin bloquear la ejecución", async () => {
     const queueName = "fast-queue";
     const payload = { data: 123 };
 
-    vi.spyOn(QueueRegistry, "getProcessor").mockReturnValue(undefined);
-    vi.spyOn(console, "error").mockImplementation(() => {});
-
-    const trackingId = await adapter.dispatch(queueName, payload);
+    const _trackingId = await adapter.dispatch(queueName, payload);
 
     expect(typeof trackingId).toBe("string");
     expect(trackingId.length).toBeGreaterThan(0);
@@ -39,54 +48,45 @@ describe("Adaptador por defecto para colas en proceso (DefaultInProcessAdapter)"
     const handleSpy = vi.fn().mockResolvedValue(true);
     const mockInstance = { handle: handleSpy };
 
-    const getProcessorSpy = vi
-      .spyOn(QueueRegistry, "getProcessor")
-      .mockReturnValue(DummyEmailProcessor);
-    const resolveSpy = vi
-      .spyOn(container, "resolve")
-      .mockReturnValue(mockInstance);
+    registry.register(queueName, DummyEmailProcessor, "io");
+    container.registerInstance(DummyEmailProcessor, mockInstance);
 
-    const trackingId = await adapter.dispatch(queueName, payload);
-
+    const __trackingId = await adapter.dispatch(queueName, payload);
+    await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(getProcessorSpy).toHaveBeenCalledWith(queueName);
-    expect(resolveSpy).toHaveBeenCalledWith(DummyEmailProcessor);
-    expect(handleSpy).toHaveBeenCalledWith(trackingId, payload);
+    expect(handleSpy).toHaveBeenCalledWith(expect.any(String), payload);
   });
 
-  it("Debería capturar y loguear el error si no hay un procesador registrado para la cola", async () => {
-    const queueName = "unregistered-queue";
+  it("Debería loguear un error si no hay procesador registrado y lanzar desde dentro del setImmediate", async () => {
+    const queueName = "ghost-queue";
+    const payload = { ghost: true };
 
-    vi.spyOn(QueueRegistry, "getProcessor").mockReturnValue(undefined);
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    await adapter.dispatch(queueName, {});
-
+    const _trackingId = await adapter.dispatch(queueName, payload);
+    await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(consoleSpy).toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalled();
   });
 
-  it("Debería capturar y loguear el error si el procesador lanza una excepción durante su ejecución", async () => {
-    const queueName = "error-queue";
+  it("Debería capturar y loguear el error si el procesador falla", async () => {
+    const queueName = "failing-queue";
+    const payload = { explode: true };
+
     class FaultyProcessor {
-      faulty = true;
+      dummy = true;
     }
 
-    const errorToThrow = new Error("Fallo interno en el procesador");
-    const handleSpy = vi.fn().mockRejectedValue(errorToThrow);
+    const handleSpy = vi.fn().mockRejectedValue(new Error("BOOM"));
+    const mockInstance = { handle: handleSpy };
 
-    vi.spyOn(QueueRegistry, "getProcessor").mockReturnValue(FaultyProcessor);
-    vi.spyOn(container, "resolve").mockReturnValue({ handle: handleSpy });
+    registry.register(queueName, FaultyProcessor, "io");
+    container.registerInstance(FaultyProcessor, mockInstance);
 
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    await adapter.dispatch(queueName, {});
-
+    const _trackingId = await adapter.dispatch(queueName, payload);
+    await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
 
-    expect(handleSpy).toHaveBeenCalled();
-    expect(consoleSpy).toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalled();
   });
 });

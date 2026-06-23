@@ -19,7 +19,10 @@ import { Controller } from "../../../src/http/decorators/controller.js";
 import { Post } from "../../../src/http/decorators/methods.js";
 import { Body, UseParams } from "../../../src/http/decorators/parameters.js";
 import { QueueManager } from "../../../src/queues/QueueManager.js";
-import { QueueRegistry } from "../../../src/queues/QueueRegistry.js";
+import {
+  QUEUE_REGISTRY_TOKEN,
+  type QueueRegistryService,
+} from "../../../src/queues/QueueRegistryService.js";
 
 // Ruta al archivo de prueba que el worker usará para avisar que terminó
 const PROOF_FILE = path.join(process.cwd(), ".worker-proof.txt");
@@ -93,7 +96,9 @@ describe("Integración Worker Pool", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
 
     // Limpiamos el registro de procesadores antes de cada test para evitar interferencias entre tests
-    QueueRegistry.clear();
+    const queueRegistry =
+      container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN);
+    queueRegistry.clear();
 
     // Simulamos el discovery del framework para registrar el procesador de la cola,
     // Le inyectamos la ruta absoluta del fixture al registro para que el Worker sepa qué importar
@@ -101,7 +106,7 @@ describe("Integración Worker Pool", () => {
       __dirname,
       "./fixtures/WelcomeWorker.processor.ts",
     );
-    QueueRegistry.addProcessorFile(pathToFileURL(fixturePath).href);
+    queueRegistry.addProcessorFile(pathToFileURL(fixturePath).href);
 
     app = await FastifyKit.create({
       module: QueueIntegrationModule,

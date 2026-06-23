@@ -11,7 +11,11 @@ import { Module } from "../../../src/core/module.decorator.js";
 import { registerRedisConnection } from "../../../src/distributed/redis.factory.js";
 import { RedisEventBus } from "../../../src/events/RedisEventBus.js";
 import { QueueManager } from "../../../src/queues/QueueManager.js";
-import { QueueRegistry } from "../../../src/queues/QueueRegistry.js";
+import { QueueRegistryService } from "../../../src/queues/QueueRegistryService.js";
+import {
+  QUEUE_REGISTRY_TOKEN,
+  type QueueRegistryService,
+} from "../../../src/queues/QueueRegistryService.js";
 
 // Herramienta de detección de Redis para saber si correr o no las pruebas de integración
 const isRedisAvailable = async () => {
@@ -68,7 +72,8 @@ describe("Integración Sistema Distribuido (Redis)", () => {
     "Debería sincronizar eventos entre dos instancias independientes",
     async () => {
       container.clearAll();
-      QueueRegistry.clear();
+      container.registerClass(QUEUE_REGISTRY_TOKEN, QueueRegistryService);
+      container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN).clear();
 
       // Configuramos el framework para que las instancias sepan a qué Redis conectar
       // Registramos el ConfigService inyectable y configuramos los datos distribuidos
@@ -113,7 +118,8 @@ describe("Integración Sistema Distribuido (Redis)", () => {
     "Debería procesar tareas distribuidas y notificar vía EventBus Global",
     async () => {
       container.clearAll();
-      QueueRegistry.clear();
+      container.registerClass(QUEUE_REGISTRY_TOKEN, QueueRegistryService);
+      container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN).clear();
 
       const { DistributedProcessor: ProcessorImpl } =
         await import("../queues/fixtures/Distributed.processor.js");
@@ -123,7 +129,9 @@ describe("Integración Sistema Distribuido (Redis)", () => {
         process.cwd(),
         "test/integration/queues/fixtures/Distributed.processor.ts",
       );
-      QueueRegistry.addProcessorFile(pathToFileURL(fixturePath).href);
+      container
+        .resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN)
+        .addProcessorFile(pathToFileURL(fixturePath).href);
 
       @Module({
         providers: [ProcessorImpl],
@@ -189,7 +197,8 @@ describe("Integración Sistema Distribuido (Redis)", () => {
 
       // Iniciamos Instancia Primaria en este hilo
       container.clearAll();
-      QueueRegistry.clear();
+      container.registerClass(QUEUE_REGISTRY_TOKEN, QueueRegistryService);
+      container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN).clear();
 
       @Module({})
       class PrimaryModule {}

@@ -1,6 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 
-import { QueueRegistry } from "../../../src/queues/QueueRegistry.js";
+import { container } from "../../../src/container/DIContainer.js";
+import { QueueRegistryService } from "../../../src/queues/QueueRegistryService.js";
+import { QUEUE_REGISTRY_TOKEN } from "../../../src/queues/QueueRegistryService.js";
 
 // Clases dummy para simular los procesadores que inyectaría el usuario
 class DummyEmailProcessor {
@@ -17,20 +19,28 @@ class DummyVideoProcessor {
   }
 }
 
-describe("QueueRegistry (Memoria Estática)", () => {
+describe("QueueRegistryService (Inyectable)", () => {
+  let registry: QueueRegistryService;
+
+  beforeEach(() => {
+    // Registramos el servicio en el contenedor para cada test
+    container.registerClass(QUEUE_REGISTRY_TOKEN, QueueRegistryService);
+    registry = container.resolve(QUEUE_REGISTRY_TOKEN);
+  });
+
   it("Debería registrar un procesador correctamente y recuperar su clase y tipo", () => {
     const queueName = "test-email-queue";
 
     // Registramos la cola
-    QueueRegistry.register(queueName, DummyEmailProcessor, "io");
+    registry.register(queueName, DummyEmailProcessor, "io");
 
     // Validamos la recuperación de la clase
-    const ProcessorClass = QueueRegistry.getProcessor(queueName);
+    const ProcessorClass = registry.getProcessor(queueName);
     expect(ProcessorClass).toBeDefined();
     expect(ProcessorClass).toBe(DummyEmailProcessor);
 
     // Validamos la recuperación del tipo de carga
-    const queueType = QueueRegistry.getQueueType(queueName);
+    const queueType = registry.getQueueType(queueName);
     expect(queueType).toBe("io");
   });
 
@@ -38,10 +48,10 @@ describe("QueueRegistry (Memoria Estática)", () => {
     const queueName1 = "list-queue-1";
     const queueName2 = "list-queue-2";
 
-    QueueRegistry.register(queueName1, DummyEmailProcessor, "cpu");
-    QueueRegistry.register(queueName2, DummyVideoProcessor, "cpu");
+    registry.register(queueName1, DummyEmailProcessor, "cpu");
+    registry.register(queueName2, DummyVideoProcessor, "cpu");
 
-    const queues = QueueRegistry.getRegisteredQueues();
+    const queues = registry.getRegisteredQueues();
 
     expect(Array.isArray(queues)).toBe(true);
     expect(queues).toContain(queueName1);
@@ -52,18 +62,18 @@ describe("QueueRegistry (Memoria Estática)", () => {
     const collisionQueueName = "collision-queue";
 
     // Primer registro exitoso
-    QueueRegistry.register(collisionQueueName, DummyEmailProcessor, "io");
+    registry.register(collisionQueueName, DummyEmailProcessor, "io");
 
     // Segundo registro con el mismo nombre debe fallar
     expect(() => {
-      QueueRegistry.register(collisionQueueName, DummyVideoProcessor, "cpu");
+      registry.register(collisionQueueName, DummyVideoProcessor, "cpu");
     }).toThrow();
   });
 
   it("Debería retornar undefined si se consulta una cola inexistente", () => {
     const ghostQueueName = "ghost-queue-does-not-exist";
 
-    expect(QueueRegistry.getProcessor(ghostQueueName)).toBeUndefined();
-    expect(QueueRegistry.getQueueType(ghostQueueName)).toBeUndefined();
+    expect(registry.getProcessor(ghostQueueName)).toBeUndefined();
+    expect(registry.getQueueType(ghostQueueName)).toBeUndefined();
   });
 });
