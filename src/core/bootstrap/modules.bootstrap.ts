@@ -1,7 +1,10 @@
 import { type Constructor } from "../../http/routing/scanner/index.js";
 import { container } from "../../container/DIContainer.js";
 import type { FastifyKitMetadata } from "../../http/decorators/types.js";
-import { InternalConfig } from "../../config/InternalConfig.js";
+import {
+  CONFIG_SERVICE_TOKEN,
+  type ConfigService,
+} from "../../config/ConfigService.js";
 import { QueueOptions } from "../interfaces/queue.interface.js";
 import { Mediator } from "../../cqrs/Mediator.js";
 import {
@@ -49,8 +52,9 @@ export async function initializeWebRtcModule(
     const webrtcConfig =
       typeof options.webrtc === "object" ? options.webrtc : {};
 
-    // Guardamos la configuración de WebRTC en el InternalConfig
-    InternalConfig.set("webrtc", webrtcConfig);
+    // Guardamos la configuración de WebRTC en el ConfigService inyectable
+    const configService = container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN);
+    configService.set("webrtc", webrtcConfig);
 
     const { SFU_ROOM_MANAGER_TOKEN } =
       await import("../../webrtc/interfaces/SfuRoomManager.js");
@@ -109,13 +113,14 @@ export async function initializeQueueModule(
   allControllers: Constructor[],
   allProviders: { token: any; implementation: Constructor }[],
 ) {
-  // Guardamos la configuración del motor de BackgroundJobs en el InternalConfig
+  // Guardamos la configuración del motor de BackgroundJobs en el ConfigService inyectable
   const queueConfig: QueueOptions = options.queue || {
     strategy: "in-process",
   };
 
-  // Guardamos la configuración de colas en el InternalConfig
-  InternalConfig.set("queue", queueConfig);
+  // Guardamos la configuración de colas en el ConfigService
+  const configService = container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN);
+  configService.set("queue", queueConfig);
 
   if (!options.queue) return;
 
