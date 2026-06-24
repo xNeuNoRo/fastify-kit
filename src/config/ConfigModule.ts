@@ -4,10 +4,7 @@ import { ConfigValidator, ConfigValidationError } from "./ConfigValidator.js";
 import { ConfigWatcher } from "./ConfigWatcher.js";
 import { getLogger } from "../logger/logger.factory.js";
 import { container } from "../container/DIContainer.js";
-import {
-  CONFIG_SERVICE_TOKEN,
-  type ConfigService,
-} from "./ConfigService.js";
+import { CONFIG_SERVICE_TOKEN, type ConfigService } from "./ConfigService.js";
 import { DefaultConfigService } from "./DefaultConfigService.js";
 
 /**
@@ -123,9 +120,21 @@ export class ConfigModule {
 
     // Verificamos claves desconocidas si strict está activado
     if (strict) {
+      // Extraemos todas las variables de entorno que coincidan con el prefijo (o sin prefijo)
+      const rawEnvKeys: Record<string, unknown> = {};
+      for (const envKey of Object.keys(process.env)) {
+        if (envPrefix) {
+          if (!envKey.startsWith(envPrefix)) continue;
+        } else {
+          // Sin prefijo, solo consideramos vars con formato de config (MAYUSCULAS_CON_GUIONES)
+          if (!/^[A-Z][A-Z0-9_]*$/.test(envKey)) continue;
+        }
+        const key = envPrefix ? envKey.slice(envPrefix.length) : envKey;
+        rawEnvKeys[key] = process.env[envKey];
+      }
       const unknownKeys = ConfigValidator.findUnknownKeys(
         options.schema,
-        coerced as Record<string, unknown>,
+        rawEnvKeys,
       );
       if (unknownKeys.length > 0) {
         console.error(
@@ -134,13 +143,11 @@ export class ConfigModule {
         for (const key of unknownKeys) {
           console.error(`  - ${key}`);
         }
-        if (options.strict) {
-          throw new ConfigValidationError(
-            "Claves de configuración desconocidas detectadas (strict mode). " +
-              "Añádelas al schema o desactiva strict: false.",
-            unknownKeys.map((k) => ({ path: k, message: "Clave no declarada" })),
-          );
-        }
+        throw new ConfigValidationError(
+          "Claves de configuración desconocidas detectadas (strict mode). " +
+            "Añádelas al schema o desactiva strict: false.",
+          unknownKeys.map((k) => ({ path: k, message: "Clave no declarada" })),
+        );
       }
     }
 
@@ -159,7 +166,13 @@ export class ConfigModule {
 
       // Observamos archivos .env comunes
       watcher.watch(
-        [".env", ".env.local", ".env.development", ".env.production", "config.*"],
+        [
+          ".env",
+          ".env.local",
+          ".env.development",
+          ".env.production",
+          "config.*",
+        ],
         (_filePath) => {
           logger.info("[FastifyKit ConfigModule] Recargando configuración...");
 
@@ -176,11 +189,15 @@ export class ConfigModule {
             const newCoerced = ConfigValidator.coerce(options.schema, newEnv);
             const validated = ConfigValidator.validate(compiler, newCoerced);
 
-            for (const [key, value] of Object.entries(validated as Record<string, any>)) {
+            for (const [key, value] of Object.entries(
+              validated as Record<string, any>,
+            )) {
               configService.setConfig(key, value);
             }
 
-            logger.info("[FastifyKit ConfigModule] Configuración recargada exitosamente.");
+            logger.info(
+              "[FastifyKit ConfigModule] Configuración recargada exitosamente.",
+            );
           } catch (err) {
             logger.error(
               "[FastifyKit ConfigModule] Error recargando configuración. Se mantiene la anterior.",
