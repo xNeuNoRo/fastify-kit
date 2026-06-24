@@ -1,7 +1,4 @@
-import {
-  CONFIG_SERVICE_TOKEN,
-  type ConfigService,
-} from "./ConfigService.js";
+import { CONFIG_SERVICE_TOKEN, type ConfigService } from "./ConfigService.js";
 import { ConfigRegistry } from "./ConfigRegistry.js";
 import { container } from "../container/DIContainer.js";
 
@@ -48,7 +45,8 @@ export function InjectConfig(namespace: string) {
     return function (this: This, initialValue: Value) {
       // Intentamos resolver ConfigService del contenedor DI (registrado por ConfigModule.forRoot())
       if (container.has(CONFIG_SERVICE_TOKEN)) {
-        const configService = container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN);
+        const configService =
+          container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN);
         // Si la config existe en ConfigService, la usamos.
         if (configService.hasConfig(namespace)) {
           return configService.getConfig(namespace) as Value;
@@ -56,7 +54,11 @@ export function InjectConfig(namespace: string) {
         // Si no existe en ConfigService, seguimos al fallback (ConfigRegistry)
       }
 
+      
       // Fallback: ConfigRegistry (deprecado, se eliminará en futuras versiones)
+      console.warn(
+        "[FastifyKit Deprecation]: Haciendo fallback a ConfigRegistry\nUsa ConfigModule.forRoot() y ConfigService para inyectar configuraciones en lugar de ConfigRegistry.\nConfigRegistry se mantendrá temporalmente para compatibilidad con versiones anteriores, pero se eliminará en futuras versiones.",
+      );
       const config = ConfigRegistry.get(namespace);
       return (config === undefined ? initialValue : config) as Value;
     };

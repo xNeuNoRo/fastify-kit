@@ -1,5 +1,10 @@
 const configStore = new Map<string, any>();
 
+/**
+ * @deprecated Usa ConfigModule.forRoot() y ConfigService para inyectar configuraciones 
+ * en lugar de ConfigRegistry. ConfigRegistry se mantendrá temporalmente para compatibilidad 
+ * con versiones anteriores, pero se eliminará en futuras versiones.
+ */
 export class ConfigRegistry {
   /**
    * @description Registra una configuración bajo un namespace específico en el ConfigRegistry. Esto permite organizar y acceder a configuraciones de manera centralizada en la aplicación, facilitando su gestión y evitando la dispersión de configuraciones en diferentes partes del código. Al registrar una configuración, se asocia un namespace único con un objeto de configuración, lo que permite acceder a esa configuración posteriormente utilizando el mismo namespace. Esta función es especialmente útil para mantener las configuraciones organizadas y fácilmente accesibles en toda la aplicación.
@@ -20,6 +25,7 @@ export class ConfigRegistry {
    *   \@InjectConfig("database")
    *   private readonly dbConfig: DatabaseConfig;
    * }
+   * @deprecated Usa ConfigService.setConfig()
    */
   static set(namespace: string, config: any) {
     configStore.set(namespace, config);
@@ -40,6 +46,7 @@ export class ConfigRegistry {
    *   \@InjectConfig("database")
    *   private readonly dbConfig: DatabaseConfig;
    * }
+   * @deprecated Usa ConfigService.getConfig()
    */
   static get<T>(namespace: string): T | undefined {
     return configStore.get(namespace) as T;
@@ -66,6 +73,7 @@ export class ConfigRegistry {
    * const hasDbConfigInMyService = myService.dbConfig !== undefined;
    * console.log(hasDbConfigInMyService); // Imprime true si la configuración existe, o false si no existe
    * ```
+   * @deprecated Usa ConfigService.hasConfig()
    */
   static has(namespace: string): boolean {
     return configStore.has(namespace);
@@ -92,6 +100,7 @@ export class ConfigRegistry {
    * const wasDeletedInMyService = ConfigRegistry.delete("database");
    * console.log(wasDeletedInMyService); // Imprime true si la configuración fue eliminada, o false si no se encontró ninguna configuración bajo ese namespace
    * ```
+   * @deprecated Usa ConfigService.clear()
    */
   static delete(namespace: string): boolean {
     return configStore.delete(namespace);
@@ -118,6 +127,7 @@ export class ConfigRegistry {
    * const myService = new MyService();
    * console.log(myService.dbConfig); // Imprime undefined, ya que la configuración ha sido eliminada
    * ```
+   * @deprecated Usa ConfigService.clear()
    */
   static clear(): void {
     configStore.clear();

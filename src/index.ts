@@ -207,7 +207,10 @@ export { TaskScheduler } from "./queues/workers/TaskScheduler.js";
 export { WorkerLifecycleManager } from "./queues/workers/WorkerLifecycleManager.js";
 export { WorkerProtocolHandler } from "./queues/workers/WorkerProtocolHandler.js";
 export { WorkerEventHandler } from "./queues/workers/WorkerEventHandler.js";
-export { QueueEvents, type QueueJobEvent } from "./queues/interfaces/queue-events.js";
+export {
+  QueueEvents,
+  type QueueJobEvent,
+} from "./queues/interfaces/queue-events.js";
 export type { JobHandler } from "./queues/interfaces/JobHandler.js";
 export type { QueueOptions } from "./core/interfaces/queue.interface.js";
 export type { DistributedOptions } from "./core/interfaces/distributed.interface.js";
@@ -220,7 +223,13 @@ export type { QueueAdapter } from "./queues/interfaces/QueueAdapter.js";
 // ----------------------------------------------
 // Configuration Management
 // ----------------------------------------------
+/**
+ * @deprecated Usa ConfigModule.forRoot() y ConfigService para inyectar configuraciones
+ * en lugar de ConfigRegistry. ConfigRegistry se mantendrá temporalmente para compatibilidad
+ * con versiones anteriores, pero se eliminará en futuras versiones.
+ */
 export { ConfigRegistry } from "./config/ConfigRegistry.js";
+
 export { InjectConfig } from "./config/inject-config.decorator.js";
 export {
   CONFIG_SERVICE_TOKEN,
@@ -232,7 +241,10 @@ export {
   ConfigModule,
   type ConfigModuleOptions,
 } from "./config/ConfigModule.js";
-export { ConfigValidator, ConfigValidationError } from "./config/ConfigValidator.js";
+export {
+  ConfigValidator,
+  ConfigValidationError,
+} from "./config/ConfigValidator.js";
 export { ConfigWatcher } from "./config/ConfigWatcher.js";
 
 // ----------------------------------------------
