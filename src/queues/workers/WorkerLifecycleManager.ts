@@ -7,9 +7,9 @@ import {
 import { getLogger } from "../../logger/logger.factory.js";
 import { container } from "../../container/DIContainer.js";
 import {
-  CONFIG_SERVICE_TOKEN,
-  type ConfigService,
-} from "../../config/ConfigService.js";
+  INTERNAL_CONFIG_SERVICE_TOKEN,
+  type InternalConfigService,
+} from "../../config/InternalConfigService.js";
 import {
   QUEUE_REGISTRY_TOKEN,
   type QueueRegistryService,
@@ -56,7 +56,7 @@ export class WorkerLifecycleManager {
   ) {
     // Cargamos configuración global para el pool de workers
     const configService =
-      container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN);
+      container.resolve<InternalConfigService>(INTERNAL_CONFIG_SERVICE_TOKEN);
     const config = configService.get("queue") || {};
 
     // Aplicamos valores por defecto si no se proporcionan en la configuración

@@ -3,8 +3,9 @@ import { TypeCompiler } from "@sinclair/typebox/compiler";
 import { ConfigValidator, ConfigValidationError } from "./ConfigValidator.js";
 import { ConfigWatcher } from "./ConfigWatcher.js";
 import { getLogger } from "../logger/logger.factory.js";
-import { container } from "../container/DIContainer.js";
+import { ScopeType, container } from "../container/DIContainer.js";
 import { CONFIG_SERVICE_TOKEN, type ConfigService } from "./ConfigService.js";
+import { INTERNAL_CONFIG_SERVICE_TOKEN } from "./InternalConfigService.js";
 import { DefaultConfigService } from "./DefaultConfigService.js";
 
 /**
@@ -159,6 +160,16 @@ export class ConfigModule {
 
     // Registramos el servicio en el contenedor DI
     container.registerInstance(CONFIG_SERVICE_TOKEN, configService);
+
+    // Aseguramos que INTERNAL_CONFIG_SERVICE_TOKEN resuelva la misma instancia
+    // (DefaultConfigService implementa ambas interfaces)
+    if (!container.has(INTERNAL_CONFIG_SERVICE_TOKEN)) {
+      container.registerFactory(
+        INTERNAL_CONFIG_SERVICE_TOKEN,
+        (c) => c.resolve(CONFIG_SERVICE_TOKEN),
+        ScopeType.Singleton,
+      );
+    }
 
     // Inicializamos hot-reload si está activado
     if (options.hotReload && process.env.NODE_ENV !== "production") {

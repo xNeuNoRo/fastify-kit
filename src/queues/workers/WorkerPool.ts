@@ -1,8 +1,8 @@
 import { container } from "../../container/DIContainer.js";
 import {
-  CONFIG_SERVICE_TOKEN,
-  type ConfigService,
-} from "../../config/ConfigService.js";
+  INTERNAL_CONFIG_SERVICE_TOKEN,
+  type InternalConfigService,
+} from "../../config/InternalConfigService.js";
 import {
   QUEUE_REGISTRY_TOKEN,
   type QueueRegistryService,
@@ -35,8 +35,8 @@ export class WorkerPool implements BeforeApplicationShutdown {
 
   constructor() {
     // Cargamos configuración global para el pool de workers
-    const configService = container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN);
-    const config = configService.get("queue") || {};
+    const internalConfig = container.resolve<InternalConfigService>(INTERNAL_CONFIG_SERVICE_TOKEN);
+    const config = internalConfig.get("queue") || {};
 
     this.lifecycle = new WorkerLifecycleManager(
       this.workers,

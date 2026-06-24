@@ -1,9 +1,9 @@
 import { ConnectionOptions, Worker } from "bullmq";
 import { Redis } from "ioredis";
 import {
-  CONFIG_SERVICE_TOKEN,
-  type ConfigService,
-} from "../config/ConfigService.js";
+  INTERNAL_CONFIG_SERVICE_TOKEN,
+  type InternalConfigService,
+} from "../config/InternalConfigService.js";
 import {
   QUEUE_REGISTRY_TOKEN,
   type QueueRegistryService,
@@ -32,8 +32,8 @@ export class QueueWorkerManager
   private readonly logger = getLogger();
 
   public async onApplicationBootstrap(): Promise<void> {
-    const configService = container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN);
-    const config = configService.get("queue") || {};
+    const internalConfig = container.resolve<InternalConfigService>(INTERNAL_CONFIG_SERVICE_TOKEN);
+    const config = internalConfig.get("queue") || {};
 
     if (config.strategy !== "redis") return;
 

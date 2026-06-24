@@ -32,9 +32,9 @@ import {
 import { getEventBus } from "../../events/eventbus.factory.js";
 import { container } from "../../container/DIContainer.js";
 import {
-  CONFIG_SERVICE_TOKEN,
-  type ConfigService,
-} from "../../config/ConfigService.js";
+  INTERNAL_CONFIG_SERVICE_TOKEN,
+  type InternalConfigService,
+} from "../../config/InternalConfigService.js";
 
 type WorkerAppData = {
   workerIndex: number;
@@ -63,7 +63,7 @@ export class AdvancedSfuRoomManager
   private readonly workerRoomBundles = new Map<number, Set<string>>();
   // Porcentaje de CPU a partir del cual consideramos que el sistema está saturado
   private readonly SATURATION_THRESHOLD =
-    container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN).get("webrtc")?.saturationThreshold || 90;
+    container.resolve<InternalConfigService>(INTERNAL_CONFIG_SERVICE_TOKEN).get("webrtc")?.saturationThreshold || 90;
 
   /**
    * @description Inicializa el gestor avanzado de salas SFU creando un pool de workers de mediasoup

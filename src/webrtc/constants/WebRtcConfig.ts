@@ -10,15 +10,15 @@ import type {
 import { IceServer } from "../interfaces/IceServer.js";
 import { container } from "../../container/DIContainer.js";
 import {
-  CONFIG_SERVICE_TOKEN,
-  type ConfigService,
-} from "../../config/ConfigService.js";
+  INTERNAL_CONFIG_SERVICE_TOKEN,
+  type InternalConfigService,
+} from "../../config/InternalConfigService.js";
 
 /**
  * @description Helper para obtener la configuración de WebRTC desde el ConfigService inyectable.
  */
 function getWebRtcConfig() {
-  return container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN).get("webrtc");
+  return container.resolve<InternalConfigService>(INTERNAL_CONFIG_SERVICE_TOKEN).get("webrtc");
 }
 
 /**
