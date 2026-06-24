@@ -49,4 +49,31 @@ export interface ConfigService {
    * @returns true si la configuración existe, false en caso contrario.
    */
   has<K extends keyof InternalFrameworkConfig>(key: K): boolean;
+
+  /**
+   * Registra una configuración genérica bajo cualquier namespace (string).
+   * Para config de usuario (ej: "DATABASE_URL", "PORT") registrada por ConfigModule.
+   * @param namespace El namespace de la configuración.
+   * @param value El valor de la configuración.
+   */
+  setConfig<T>(namespace: string, value: T): void;
+
+  /**
+   * Obtiene una configuración genérica por su namespace.
+   * @param namespace El namespace de la configuración.
+   * @returns La configuración solicitada, o undefined si no existe.
+   */
+  getConfig<T>(namespace: string): T | undefined;
+
+  /**
+   * Verifica si existe una configuración genérica bajo un namespace.
+   * @param namespace El namespace de la configuración.
+   * @returns true si la configuración existe, false en caso contrario.
+   */
+  hasConfig(namespace: string): boolean;
+
+  /**
+   * Elimina todas las configuraciones (internas y genéricas).
+   */
+  clear(): void;
 }

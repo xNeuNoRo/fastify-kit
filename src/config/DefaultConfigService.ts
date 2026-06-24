@@ -17,6 +17,7 @@ import {
 @Injectable(CONFIG_SERVICE_TOKEN)
 export class DefaultConfigService implements ConfigService {
   private readonly state: InternalFrameworkConfig = {};
+  private readonly configStore = new Map<string, unknown>();
 
   set<K extends keyof InternalFrameworkConfig>(
     key: K,
@@ -33,5 +34,22 @@ export class DefaultConfigService implements ConfigService {
 
   has<K extends keyof InternalFrameworkConfig>(key: K): boolean {
     return key in this.state;
+  }
+
+  setConfig<T>(namespace: string, value: T): void {
+    this.configStore.set(namespace, value);
+  }
+
+  getConfig<T>(namespace: string): T | undefined {
+    return this.configStore.get(namespace) as T | undefined;
+  }
+
+  hasConfig(namespace: string): boolean {
+    return this.configStore.has(namespace);
+  }
+
+  clear(): void {
+    Object.keys(this.state).forEach((k) => delete (this.state as any)[k]);
+    this.configStore.clear();
   }
 }

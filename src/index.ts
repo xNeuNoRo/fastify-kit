@@ -228,6 +228,12 @@ export {
   type InternalFrameworkConfig,
 } from "./config/ConfigService.js";
 export { DefaultConfigService } from "./config/DefaultConfigService.js";
+export {
+  ConfigModule,
+  type ConfigModuleOptions,
+} from "./config/ConfigModule.js";
+export { ConfigValidator, ConfigValidationError } from "./config/ConfigValidator.js";
+export { ConfigWatcher } from "./config/ConfigWatcher.js";
 
 // ----------------------------------------------
 // Validation (TypeBox)
