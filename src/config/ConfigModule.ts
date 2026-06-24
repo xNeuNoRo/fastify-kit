@@ -7,6 +7,33 @@ import { ScopeType, container } from "../container/DIContainer.js";
 import { CONFIG_SERVICE_TOKEN, type ConfigService } from "./ConfigService.js";
 import { INTERNAL_CONFIG_SERVICE_TOKEN } from "./InternalConfigService.js";
 import { DefaultConfigService } from "./DefaultConfigService.js";
+import type { ObservabilityConfig } from "../observability/contracts/ObservabilityConfig.js";
+import {
+  OBSERVABILITY_CONFIG_KEY,
+  getDefaultObservabilityConfig,
+} from "../observability/contracts/ObservabilityConfig.js";
+
+function deepMerge(
+  target: Record<string, any>,
+  source: Record<string, any>,
+): Record<string, any> {
+  const output = { ...target };
+  for (const key of Object.keys(source)) {
+    if (
+      source[key] &&
+      typeof source[key] === "object" &&
+      !Array.isArray(source[key]) &&
+      target[key] &&
+      typeof target[key] === "object" &&
+      !Array.isArray(target[key])
+    ) {
+      output[key] = deepMerge(target[key], source[key]);
+    } else {
+      output[key] = source[key];
+    }
+  }
+  return output;
+}
 
 /**
  * @description Opciones de configuración para ConfigModule.forRoot().
@@ -40,6 +67,11 @@ export interface ConfigModuleOptions {
    * @default "" (sin prefijo)
    */
   envPrefix?: string;
+  /**
+   * Configuracion de observabilidad nativa (logs, metricas, trazas).
+   * Se mergea con defaults inteligentes segun el entorno.
+   */
+  observability?: Partial<ObservabilityConfig>;
 }
 
 /**
@@ -160,6 +192,13 @@ export class ConfigModule {
 
     // Registramos el servicio en el contenedor DI
     container.registerInstance(CONFIG_SERVICE_TOKEN, configService);
+
+    // Registramos la configuracion de observabilidad si fue proporcionada
+    if (options.observability) {
+      const defaults = getDefaultObservabilityConfig();
+      const merged = deepMerge(defaults as any, options.observability as any);
+      configService.setConfig(OBSERVABILITY_CONFIG_KEY, merged);
+    }
 
     // Aseguramos que INTERNAL_CONFIG_SERVICE_TOKEN resuelva la misma instancia
     // (DefaultConfigService implementa ambas interfaces)

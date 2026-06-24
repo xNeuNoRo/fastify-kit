@@ -23,6 +23,7 @@ import { CorePluginsStep } from "./bootstrap/steps/CorePluginsStep.js";
 import { LifecycleAndRoutesStep } from "./bootstrap/steps/LifecycleAndRoutesStep.js";
 import { BootstrapHooksStep } from "./bootstrap/steps/BootstrapHooksStep.js";
 import { GracefulShutdownStep } from "./bootstrap/steps/GracefulShutdownStep.js";
+import { ObservabilityBootstrapStep } from "../observability/bootstrap/ObservabilityBootstrapStep.js";
 import type { Constructor } from "../http/routing/scanner/index.js";
 
 export { FASTIFY_KIT_METADATA_SYMBOL } from "./constants/symbols.js";
@@ -166,6 +167,7 @@ export class FastifyKit {
     options: FastifyKitOptions,
   ): Promise<FastifyInstance<any, any, any, any, TypeBoxTypeProvider>> {
     return new BootstrapPipeline(options)
+      .add(new ObservabilityBootstrapStep())
       .add(new PreFlightStep())
       .add(new FastifyInstanceStep())
       .add(new ModuleDiscoveryStep())

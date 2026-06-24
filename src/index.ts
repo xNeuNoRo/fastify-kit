@@ -160,6 +160,37 @@ export {
 } from "./logger/LoggerContract.js";
 export { getLogger } from "./logger/logger.factory.js";
 
+// Observabilidad Nativa (OpenTelemetry, Prometheus, Pino)
+export {
+  METRICS_SERVICE_TOKEN,
+  type MetricsService,
+} from "./observability/contracts/MetricsService.js";
+export {
+  TRACER_SERVICE_TOKEN,
+  type TracerService,
+  type Span,
+  type SpanContext,
+  type SpanOptions,
+  SpanKind,
+  SpanStatusCode,
+} from "./observability/contracts/TracerService.js";
+export {
+  OBSERVABILITY_CONFIG_KEY,
+  ObservabilityConfigSchema,
+  type ObservabilityConfig,
+  getDefaultObservabilityConfig,
+} from "./observability/contracts/ObservabilityConfig.js";
+export { PromMetricsService } from "./observability/implementations/PromMetricsService.js";
+export { OtelTracerService } from "./observability/implementations/OtelTracerService.js";
+export { PinoLoggerService } from "./observability/implementations/PinoLoggerService.js";
+export {
+  injectTraceContext,
+  extractTraceContext,
+  injectBaggage,
+  parseBaggageHeader,
+} from "./observability/propagation/context-propagation.js";
+export * from "./observability/utils/semantic-conventions.js";
+
 // ----------------------------------------------
 // Resilience & Fault Tolerance
 // ----------------------------------------------
