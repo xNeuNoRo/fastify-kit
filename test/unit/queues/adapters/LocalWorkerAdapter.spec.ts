@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { LocalWorkerAdapter } from "../../../../src/queues/adapters/LocalWorkerAdapter.js";
-import { WorkerPool } from "../../../../src/queues/workers/WorkerPool.js";
 import { WorkerLifecycleManager } from "../../../../src/queues/workers/WorkerLifecycleManager.js";
+import { WorkerPool } from "../../../../src/queues/workers/WorkerPool.js";
 
 describe("Adaptador Multihilo (LocalWorkerAdapter)", () => {
   let adapter: LocalWorkerAdapter;

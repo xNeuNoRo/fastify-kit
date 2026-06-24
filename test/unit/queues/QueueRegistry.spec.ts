@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 
 import { container } from "../../../src/container/DIContainer.js";
-import { QueueRegistryService } from "../../../src/queues/QueueRegistryService.js";
-import { QUEUE_REGISTRY_TOKEN } from "../../../src/queues/QueueRegistryService.js";
+import {
+  QueueRegistryService,
+  QUEUE_REGISTRY_TOKEN,
+} from "../../../src/queues/QueueRegistryService.js";
 
 // Clases dummy para simular los procesadores que inyectaría el usuario
 class DummyEmailProcessor {

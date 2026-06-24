@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
+
 import { discoverControllers } from "../../../../src/core/discovery.js";
 
 describe("Motor de Auto-Descubrimiento - Estrés de Concurrencia", () => {
@@ -55,48 +56,36 @@ describe("Motor de Auto-Descubrimiento - Estrés de Concurrencia", () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it(
-    "Debería descubrir 500 controladores sin error EMFILE usando concurrencia limitada",
-    async () => {
-      // 200 archivos en el directorio raíz + 10 subdirectorios * 30 archivos c/u = 500
-      const controllers = await discoverControllers({
-        baseDir: path.join(tmpDir, "large-module"),
-        suffix: ".controller.js",
-        concurrency: 30, // Concurrencia baja para verificar que el límite funciona
-      });
+  it("Debería descubrir 500 controladores sin error EMFILE usando concurrencia limitada", async () => {
+    // 200 archivos en el directorio raíz + 10 subdirectorios * 30 archivos c/u = 500
+    const controllers = await discoverControllers({
+      baseDir: path.join(tmpDir, "large-module"),
+      suffix: ".controller.js",
+      concurrency: 30, // Concurrencia baja para verificar que el límite funciona
+    });
 
-      expect(controllers.length).toBe(500);
-      expect(controllers.every((c) => typeof c === "function")).toBe(true);
-    },
-    30000, // 30 segundos timeout para este test de estrés
-  );
+    expect(controllers.length).toBe(500);
+    expect(controllers.every((c) => typeof c === "function")).toBe(true);
+  }, 30000); // 30 segundos timeout para este test de estrés
 
-  it(
-    "Debería respetar el límite de concurrencia configurado sin degradar el resultado",
-    async () => {
-      // Mismo escenario, pero con concurrencia alta para verificar que también funciona
-      const controllers = await discoverControllers({
-        baseDir: path.join(tmpDir, "large-module"),
-        suffix: ".controller.js",
-        concurrency: 100,
-      });
+  it("Debería respetar el límite de concurrencia configurado sin degradar el resultado", async () => {
+    // Mismo escenario, pero con concurrencia alta para verificar que también funciona
+    const controllers = await discoverControllers({
+      baseDir: path.join(tmpDir, "large-module"),
+      suffix: ".controller.js",
+      concurrency: 100,
+    });
 
-      expect(controllers.length).toBe(500);
-    },
-    30000,
-  );
+    expect(controllers.length).toBe(500);
+  }, 30000);
 
-  it(
-    "Debería usar el límite por defecto (50) si no se especifica concurrency",
-    async () => {
-      const controllers = await discoverControllers({
-        baseDir: path.join(tmpDir, "large-module"),
-        suffix: ".controller.js",
-        // No especificamos concurrency → debe usar el default de 50
-      });
+  it("Debería usar el límite por defecto (50) si no se especifica concurrency", async () => {
+    const controllers = await discoverControllers({
+      baseDir: path.join(tmpDir, "large-module"),
+      suffix: ".controller.js",
+      // No especificamos concurrency → debe usar el default de 50
+    });
 
-      expect(controllers.length).toBe(500);
-    },
-    30000,
-  );
+    expect(controllers.length).toBe(500);
+  }, 30000);
 });
