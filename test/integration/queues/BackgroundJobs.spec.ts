@@ -18,7 +18,10 @@ import { Post } from "../../../src/http/decorators/methods.js";
 import { Body, UseParams } from "../../../src/http/decorators/parameters.js";
 import { Processor } from "../../../src/queues/decorators/processor.js";
 import { QueueManager } from "../../../src/queues/QueueManager.js";
-import { QueueRegistry } from "../../../src/queues/QueueRegistry.js";
+import {
+  QUEUE_REGISTRY_TOKEN,
+  type QueueRegistryService,
+} from "../../../src/queues/QueueRegistryService.js";
 
 // Aseguramos que la metadata exista por si acaso
 if (!(Symbol as any).metadata) {
@@ -87,12 +90,16 @@ describe("Integración Background Jobs", () => {
   });
 
   afterEach(() => {
-    QueueRegistry.clear();
+    const queueRegistry =
+      container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN);
+    queueRegistry.clear();
   });
 
   describe("Discovery de los Procesadores", () => {
     it("Debería escanear y registrar correctamente el Procesador en el contenedor", () => {
-      const processorClass = QueueRegistry.getProcessor("email-welcome-queue");
+      const queueRegistry =
+        container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN);
+      const processorClass = queueRegistry.getProcessor("email-welcome-queue");
       expect(processorClass).toBe(WelcomeEmailProcessor);
     });
   });

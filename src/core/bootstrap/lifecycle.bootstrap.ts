@@ -1,7 +1,7 @@
 import { Cron } from "croner";
 import type { FastifyInstance } from "fastify";
 import { type Constructor } from "../../http/routing/scanner/index.js";
-import { registerGateways } from "../../websockets/gateway.registry.js";
+import { WsGatewayRegistry } from "../../websockets/WsGatewayRegistry.js";
 import { container } from "../../container/DIContainer.js";
 import type { FastifyKitMetadata } from "../../http/decorators/types.js";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
@@ -226,7 +226,7 @@ export function registerWebSocketGateways(
 
   // Si encontramos gateways, los registramos.
   if (gateways.length > 0) {
-    registerGateways(app, gateways);
+    new WsGatewayRegistry().registerGateways(app, gateways);
   } else {
     app.log.warn(
       "[FastifyKit WS] WebSockets activados en opciones, pero no se encontró ningún @WebSocketGateway en los módulos.",

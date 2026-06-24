@@ -1,7 +1,13 @@
 import { ConnectionOptions, Worker } from "bullmq";
 import { Redis } from "ioredis";
-import { InternalConfig } from "../config/InternalConfig.js";
-import { QueueRegistry } from "./QueueRegistry.js";
+import {
+  INTERNAL_CONFIG_SERVICE_TOKEN,
+  type InternalConfigService,
+} from "../config/InternalConfigService.js";
+import {
+  QUEUE_REGISTRY_TOKEN,
+  type QueueRegistryService,
+} from "./QueueRegistryService.js";
 import { WorkerPool } from "./workers/WorkerPool.js";
 import { getLogger } from "../logger/logger.factory.js";
 import { Injectable } from "../container/injectable.decorator.js";
@@ -26,7 +32,8 @@ export class QueueWorkerManager
   private readonly logger = getLogger();
 
   public async onApplicationBootstrap(): Promise<void> {
-    const config = InternalConfig.get("queue") || {};
+    const internalConfig = container.resolve<InternalConfigService>(INTERNAL_CONFIG_SERVICE_TOKEN);
+    const config = internalConfig.get("queue") || {};
 
     if (config.strategy !== "redis") return;
 
@@ -35,7 +42,8 @@ export class QueueWorkerManager
     const workerPool = container.resolve(WorkerPool);
 
     // Obtenemos todas las colas registradas por el scanner
-    const registeredQueues = QueueRegistry.getRegisteredQueues();
+    const queueRegistry = container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN);
+    const registeredQueues = queueRegistry.getRegisteredQueues();
 
     for (const queueName of registeredQueues) {
       const worker = new Worker(

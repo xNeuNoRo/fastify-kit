@@ -3,14 +3,19 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, it, expect, beforeEach, vi, afterAll } from "vitest";
 
-import { InternalConfig } from "../../../src/config/InternalConfig.js";
-import { container } from "../../../src/container/DIContainer.js";
+import { CONFIG_SERVICE_TOKEN } from "../../../src/config/ConfigService.js";
+import { DefaultConfigService } from "../../../src/config/DefaultConfigService.js";
+import { INTERNAL_CONFIG_SERVICE_TOKEN } from "../../../src/config/InternalConfigService.js";
+import { ScopeType, container } from "../../../src/container/DIContainer.js";
 import { FastifyKit } from "../../../src/core/FastifyKit.js";
 import { Module } from "../../../src/core/module.decorator.js";
 import { registerRedisConnection } from "../../../src/distributed/redis.factory.js";
 import { RedisEventBus } from "../../../src/events/RedisEventBus.js";
 import { QueueManager } from "../../../src/queues/QueueManager.js";
-import { QueueRegistry } from "../../../src/queues/QueueRegistry.js";
+import {
+  QUEUE_REGISTRY_TOKEN,
+  QueueRegistryService,
+} from "../../../src/queues/QueueRegistryService.js";
 
 // Herramienta de detección de Redis para saber si correr o no las pruebas de integración
 const isRedisAvailable = async () => {
@@ -67,12 +72,21 @@ describe("Integración Sistema Distribuido (Redis)", () => {
     "Debería sincronizar eventos entre dos instancias independientes",
     async () => {
       container.clearAll();
-      QueueRegistry.clear();
+      container.registerClass(QUEUE_REGISTRY_TOKEN, QueueRegistryService);
+      container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN).clear();
 
       // Configuramos el framework para que las instancias sepan a qué Redis conectar
-      InternalConfig.set("distributed", {
+      // Registramos el ConfigService inyectable y configuramos los datos distribuidos
+      const configService = new DefaultConfigService();
+      configService.set("distributed", {
         redis: { host: "localhost", port: 6379 },
       });
+      container.registerInstance(CONFIG_SERVICE_TOKEN, configService);
+      container.registerFactory(
+        INTERNAL_CONFIG_SERVICE_TOKEN,
+        (c) => c.resolve(CONFIG_SERVICE_TOKEN),
+        ScopeType.Singleton,
+      );
 
       // Registramos la conexión compartida
       registerRedisConnection();
@@ -109,7 +123,8 @@ describe("Integración Sistema Distribuido (Redis)", () => {
     "Debería procesar tareas distribuidas y notificar vía EventBus Global",
     async () => {
       container.clearAll();
-      QueueRegistry.clear();
+      container.registerClass(QUEUE_REGISTRY_TOKEN, QueueRegistryService);
+      container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN).clear();
 
       const { DistributedProcessor: ProcessorImpl } =
         await import("../queues/fixtures/Distributed.processor.js");
@@ -119,7 +134,9 @@ describe("Integración Sistema Distribuido (Redis)", () => {
         process.cwd(),
         "test/integration/queues/fixtures/Distributed.processor.ts",
       );
-      QueueRegistry.addProcessorFile(pathToFileURL(fixturePath).href);
+      container
+        .resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN)
+        .addProcessorFile(pathToFileURL(fixturePath).href);
 
       @Module({
         providers: [ProcessorImpl],
@@ -174,18 +191,19 @@ describe("Integración Sistema Distribuido (Redis)", () => {
       );
 
       // Iniciamos Instancia Secundaria en un hilo aparte (Aislamiento de Memoria/Container)
-      const secondaryNode = new Worker(workerPath);
+      const secondaryNode = new Worker(workerPath) as any;
 
       // Esperamos a que el nodo secundario esté listo
       await new Promise((resolve) => {
-        secondaryNode.on("message", (msg) => {
+        secondaryNode.on("message", (msg: any) => {
           if (msg.type === "ready") resolve(true);
         });
       });
 
       // Iniciamos Instancia Primaria en este hilo
       container.clearAll();
-      QueueRegistry.clear();
+      container.registerClass(QUEUE_REGISTRY_TOKEN, QueueRegistryService);
+      container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN).clear();
 
       @Module({})
       class PrimaryModule {}
@@ -204,7 +222,7 @@ describe("Integración Sistema Distribuido (Redis)", () => {
       let eventReceivedBySecondary = false;
       let receivedPayload: any = null;
 
-      secondaryNode.on("message", (msg) => {
+      secondaryNode.on("message", (msg: any) => {
         if (msg.type === "event_received") {
           eventReceivedBySecondary = true;
           receivedPayload = msg.payload;

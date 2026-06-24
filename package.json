@@ -31,6 +31,7 @@
     "build": "npm run build:clean && tsc",
     "build:watch": "tsc --watch",
     "typecheck": "tsc --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --check \"src/**/*.{ts,js,json,md}\"",
@@ -48,10 +49,10 @@
   },
   "peerDependencies": {
     "@sinclair/typebox": "^0.34.49",
-    "fastify": "^5.8.5",
-    "mediasoup": "^3.20.5",
     "bullmq": "^5.78.0",
-    "ioredis": "^5.11.1"
+    "fastify": "^5.8.5",
+    "ioredis": "^5.11.1",
+    "mediasoup": "^3.20.5"
   },
   "peerDependenciesMeta": {
     "fastify": {
@@ -90,6 +91,7 @@
     "fastify-plugin": "^6.0.0",
     "glob": "^13.0.6",
     "ora": "^9.4.0",
+    "p-limit": "^7.3.0",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {

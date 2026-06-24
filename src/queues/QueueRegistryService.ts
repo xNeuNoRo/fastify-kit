@@ -1,5 +1,8 @@
 import type { Constructor } from "../http/routing/scanner/index.js";
 import type { QueueType } from "./interfaces/queue-options.js";
+import { Injectable } from "../container/injectable.decorator.js";
+
+export const QUEUE_REGISTRY_TOKEN = Symbol.for("QUEUE_REGISTRY_TOKEN");
 
 interface QueueDefinition {
   processorClass: Constructor;
@@ -7,12 +10,16 @@ interface QueueDefinition {
 }
 
 /**
- * @description Registro global en memoria que mapea el nombre de las colas
+ * @description Registro inyectable que mapea el nombre de las colas
  * con sus respectivas clases procesadoras y perfiles de ejecución (CPU o IO).
+ *
+ * Reemplaza al antiguo QueueRegistry estático con un servicio inyectable,
+ * permitiendo tests paralelos, multi-tenancy y eliminando acoplamiento global.
  */
-export class QueueRegistry {
-  private static readonly registry = new Map<string, QueueDefinition>();
-  private static readonly processorFiles = new Set<string>();
+@Injectable(QUEUE_REGISTRY_TOKEN)
+export class QueueRegistryService {
+  private readonly registry = new Map<string, QueueDefinition>();
+  private readonly processorFiles = new Set<string>();
 
   /**
    * @description Registra un nuevo procesador de cola en memoria.
@@ -24,7 +31,7 @@ export class QueueRegistry {
    * @param type El tipo de la cola, que puede ser "cpu" o "io", utilizado para determinar
    * la estrategia de asignación de workers en el pool.
    */
-  public static register(
+  register(
     queueName: string,
     processorClass: Constructor,
     type: QueueType,
@@ -44,7 +51,7 @@ export class QueueRegistry {
    * @returns La clase del procesador registrado para la cola, o undefined si no se
    * encuentra ningún procesador registrado para esa cola
    */
-  public static getProcessor(queueName: string): Constructor | undefined {
+  getProcessor(queueName: string): Constructor | undefined {
     return this.registry.get(queueName)?.processorClass;
   }
 
@@ -53,7 +60,7 @@ export class QueueRegistry {
    * @param queueName El nombre de la cola para la que se desea obtener el tipo
    * @returns El tipo de la cola ("cpu" o "io"), o undefined si no se encuentra ningún procesador registrado para esa cola
    */
-  public static getQueueType(queueName: string): QueueType | undefined {
+  getQueueType(queueName: string): QueueType | undefined {
     return this.registry.get(queueName)?.type;
   }
 
@@ -61,21 +68,21 @@ export class QueueRegistry {
    * @description Método de utilidad para obtener una lista de todas las colas registradas en el sistema.
    * @returns Un array con los nombres de todas las colas que tienen un procesador registrado en el sistema.
    */
-  public static getRegisteredQueues(): string[] {
+  getRegisteredQueues(): string[] {
     return Array.from(this.registry.keys());
   }
 
   /**
    * @description Registra la ruta de un archivo que contiene uno o más procesadores.
    */
-  public static addProcessorFile(path: string): void {
+  addProcessorFile(path: string): void {
     this.processorFiles.add(path);
   }
 
   /**
    * @description Obtiene todas las rutas de archivos registradas.
    */
-  public static getProcessorFiles(): string[] {
+  getProcessorFiles(): string[] {
     return Array.from(this.processorFiles);
   }
 
@@ -83,7 +90,7 @@ export class QueueRegistry {
    * @description Método de utilidad para limpiar el registro de colas y archivos de procesadores,
    * utilizado principalmente en tests para asegurar un estado limpio entre pruebas.
    */
-  static clear(): void {
+  clear(): void {
     this.registry.clear();
     this.processorFiles.clear();
   }

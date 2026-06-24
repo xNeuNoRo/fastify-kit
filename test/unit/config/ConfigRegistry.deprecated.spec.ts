@@ -1,16 +1,25 @@
+/**
+ * ⚠️ DEPRECATED — Tests del sistema legacy ConfigRegistry
+ *
+ * ConfigRegistry está deprecado y se eliminará en v1.0.
+ * La API recomendada es ConfigModule.forRoot() + ConfigService.
+ *
+ * Estos tests se mantienen temporalmente para verificar compatibilidad
+ * con el fallback legacy del decorador @InjectConfig.
+ */
 import { describe, it, expect, beforeEach } from "vitest";
 
 import { ConfigRegistry } from "../../../src/config/ConfigRegistry.js";
 import { InjectConfig } from "../../../src/config/inject-config.decorator.js";
 
-describe("Sistema de Configuración (ConfigRegistry & @InjectConfig)", () => {
+describe("[DEPRECATED] ConfigRegistry — Legacy API (se elimina en v1.0)", () => {
   // Esto se ejecuta antes de cada "it" para asegurarnos de que el ConfigRegistry esté limpio antes de cada prueba
   beforeEach(() => {
     // Limpiar el ConfigRegistry antes de cada prueba
     ConfigRegistry.clear();
   });
 
-  describe("Gestión de Estado y Recuperación (ConfigRegistry)", () => {
+  describe("Gestión de Estado y Recuperación — ConfigRegistry (deprecated)", () => {
     it("Deberia cargar configuraciones masivamente y recuperarlas", () => {
       const environmentConfig = {
         NODE_ENV: "production",
@@ -92,7 +101,7 @@ describe("Sistema de Configuración (ConfigRegistry & @InjectConfig)", () => {
     });
   });
 
-  describe("Inyección en Clases (@InjectConfig)", () => {
+  describe("@InjectConfig — Comportamiento actual (fallback ConfigRegistry)", () => {
     it("Deberia inyectar la configuración dinámicamente en una propiedad de clase", () => {
       const databaseConfig = {
         host: "localhost",

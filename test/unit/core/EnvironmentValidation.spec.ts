@@ -2,7 +2,11 @@
 import { Type } from "@sinclair/typebox";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-import { ConfigRegistry } from "../../../src/config/ConfigRegistry.js";
+import {
+  CONFIG_SERVICE_TOKEN,
+  type ConfigService,
+} from "../../../src/config/ConfigService.js";
+import { container } from "../../../src/container/DIContainer.js";
 import { FastifyKit } from "../../../src/core/FastifyKit.js";
 import { Module } from "../../../src/core/module.decorator.js";
 
@@ -23,8 +27,10 @@ describe("Validación de Entorno en el Arranque (Boot-Time Env Validation)", () 
     // Mockeamos console.error para mantener la terminal limpia de los errores intencionales
     vi.spyOn(console, "error").mockImplementation(() => {});
 
-    // Limpiamos el registro de configuración para evitar datos residuales
-    ConfigRegistry.clear();
+    // Limpiamos la configuración para evitar datos residuales
+    if (container.has(CONFIG_SERVICE_TOKEN)) {
+      container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN).clear();
+    }
   });
 
   afterEach(() => {
@@ -55,12 +61,14 @@ describe("Validación de Entorno en el Arranque (Boot-Time Env Validation)", () 
       envSchema: EnvSchema,
     });
 
+    const configService =
+      container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN);
     // Validamos que los strings fueron coaccionados automáticamente a sus tipos primitivos nativos
-    expect(ConfigRegistry.get("PORT")).toBe(3000);
-    expect(ConfigRegistry.get("PORT")).not.toBe("3000"); // Validación estricta
+    expect(configService.getConfig("PORT")).toBe(3000);
+    expect(configService.getConfig("PORT")).not.toBe("3000"); // Validación estricta
 
-    expect(ConfigRegistry.get("ENABLE_CACHE")).toBe(true);
-    expect(ConfigRegistry.get("ENABLE_CACHE")).not.toBe("true");
+    expect(configService.getConfig("ENABLE_CACHE")).toBe(true);
+    expect(configService.getConfig("ENABLE_CACHE")).not.toBe("true");
 
     await app.close();
   });

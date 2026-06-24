@@ -5,7 +5,12 @@ import { pathToFileURL } from "node:url";
 import type { FastifyKitMetadata } from "../http/decorators/types.js";
 import { Dirent } from "node:fs";
 import { getLogger } from "../logger/logger.factory.js";
-import { QueueRegistry } from "../queues/QueueRegistry.js";
+import { container } from "../container/DIContainer.js";
+import {
+  QUEUE_REGISTRY_TOKEN,
+  type QueueRegistryService,
+} from "../queues/QueueRegistryService.js";
+import pLimit from "p-limit";
 
 const decoratorMetadataSymbol: symbol =
   (Symbol as any).metadata ?? Symbol.for("Symbol.metadata");
@@ -21,6 +26,13 @@ export interface AutoDiscoverOptions {
    * Ej: ".controller.ts" o [".controller.ts", ".controller.js"]
    */
   suffix?: string | string[];
+  /**
+   * Número máximo de operaciones de lectura/importación simultáneas.
+   * Limitar la concurrencia previene el agotamiento de file descriptors
+   * (EMFILE) en proyectos con miles de archivos.
+   * @default 50
+   */
+  concurrency?: number;
 }
 
 /**
@@ -46,9 +58,10 @@ function iterateModuleExports(
       ] as FastifyKitMetadata | undefined;
       if (metadata) {
         // Si la clase tiene metadata de queue, registramos el archivo
-        // en el QueueRegistry para que luego sepa dónde encontrarlo en los workers aislados
+        // en el QueueRegistryService para que luego sepa dónde encontrarlo en los workers aislados
         if (metadata.queue) {
-          QueueRegistry.addProcessorFile(fileUrl);
+          const queueRegistry = container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN);
+          queueRegistry.addProcessorFile(fileUrl);
         }
 
         // Si la metadata cumple con los criterios definidos, agregamos la clase al array de descubiertas
@@ -71,6 +84,7 @@ async function walkEntries({
   suffixes,
   criteria,
   discovered,
+  concurrency,
 }: {
   callback: (dir: string) => Promise<void>;
   entries: Dirent<string>[];
@@ -78,35 +92,42 @@ async function walkEntries({
   suffixes: string[];
   criteria: (metadata: FastifyKitMetadata) => boolean;
   discovered: Constructor[];
+  concurrency: number;
 }) {
+  // Limitamos la concurrencia de operaciones de archivo (readdir + import dinámico)
+  // para prevenir EMFILE en proyectos con miles de archivos
+  const limit = pLimit(concurrency);
+
   // Recorremos todas las entradas del directorio actual
-  const promises = entries.map(async (entry) => {
-    const fullPath = path.join(currentDir, entry.name);
+  const promises = entries.map((entry) =>
+    limit(async () => {
+      const fullPath = path.join(currentDir, entry.name);
 
-    // Si es un directorio, lo escaneamos recursivamente. Si es un archivo, verificamos si coincide con los sufijos buscados.
-    if (entry.isDirectory()) {
-      await callback(fullPath); // Buscamos recursivamente por cada subdirectorio
-    } else if (entry.isFile() && suffixes.some((s) => entry.name.endsWith(s))) {
-      // Importante: Bun y Node ESM requieren URLs (file://...) para imports dinámicos absolutos
-      const fileUrl = pathToFileURL(fullPath).href;
+      // Si es un directorio, lo escaneamos recursivamente. Si es un archivo, verificamos si coincide con los sufijos buscados.
+      if (entry.isDirectory()) {
+        await callback(fullPath); // Buscamos recursivamente por cada subdirectorio
+      } else if (entry.isFile() && suffixes.some((s) => entry.name.endsWith(s))) {
+        // Importante: Bun y Node ESM requieren URLs (file://...) para imports dinámicos absolutos
+        const fileUrl = pathToFileURL(fullPath).href;
 
-      try {
-        // Importamos el archivo dinámicamente
-        const module = await import(fileUrl);
+        try {
+          // Importamos el archivo dinámicamente
+          const module = await import(fileUrl);
 
-        // Iteramos sobre lo que exporta el archivo (por si exporta varias clases) y lo guardamos en el array
-        // de discovered si cumple con los criterios definidos
-        iterateModuleExports(module, criteria, discovered, fileUrl);
-      } catch (err) {
-        getLogger().warn(
-          `[FastifyKit Discovery] Error al importar ${fullPath}, archivo ignorado.`,
-          err instanceof Error
-            ? { message: err.message, stack: err.stack }
-            : { error: String(err) },
-        );
+          // Iteramos sobre lo que exporta el archivo (por si exporta varias clases) y lo guardamos en el array
+          // de discovered si cumple con los criterios definidos
+          iterateModuleExports(module, criteria, discovered, fileUrl);
+        } catch (err) {
+          getLogger().warn(
+            `[FastifyKit Discovery] Error al importar ${fullPath}, archivo ignorado.`,
+            err instanceof Error
+              ? { message: err.message, stack: err.stack }
+              : { error: String(err) },
+          );
+        }
       }
-    }
-  });
+    }),
+  );
   // Esperamos a que se completen todas las operaciones de lectura de directorios e importación de archivos antes de continuar
   await Promise.all(promises);
 }
@@ -145,6 +166,7 @@ async function discoverClasses(
     suffixArray = [];
   }
   const suffixes = suffixArray.length > 0 ? suffixArray : defaultSuffixes;
+  const concurrency = options.concurrency ?? 50;
 
   // Función recursiva para escanear directorios
   async function scanDir(currentDir: string) {
@@ -158,6 +180,7 @@ async function discoverClasses(
         suffixes,
         criteria,
         discovered,
+        concurrency,
       });
     } catch (err) {
       console.warn(`[FastifyKit Discovery] Error en ${currentDir}:`, err);

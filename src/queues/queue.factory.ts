@@ -4,7 +4,10 @@ import {
   type QueueAdapter,
 } from "./interfaces/QueueAdapter.js";
 import { LocalWorkerAdapter } from "./adapters/LocalWorkerAdapter.js";
-import { InternalConfig } from "../config/InternalConfig.js";
+import {
+  INTERNAL_CONFIG_SERVICE_TOKEN,
+  type InternalConfigService,
+} from "../config/InternalConfigService.js";
 import { DefaultInProcessAdapter } from "./adapters/DefaultInProcessAdapter.js";
 
 /**
@@ -14,7 +17,8 @@ import { DefaultInProcessAdapter } from "./adapters/DefaultInProcessAdapter.js";
  */
 export async function getQueueAdapter(): Promise<QueueAdapter> {
   if (!container.has(QUEUE_ADAPTER_TOKEN)) {
-    const config = InternalConfig.get("queue") || {};
+    const internalConfig = container.resolve<InternalConfigService>(INTERNAL_CONFIG_SERVICE_TOKEN);
+    const config = internalConfig.get("queue") || {};
 
     if (config.strategy === "redis") {
       // Importación dinámica de BullMQAdapter para no forzar la dependencia de 'bullmq'

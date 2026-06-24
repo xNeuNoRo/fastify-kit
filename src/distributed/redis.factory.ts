@@ -1,5 +1,8 @@
 import { Redis } from "ioredis";
-import { InternalConfig } from "../config/InternalConfig.js";
+import {
+  INTERNAL_CONFIG_SERVICE_TOKEN,
+  type InternalConfigService,
+} from "../config/InternalConfigService.js";
 import { container } from "../container/DIContainer.js";
 import { getLogger } from "../logger/logger.factory.js";
 import { BeforeApplicationShutdown } from "../core/interfaces/lifecycle.interface.js";
@@ -33,7 +36,8 @@ export function registerRedisConnection() {
 
   container.registerFactory(REDIS_CONNECTION_TOKEN, () => {
     const logger = getLogger();
-    const distributedConfig = InternalConfig.get("distributed") || {};
+    const internalConfig = container.resolve<InternalConfigService>(INTERNAL_CONFIG_SERVICE_TOKEN);
+    const distributedConfig = internalConfig.get("distributed") || {};
     const redisConfig = distributedConfig.redis || {};
 
     const connectionOptions = {

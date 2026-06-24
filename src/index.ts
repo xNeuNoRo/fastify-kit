@@ -8,6 +8,11 @@ export {
   type FastifyKitOptions,
   FASTIFY_INSTANCE_TOKEN,
 } from "./core/FastifyKit.js";
+export {
+  BootstrapPipeline,
+  type BootstrapContext,
+  type BootstrapStep,
+} from "./core/bootstrap/BootstrapPipeline.js";
 export { Module } from "./core/module.decorator.js";
 export {
   discoverControllers,
@@ -193,7 +198,19 @@ export { Processor } from "./queues/decorators/processor.js";
 export { OnQueueSuccess } from "./queues/decorators/on-queue-success.js";
 export { OnQueueFailure } from "./queues/decorators/on-queue-failure.js";
 export { QueueManager } from "./queues/QueueManager.js";
-export { QueueEvents, type QueueJobEvent } from "./queues/interfaces/queue-events.js";
+export {
+  QueueRegistryService,
+  QUEUE_REGISTRY_TOKEN,
+} from "./queues/QueueRegistryService.js";
+export { WorkerPool } from "./queues/workers/WorkerPool.js";
+export { TaskScheduler } from "./queues/workers/TaskScheduler.js";
+export { WorkerLifecycleManager } from "./queues/workers/WorkerLifecycleManager.js";
+export { WorkerProtocolHandler } from "./queues/workers/WorkerProtocolHandler.js";
+export { WorkerEventHandler } from "./queues/workers/WorkerEventHandler.js";
+export {
+  QueueEvents,
+  type QueueJobEvent,
+} from "./queues/interfaces/queue-events.js";
 export type { JobHandler } from "./queues/interfaces/JobHandler.js";
 export type { QueueOptions } from "./core/interfaces/queue.interface.js";
 export type { DistributedOptions } from "./core/interfaces/distributed.interface.js";
@@ -206,8 +223,39 @@ export type { QueueAdapter } from "./queues/interfaces/QueueAdapter.js";
 // ----------------------------------------------
 // Configuration Management
 // ----------------------------------------------
+/**
+ * @deprecated Usa ConfigModule.forRoot() y ConfigService para inyectar configuraciones
+ * en lugar de ConfigRegistry. ConfigRegistry se mantendrá temporalmente para compatibilidad
+ * con versiones anteriores, pero se eliminará en futuras versiones.
+ */
 export { ConfigRegistry } from "./config/ConfigRegistry.js";
+
 export { InjectConfig } from "./config/inject-config.decorator.js";
+
+// User Config API (ConfigModule, @InjectConfig)
+export {
+  CONFIG_SERVICE_TOKEN,
+  type ConfigService,
+} from "./config/ConfigService.js";
+
+// Internal Framework Config API (queue, distributed, webrtc)
+// Solo para subsistemas internos. Usuarios: usar ConfigService con setConfig/getConfig.
+export {
+  INTERNAL_CONFIG_SERVICE_TOKEN,
+  type InternalConfigService,
+  type InternalFrameworkConfig,
+} from "./config/InternalConfigService.js";
+
+export { DefaultConfigService } from "./config/DefaultConfigService.js";
+export {
+  ConfigModule,
+  type ConfigModuleOptions,
+} from "./config/ConfigModule.js";
+export {
+  ConfigValidator,
+  ConfigValidationError,
+} from "./config/ConfigValidator.js";
+export { ConfigWatcher } from "./config/ConfigWatcher.js";
 
 // ----------------------------------------------
 // Validation (TypeBox)
@@ -225,6 +273,13 @@ export {
   OnDisconnect,
 } from "./websockets/decorators/events.js";
 export type { WebSocketGatewayOptions } from "./websockets/decorators/types.js";
+
+// Servicios de WebSockets (Gateway Registry y sub-servicios)
+export { WsGatewayRegistry } from "./websockets/WsGatewayRegistry.js";
+export { WsConnectionManager } from "./websockets/WsConnectionManager.js";
+export { WsMessageRouter } from "./websockets/WsMessageRouter.js";
+export { WsGuardExecutor } from "./websockets/WsGuardExecutor.js";
+export { WsLifecycleHandler } from "./websockets/WsLifecycleHandler.js";
 
 // Adaptadores y Contratos
 export { JsonWsAdapter } from "./websockets/adapters/JsonWsAdapter.js";

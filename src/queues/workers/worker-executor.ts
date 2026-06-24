@@ -5,7 +5,10 @@ import {
   WorkerJobDoneMessage,
 } from "./worker-protocol.js";
 import { parentPort } from "node:worker_threads";
-import { QueueRegistry } from "../QueueRegistry.js";
+import {
+  QUEUE_REGISTRY_TOKEN,
+  type QueueRegistryService,
+} from "../QueueRegistryService.js";
 import { container } from "../../container/DIContainer.js";
 import type { JobHandler } from "../interfaces/JobHandler.js";
 import { FASTIFY_KIT_METADATA_SYMBOL } from "../../core/constants/symbols.js";
@@ -49,8 +52,9 @@ async function registerProcessorsFromFile(fileUrl: string) {
       const metadata = exportedItem[FASTIFY_KIT_METADATA_SYMBOL];
 
       if (metadata.queue) {
-        // Lo registramos en el motor de colas del worker
-        QueueRegistry.register(
+        // Lo registramos en el servicio inyectable de colas del worker
+        const queueRegistry = container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN);
+        queueRegistry.register(
           metadata.queue.name,
           exportedItem,
           metadata.queue.type,
@@ -104,7 +108,8 @@ async function handleJobMessage(
 
   try {
     // Para cada trabajo entrante, buscamos el procesador registrado para la cola correspondiente
-    const ProcessorClass = QueueRegistry.getProcessor(message.queueName);
+    const queueRegistry = container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN);
+    const ProcessorClass = queueRegistry.getProcessor(message.queueName);
 
     // Si no encontramos un procesador registrado para la cola, lanzamos un
     // error que será capturado y enviado de vuelta al pool

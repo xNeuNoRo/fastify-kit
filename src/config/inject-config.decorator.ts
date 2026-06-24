@@ -1,31 +1,32 @@
-import { ConfigRegistry } from "../config/ConfigRegistry.js";
+import { CONFIG_SERVICE_TOKEN, type ConfigService } from "./ConfigService.js";
+import { ConfigRegistry } from "./ConfigRegistry.js";
+import { container } from "../container/DIContainer.js";
 
 /**
- * @description Decorador de campo para inyectar configuraciones registradas en el ConfigRegistry.
- * Permite acceder a configuraciones específicas por namespace directamente desde los campos de clase.
- * @param namespace El namespace bajo el cual se ha registrado la configuración en el ConfigRegistry.
- * Al acceder al campo decorado, se retornará la configuración correspondiente a ese namespace.
+ * @description Decorador de campo para inyectar configuraciones desde el ConfigService inyectable.
+ * Resuelve ConfigService del contenedor DI y accede a la config por namespace.
+ * Si ConfigService no está registrado, fallback a ConfigRegistry (deprecado).
+ *
+ * @param namespace El namespace bajo el cual se ha registrado la configuración en el ConfigService.
  * @example
  * ```typescript
- * // Primero debes registrar una configuración en el ConfigRegistry bajo un namespace específico
- * ConfigRegistry.set("database", {
- *  host: "localhost",
- *  port: 5432,
- *  username: "user",
- *  password: "password"
+ * // Primero debes inicializar ConfigModule.forRoot() con el schema
+ * ConfigModule.forRoot({
+ *   schema: Type.Object({
+ *     DATABASE_URL: Type.String(),
+ *     PORT: Type.Number({ default: 3000 }),
+ *   })
  * });
  *
- * // Luego puedes inyectarla en el paradigma orientado a objetos usando el decorador \@InjectConfig
+ * // Luego puedes inyectar la config en cualquier clase
  * class MyService {
- *   \@InjectConfig("database")
- *   private readonly dbConfig: DatabaseConfig;
- *
- *   constructor() {
- *     console.log(this.dbConfig); // Accede a la configuración de la base de datos registrada bajo el namespace "database"
- *   }
+ *   \@InjectConfig("DATABASE_URL")
+ *   private readonly dbUrl: string;
  * }
  * ```
- * @remarks Es importante asegurarse de que la configuración esté registrada en el ConfigRegistry antes de intentar inyectarla, de lo contrario el campo decorado retornará undefined. Este decorador es especialmente útil para centralizar la gestión de configuraciones y facilitar su acceso en diferentes partes de la aplicación sin necesidad de pasar manualmente las configuraciones a través de constructores o métodos.
+ * @remarks Es importante asegurarse de que ConfigModule.forRoot() se haya llamado antes de inyectar la configuración.
+ * Si ConfigService no está registrado en el DI (no se llamó ConfigModule.forRoot()), se usa el fallback a ConfigRegistry
+ * con un warning de deprecación.
  * @returns Una función que se ejecutará cada vez que se acceda al campo decorado,
  * retornando la configuración registrada bajo el namespace especificado.
  */
@@ -42,9 +43,23 @@ export function InjectConfig(namespace: string) {
 
     // Este initializer recibe el valor que se le haya asignado por defecto a la variable
     return function (this: This, initialValue: Value) {
-      const config = ConfigRegistry.get(namespace);
+      // Intentamos resolver ConfigService del contenedor DI (registrado por ConfigModule.forRoot())
+      if (container.has(CONFIG_SERVICE_TOKEN)) {
+        const configService =
+          container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN);
+        // Si la config existe en ConfigService, la usamos.
+        if (configService.hasConfig(namespace)) {
+          return configService.getConfig(namespace) as Value;
+        }
+        // Si no existe en ConfigService, seguimos al fallback (ConfigRegistry)
+      }
 
-      // Si la config existe en el Registry, la usamos. Si no, usamos el valor por defecto.
+      
+      // Fallback: ConfigRegistry (deprecado, se eliminará en futuras versiones)
+      console.warn(
+        "[FastifyKit Deprecation]: Haciendo fallback a ConfigRegistry\nUsa ConfigModule.forRoot() y ConfigService para inyectar configuraciones en lugar de ConfigRegistry.\nConfigRegistry se mantendrá temporalmente para compatibilidad con versiones anteriores, pero se eliminará en futuras versiones.",
+      );
+      const config = ConfigRegistry.get(namespace);
       return (config === undefined ? initialValue : config) as Value;
     };
   };
