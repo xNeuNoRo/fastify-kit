@@ -61,13 +61,14 @@ describe("Validación de Entorno en el Arranque (Boot-Time Env Validation)", () 
       envSchema: EnvSchema,
     });
 
-    const configService = container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN);
+    const configService =
+      container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN);
     // Validamos que los strings fueron coaccionados automáticamente a sus tipos primitivos nativos
-    expect(configService.get("PORT")).toBe(3000);
-    expect(configService.get("PORT")).not.toBe("3000"); // Validación estricta
+    expect(configService.getConfig("PORT")).toBe(3000);
+    expect(configService.getConfig("PORT")).not.toBe("3000"); // Validación estricta
 
-    expect(configService.get("ENABLE_CACHE")).toBe(true);
-    expect(configService.get("ENABLE_CACHE")).not.toBe("true");
+    expect(configService.getConfig("ENABLE_CACHE")).toBe(true);
+    expect(configService.getConfig("ENABLE_CACHE")).not.toBe("true");
 
     await app.close();
   });

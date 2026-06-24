@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-import { CONFIG_SERVICE_TOKEN } from "../../../src/config/ConfigService.js";
 import { DefaultConfigService } from "../../../src/config/DefaultConfigService.js";
+import { INTERNAL_CONFIG_SERVICE_TOKEN } from "../../../src/config/InternalConfigService.js";
 import { container } from "../../../src/container/DIContainer.js";
 import { DefaultInProcessAdapter } from "../../../src/queues/adapters/DefaultInProcessAdapter.js";
 import { LocalWorkerAdapter } from "../../../src/queues/adapters/LocalWorkerAdapter.js";
@@ -28,11 +28,13 @@ describe("QueueFactory (getQueueAdapter)", () => {
       .spyOn(container, "registerClass")
       .mockImplementation(() => {});
 
-    // Devolvemos el ConfigService cuando se pida CONFIG_SERVICE_TOKEN,
+    // Devolvemos el InternalConfigService cuando se pida INTERNAL_CONFIG_SERVICE_TOKEN,
     // y un dummy adapter cuando se pida QUEUE_ADAPTER_TOKEN
     const dummyInProcess = new DefaultInProcessAdapter();
     vi.spyOn(container, "resolve").mockImplementation((token: unknown) =>
-      token === CONFIG_SERVICE_TOKEN ? configService : (dummyInProcess as any),
+      token === INTERNAL_CONFIG_SERVICE_TOKEN
+        ? configService
+        : (dummyInProcess as any),
     );
 
     // Ejecutamos la factory
@@ -61,7 +63,7 @@ describe("QueueFactory (getQueueAdapter)", () => {
     // Devolvemos un objeto mock en lugar de la clase real para no levantar Hilos en el test
     const dummyWorkerAdapter = { dispatch: vi.fn() };
     vi.spyOn(container, "resolve").mockImplementation((token: unknown) =>
-      token === CONFIG_SERVICE_TOKEN
+      token === INTERNAL_CONFIG_SERVICE_TOKEN
         ? configService
         : (dummyWorkerAdapter as any),
     );

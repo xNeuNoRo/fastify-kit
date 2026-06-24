@@ -5,16 +5,16 @@ import { describe, it, expect, beforeEach, vi, afterAll } from "vitest";
 
 import { CONFIG_SERVICE_TOKEN } from "../../../src/config/ConfigService.js";
 import { DefaultConfigService } from "../../../src/config/DefaultConfigService.js";
-import { container } from "../../../src/container/DIContainer.js";
+import { INTERNAL_CONFIG_SERVICE_TOKEN } from "../../../src/config/InternalConfigService.js";
+import { ScopeType, container } from "../../../src/container/DIContainer.js";
 import { FastifyKit } from "../../../src/core/FastifyKit.js";
 import { Module } from "../../../src/core/module.decorator.js";
 import { registerRedisConnection } from "../../../src/distributed/redis.factory.js";
 import { RedisEventBus } from "../../../src/events/RedisEventBus.js";
 import { QueueManager } from "../../../src/queues/QueueManager.js";
-import { QueueRegistryService } from "../../../src/queues/QueueRegistryService.js";
 import {
   QUEUE_REGISTRY_TOKEN,
-  type QueueRegistryService,
+  QueueRegistryService,
 } from "../../../src/queues/QueueRegistryService.js";
 
 // Herramienta de detección de Redis para saber si correr o no las pruebas de integración
@@ -82,6 +82,11 @@ describe("Integración Sistema Distribuido (Redis)", () => {
         redis: { host: "localhost", port: 6379 },
       });
       container.registerInstance(CONFIG_SERVICE_TOKEN, configService);
+      container.registerFactory(
+        INTERNAL_CONFIG_SERVICE_TOKEN,
+        (c) => c.resolve(CONFIG_SERVICE_TOKEN),
+        ScopeType.Singleton,
+      );
 
       // Registramos la conexión compartida
       registerRedisConnection();
