@@ -4,8 +4,9 @@ import {
   CONFIG_SERVICE_TOKEN,
   type ConfigService,
 } from "../../config/ConfigService.js";
+import { INTERNAL_CONFIG_SERVICE_TOKEN } from "../../config/InternalConfigService.js";
 import { DefaultConfigService } from "../../config/DefaultConfigService.js";
-import { container } from "../../container/DIContainer.js";
+import { ScopeType, container } from "../../container/DIContainer.js";
 import { Value } from "@sinclair/typebox/value";
 
 /**
@@ -60,13 +61,22 @@ export function validateAndLoadEnvironment(envSchema: TSchema): void {
     container.registerClass(CONFIG_SERVICE_TOKEN, DefaultConfigService);
   }
 
+  // Aseguramos que INTERNAL_CONFIG_SERVICE_TOKEN resuelva la misma instancia
+  if (!container.has(INTERNAL_CONFIG_SERVICE_TOKEN)) {
+    container.registerFactory(
+      INTERNAL_CONFIG_SERVICE_TOKEN,
+      (c) => c.resolve(CONFIG_SERVICE_TOKEN),
+      ScopeType.Singleton,
+    );
+  }
+
   // Registramos individualmente cada variable de entorno validada y coercionada en el
   // ConfigService para que puedan ser accedidas de manera tipada en cualquier parte
-  // Con el decorador @InjectConfig("VARIABLE") o directamente con ConfigService.get("VARIABLE")
+  // Con el decorador @InjectConfig("VARIABLE") o directamente con ConfigService.getConfig("VARIABLE")
   const configService = container.resolve<ConfigService>(CONFIG_SERVICE_TOKEN);
   for (const [key, value] of Object.entries(
     coercedEnv as Record<string, any>,
   )) {
-    configService.set(key as any, value);
+    configService.setConfig(key, value);
   }
 }
