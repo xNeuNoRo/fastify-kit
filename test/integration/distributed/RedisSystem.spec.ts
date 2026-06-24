@@ -191,11 +191,11 @@ describe("Integración Sistema Distribuido (Redis)", () => {
       );
 
       // Iniciamos Instancia Secundaria en un hilo aparte (Aislamiento de Memoria/Container)
-      const secondaryNode = new Worker(workerPath);
+      const secondaryNode = new Worker(workerPath) as any;
 
       // Esperamos a que el nodo secundario esté listo
       await new Promise((resolve) => {
-        secondaryNode.on("message", (msg) => {
+        secondaryNode.on("message", (msg: any) => {
           if (msg.type === "ready") resolve(true);
         });
       });
@@ -222,7 +222,7 @@ describe("Integración Sistema Distribuido (Redis)", () => {
       let eventReceivedBySecondary = false;
       let receivedPayload: any = null;
 
-      secondaryNode.on("message", (msg) => {
+      secondaryNode.on("message", (msg: any) => {
         if (msg.type === "event_received") {
           eventReceivedBySecondary = true;
           receivedPayload = msg.payload;

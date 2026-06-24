@@ -31,10 +31,21 @@ describe("Adaptador por defecto para colas en proceso (DefaultInProcessAdapter)"
     const queueName = "fast-queue";
     const payload = { data: 123 };
 
+    // Registramos un processor dummy para evitar que el setImmediate loguee error
+    class DummyProcessor {
+      dummy = true;
+      async handle() {}
+    }
+    registry.register(queueName, DummyProcessor, "io");
+    container.registerInstance(DummyProcessor, new DummyProcessor());
+
     const _trackingId = await adapter.dispatch(queueName, payload);
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
 
     expect(typeof _trackingId).toBe("string");
     expect(_trackingId.length).toBeGreaterThan(0);
+    expect(console.error).not.toHaveBeenCalled();
   });
 
   it("Debería ejecutar la tarea asíncronamente llamando a la clase correcta", async () => {
@@ -46,7 +57,7 @@ describe("Adaptador por defecto para colas en proceso (DefaultInProcessAdapter)"
     }
 
     const handleSpy = vi.fn().mockResolvedValue(true);
-    const mockInstance = { handle: handleSpy };
+    const mockInstance = { dummy: true, handle: handleSpy };
 
     registry.register(queueName, DummyEmailProcessor, "io");
     container.registerInstance(DummyEmailProcessor, mockInstance);
@@ -78,7 +89,7 @@ describe("Adaptador por defecto para colas en proceso (DefaultInProcessAdapter)"
     }
 
     const handleSpy = vi.fn().mockRejectedValue(new Error("BOOM"));
-    const mockInstance = { handle: handleSpy };
+    const mockInstance = { dummy: true, handle: handleSpy };
 
     registry.register(queueName, FaultyProcessor, "io");
     container.registerInstance(FaultyProcessor, mockInstance);
