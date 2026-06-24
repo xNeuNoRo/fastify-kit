@@ -231,11 +231,21 @@ export type { QueueAdapter } from "./queues/interfaces/QueueAdapter.js";
 export { ConfigRegistry } from "./config/ConfigRegistry.js";
 
 export { InjectConfig } from "./config/inject-config.decorator.js";
+
+// User Config API (ConfigModule, @InjectConfig)
 export {
   CONFIG_SERVICE_TOKEN,
   type ConfigService,
-  type InternalFrameworkConfig,
 } from "./config/ConfigService.js";
+
+// Internal Framework Config API (queue, distributed, webrtc)
+// Solo para subsistemas internos. Usuarios: usar ConfigService con setConfig/getConfig.
+export {
+  INTERNAL_CONFIG_SERVICE_TOKEN,
+  type InternalConfigService,
+  type InternalFrameworkConfig,
+} from "./config/InternalConfigService.js";
+
 export { DefaultConfigService } from "./config/DefaultConfigService.js";
 export {
   ConfigModule,
