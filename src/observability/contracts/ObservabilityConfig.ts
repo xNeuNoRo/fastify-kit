@@ -57,7 +57,7 @@ export const ObservabilityConfigSchema = Type.Object(
     /** Configuración de trazado distribuido (OpenTelemetry) */
     tracing: Type.Object({
       /** Activar/desactivar el envío de trazas */
-      enabled: Type.Boolean({ default: true }),
+      enabled: Type.Boolean({ default: false }),
       /**
        * Estrategia de muestreo (sampling):
        * - always_on: Todas las trazas (desarrollo)
@@ -105,7 +105,7 @@ export const ObservabilityConfigSchema = Type.Object(
     /** Configuración de métricas (Prometheus) */
     metrics: Type.Object({
       /** Activar/desactivar la recolección y el endpoint /metrics */
-      enabled: Type.Boolean({ default: true }),
+      enabled: Type.Boolean({ default: false }),
       /** Ruta del endpoint de métricas (por defecto /metrics para scrape de Prometheus) */
       endpoint: Type.String({ default: "/metrics" }),
       /** Labels por defecto que se añaden a todas las métricas (ej: { team: "backend", region: "eu-west" }) */
@@ -121,13 +121,13 @@ export const ObservabilityConfigSchema = Type.Object(
     /** Qué subsistemas instrumentar automáticamente */
     instrumentations: Type.Object({
       /** Instrumentar peticiones HTTP (Fastify onRequest/onResponse/onError) */
-      http: Type.Boolean({ default: true }),
+      http: Type.Boolean({ default: false }),
       /** Instrumentar comandos Redis (ioredis) */
-      redis: Type.Boolean({ default: true }),
+      redis: Type.Boolean({ default: false }),
       /** Instrumentar colas de trabajo (QueueManager) */
-      queue: Type.Boolean({ default: true }),
+      queue: Type.Boolean({ default: false }),
       /** Instrumentar WebSockets (WssGatewayRegistry) */
-      ws: Type.Boolean({ default: true }),
+      ws: Type.Boolean({ default: false }),
     }),
   },
   { additionalProperties: false },
@@ -174,14 +174,14 @@ export function getDefaultObservabilityConfig(): {
   return {
     serviceName: "fastify-kit-app",
     environment: "development",
-    logging: { level: "info", prettyPrint: true },
+    logging: { level: "info", prettyPrint: false },
     tracing: {
-      enabled: true,
+      enabled: false,
       sampler: "parentbased_traceidratio",
       ratio: 0.1,
       exporter: "console",
     },
-    metrics: { enabled: true, endpoint: "/metrics", defaultLabels: {} },
-    instrumentations: { http: true, redis: true, queue: true, ws: true },
+    metrics: { enabled: false, endpoint: "/metrics", defaultLabels: {} },
+    instrumentations: { http: false, redis: false, queue: false, ws: false },
   };
 }

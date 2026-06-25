@@ -1,6 +1,5 @@
 import type { BootstrapContext, BootstrapStep } from "../../core/bootstrap/BootstrapPipeline.js";
 import { container } from "../../container/DIContainer.js";
-import { LOGGER_TOKEN } from "../../logger/LoggerContract.js";
 import { METRICS_SERVICE_TOKEN } from "../contracts/MetricsService.js";
 import { TRACER_SERVICE_TOKEN } from "../contracts/TracerService.js";
 import type { MetricsService } from "../contracts/MetricsService.js";
@@ -33,7 +32,6 @@ export class ObservabilityInstrumentationStep implements BootstrapStep {
   readonly name = "ObservabilityInstrumentationStep";
 
   async execute(ctx: BootstrapContext): Promise<void> {
-    const logger = container.resolve<any>(LOGGER_TOKEN);
     let tracer: TracerService;
     let metrics: MetricsService;
 
@@ -41,9 +39,6 @@ export class ObservabilityInstrumentationStep implements BootstrapStep {
       tracer = container.resolve<TracerService>(TRACER_SERVICE_TOKEN);
       metrics = container.resolve<MetricsService>(METRICS_SERVICE_TOKEN);
     } catch {
-      logger?.warn?.(
-        "[ObservabilityInstrumentationStep] Servicios de observabilidad no encontrados, omitiendo instrumentacion",
-      );
       return;
     }
 
@@ -65,9 +60,6 @@ export class ObservabilityInstrumentationStep implements BootstrapStep {
             .header("Content-Type", endpointInfo.getContentType())
             .send(endpointInfo.getContent());
         });
-        logger?.info?.(
-          `[ObservabilityInstrumentationStep] Endpoint de metricas registrado en ${endpointInfo.endpoint}`,
-        );
       }
     }
 

@@ -80,12 +80,14 @@ export class ObservabilityBootstrapStep implements BootstrapStep {
     // Obtenemos la config por defecto y la mergeamos con la del usuario (si existe)
     const defaults = getDefaultObservabilityConfig();
     let obsConfig: Record<string, any> = { ...defaults };
+    let hasObservabilityConfig = false;
 
     if (container.has(CONFIG_SERVICE_TOKEN)) {
       const configService = container.resolve<any>(CONFIG_SERVICE_TOKEN);
       const userConfig = configService.getConfig?.(OBSERVABILITY_CONFIG_KEY);
       if (userConfig) {
         obsConfig = deepMerge(defaults, userConfig);
+        hasObservabilityConfig = true;
       }
     }
 
@@ -93,31 +95,39 @@ export class ObservabilityBootstrapStep implements BootstrapStep {
     obsConfig.serviceName =
       ctx.options?.swagger?.title || defaults.serviceName;
 
-    // Instanciamos los servicios y los registramos en el contenedor DI
+    // Logger: siempre registramos Pino (si esta configurado o por defecto)
+    // Si Pino falla, hace fallback a console automaticamente
+    if (hasObservabilityConfig && !container.has(LOGGER_TOKEN)) {
+      const logger = new PinoLoggerService(obsConfig.logging as any);
+      container.registerInstance(LOGGER_TOKEN, logger);
+    }
 
-    // Logger: Pino con soporte de Loki y pretty-print
-    const logger = new PinoLoggerService(obsConfig.logging as any);
-    container.registerInstance(LOGGER_TOKEN, logger);
+    // Tracer: solo si el usuario lo activo explicitamente
+    if (hasObservabilityConfig && obsConfig.tracing?.enabled) {
+      const tracerLogger = container.has(LOGGER_TOKEN)
+        ? container.resolve<any>(LOGGER_TOKEN)
+        : undefined;
+      const tracer = new OtelTracerService(
+        obsConfig.tracing as any,
+        tracerLogger,
+      );
+      container.registerInstance(TRACER_SERVICE_TOKEN, tracer);
 
-    // Tracer: OpenTelemetry SDK con sampling configurable
-    const tracer = new OtelTracerService(
-      obsConfig.tracing as any,
-      logger,
-    );
-    container.registerInstance(TRACER_SERVICE_TOKEN, tracer);
+      // Metrics va despues del tracer porque necesita exemplars (traceId)
+      if (obsConfig.metrics?.enabled) {
+        const metrics = new PromMetricsService(
+          obsConfig.metrics,
+          tracer,
+        );
+        container.registerInstance(METRICS_SERVICE_TOKEN, metrics);
 
-    // Metrics: Prometheus con exemplars
-    const metrics = new PromMetricsService(
-      obsConfig.metrics,
-      tracer,
-    );
-    container.registerInstance(METRICS_SERVICE_TOKEN, metrics);
-
-    // Guardamos la info del endpoint para montarlo luego en Fastify
-    container.registerInstance(METRICS_ENDPOINT_TOKEN, {
-      endpoint: obsConfig.metrics.endpoint,
-      getContent: () => metrics.getMetricsEndpoint(),
-      getContentType: () => metrics.getContentType(),
-    });
+        // Guardamos la info del endpoint para montarlo luego en Fastify
+        container.registerInstance(METRICS_ENDPOINT_TOKEN, {
+          endpoint: obsConfig.metrics.endpoint,
+          getContent: () => metrics.getMetricsEndpoint(),
+          getContentType: () => metrics.getContentType(),
+        });
+      }
+    }
   }
 }

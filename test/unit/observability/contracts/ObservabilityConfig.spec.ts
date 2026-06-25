@@ -16,27 +16,29 @@ describe("Configuracion de Observabilidad (ObservabilityConfig)", () => {
       expect(config.environment).toBe("development");
       expect(config.logging).toBeDefined();
       expect(config.logging.level).toBe("info");
-      expect(config.logging.prettyPrint).toBe(true);
+      expect(config.logging.prettyPrint).toBe(false);
       expect(config.tracing).toBeDefined();
-      expect(config.tracing.enabled).toBe(true);
+      expect(config.tracing.enabled).toBe(false);
       expect(config.tracing.sampler).toBe("parentbased_traceidratio");
       expect(config.tracing.ratio).toBe(0.1);
       expect(config.tracing.exporter).toBe("console");
       expect(config.metrics).toBeDefined();
-      expect(config.metrics.enabled).toBe(true);
+      expect(config.metrics.enabled).toBe(false);
       expect(config.metrics.endpoint).toBe("/metrics");
       expect(config.instrumentations).toBeDefined();
-      expect(config.instrumentations.http).toBe(true);
-      expect(config.instrumentations.redis).toBe(true);
-      expect(config.instrumentations.queue).toBe(true);
-      expect(config.instrumentations.ws).toBe(true);
+      expect(config.instrumentations.http).toBe(false);
+      expect(config.instrumentations.redis).toBe(false);
+      expect(config.instrumentations.queue).toBe(false);
+      expect(config.instrumentations.ws).toBe(false);
     });
 
-    it("Deberia tener valores por defecto seguros para desarrollo", () => {
+    it("Deberia tener valores seguros por defecto (todo desactivado)", () => {
       const config = getDefaultObservabilityConfig();
 
-      expect(config.tracing.exporter).toBe("console");
-      expect(config.logging.prettyPrint).toBe(true);
+      // Observabilidad es opt-in: todo desactivado por defecto
+      expect(config.tracing.enabled).toBe(false);
+      expect(config.metrics.enabled).toBe(false);
+      expect(config.instrumentations.http).toBe(false);
     });
   });
 
