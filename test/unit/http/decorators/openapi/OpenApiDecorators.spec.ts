@@ -354,7 +354,7 @@ describe("Decoradores OpenAPI", () => {
         mapping: { cat: "Cat", dog: "Dog" },
       },
     })
-    abstract class AnimalDto {}
+    class AnimalDto {}
 
     it("Deberia almacenar oneOf con discriminador", () => {
       const meta = getMetadata(AnimalDto);
@@ -377,7 +377,7 @@ describe("Decoradores OpenAPI", () => {
     class ExampleUserDto {}
 
     it("Deberia almacenar ejemplos en la clase", () => {
-      const examples = (ExampleUserDto as Record<symbol, unknown>)[
+      const examples = (ExampleUserDto as unknown as Record<symbol, unknown>)[
         OPENAPI_EXAMPLES_METADATA
       ] as Record<string, unknown>;
       expect(examples).toBeDefined();
