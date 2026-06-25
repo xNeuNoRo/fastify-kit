@@ -239,6 +239,9 @@ export async function registerDocumentationPlugin(
     if (options.swagger.scalar?.searchHotKey) {
       scalarConfig.searchHotKey = options.swagger.scalar.searchHotKey;
     }
+    if (options.swagger.scalar?.servers?.length) {
+      scalarConfig.servers = options.swagger.scalar.servers;
+    }
 
     await app.register(import("@scalar/fastify-api-reference"), {
       routePrefix: "/docs",
