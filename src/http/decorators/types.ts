@@ -156,6 +156,10 @@ export interface ApiPropertyOptions {
   deprecated?: boolean;
   /** Título para documentación. */
   title?: string;
+  /** Si la propiedad es opcional (no se incluye en `required`). */
+  optional?: boolean;
+  /** Si la propiedad es requerida (forzar inclusión en `required`). Por defecto las propiedades son requeridas. */
+  required?: boolean;
 }
 
 /**

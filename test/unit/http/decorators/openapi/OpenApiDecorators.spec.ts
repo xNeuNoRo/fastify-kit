@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 
+import { FASTIFY_KIT_METADATA_SYMBOL as metadataSymbol } from "../../../../../src/core/constants/symbols.js";
 import { Controller } from "../../../../../src/http/decorators/controller.js";
 import { Get, Post } from "../../../../../src/http/decorators/methods.js";
 import {
@@ -22,67 +23,61 @@ import {
 } from "../../../../../src/http/decorators/openapi/index.js";
 import type { FastifyKitMetadata } from "../../../../../src/http/decorators/types.js";
 
-if (!(Symbol as any).metadata) {
-  (Symbol as any).metadata = Symbol.for("Symbol.metadata");
-}
-
-function getMetadata(cls: any): FastifyKitMetadata {
-  return cls[(Symbol as any).metadata] as FastifyKitMetadata;
+/** Accede a la metadata de decoradores Stage 3 de forma tipada. */
+function getMetadata(cls: object): FastifyKitMetadata {
+  return (cls as Record<symbol, unknown>)[metadataSymbol] as FastifyKitMetadata;
 }
 
 describe("Decoradores OpenAPI", () => {
   describe("@ApiTags", () => {
-    it("Deberia almacenar los tags en la metadata de la clase", () => {
-      @ApiTags("Users", "Admin")
-      @Controller("/test")
-      class TestCtrl {
-        @Get("/")
-        get() {
-          return "ok";
-        }
+    @ApiTags("Users", "Admin")
+    @Controller("/test")
+    class TagsCtrl {
+      @Get("/")
+      get() {
+        return "ok";
       }
+    }
 
-      const meta = getMetadata(TestCtrl);
+    it("Deberia almacenar los tags en la metadata de la clase", () => {
+      const meta = getMetadata(TagsCtrl);
       expect(meta.openApiTags).toEqual(["Users", "Admin"]);
     });
 
     it("Deberia lanzar error si se aplica a un metodo", () => {
-      class TestCtrl {
-        @Get("/")
-        // @ts-expect-error probamos runtime
-        static get() {
-          return "ok";
-        }
-      }
-
       expect(() => {
-        // Forzamos aplicar a metodo para probar validacion
-        void (ApiTags as any)("Test")(TestCtrl.prototype.get, {
+        @Controller("/test")
+        class _Local {
+          @Get("/")
+          get() {}
+        }
+        // Forzamos aplicar @ApiTags a un contexto de metodo para probar validacion
+        (ApiTags("Test") as CallableFunction)(undefined, {
           kind: "method",
           name: "get",
-        } as any);
-      }).toThrow();
+        } as ClassMethodDecoratorContext);
+      }).toThrow(/@ApiTags solo puede aplicarse a clases/);
     });
   });
 
   describe("@ApiOperation", () => {
-    it("Deberia almacenar summary, description, deprecated y externalDocs", () => {
-      @Controller("/test")
-      class TestCtrl {
-        @Get("/")
-        @ApiOperation({
-          summary: "Obtener lista",
-          description: "Devuelve todos los items",
-          deprecated: true,
-          operationId: "getItems",
-          externalDocs: { url: "https://docs.example.com" },
-        })
-        get() {
-          return "ok";
-        }
+    @Controller("/test")
+    class OperationCtrl {
+      @Get("/")
+      @ApiOperation({
+        summary: "Obtener lista",
+        description: "Devuelve todos los items",
+        deprecated: true,
+        operationId: "getItems",
+        externalDocs: { url: "https://docs.example.com" },
+      })
+      get() {
+        return "ok";
       }
+    }
 
-      const meta = getMetadata(TestCtrl);
+    it("Deberia almacenar summary, description, deprecated y externalDocs", () => {
+      const meta = getMetadata(OperationCtrl);
       const op = meta.openApiOperation?.["get"];
       expect(op).toBeDefined();
       expect(op!.summary).toBe("Obtener lista");
@@ -94,26 +89,25 @@ describe("Decoradores OpenAPI", () => {
   });
 
   describe("@ApiResponseDoc", () => {
-    it("Deberia almacenar respuestas con codigo HTTP", () => {
-      class UserDto {}
-      // ErrorDto no se usa en asserts pero es parte del escenario
+    class UserDto {}
 
-      @Controller("/test")
-      class TestCtrl {
-        @Post("/")
-        @ApiResponseDoc({
-          status: 201,
-          description: "Creado exitosamente",
-          type: UserDto,
-        })
-        @ApiResponseDoc({ status: 400, description: "Datos invalidos" })
-        @ApiResponseDoc({ status: 500, description: "Error interno" })
-        create() {
-          return "ok";
-        }
+    @Controller("/test")
+    class ResponseCtrl {
+      @Post("/")
+      @ApiResponseDoc({
+        status: 201,
+        description: "Creado exitosamente",
+        type: UserDto,
+      })
+      @ApiResponseDoc({ status: 400, description: "Datos invalidos" })
+      @ApiResponseDoc({ status: 500, description: "Error interno" })
+      create() {
+        return "ok";
       }
+    }
 
-      const meta = getMetadata(TestCtrl);
+    it("Deberia almacenar respuestas con codigo HTTP", () => {
+      const meta = getMetadata(ResponseCtrl);
       const responses = meta.openApiResponseMetas?.["create"];
       expect(responses).toBeDefined();
       expect(responses![201].status).toBe(201);
@@ -126,41 +120,40 @@ describe("Decoradores OpenAPI", () => {
 
     it("Deberia lanzar error si se aplica a una clase", () => {
       expect(() => {
-        void (ApiResponseDoc as any)({
-          status: 200,
-          description: "ok",
-        })(TestCtrl as any, { kind: "class" } as any);
-      }).toThrow();
+        (
+          ApiResponseDoc({ status: 200, description: "ok" }) as CallableFunction
+        )(undefined, { kind: "class" } as ClassDecoratorContext);
+      }).toThrow(/@ApiResponseDoc solo puede aplicarse a métodos/);
     });
   });
 
   describe("@ApiBearerAuth", () => {
-    it("Deberia almacenar bearerAuth a nivel de clase", () => {
-      @ApiBearerAuth()
-      @Controller("/test")
-      class TestCtrl {
-        @Get("/")
-        get() {
-          return "ok";
-        }
+    @ApiBearerAuth()
+    @Controller("/test")
+    class AuthClassCtrl {
+      @Get("/")
+      get() {
+        return "ok";
       }
+    }
 
-      const meta = getMetadata(TestCtrl);
+    it("Deberia almacenar bearerAuth a nivel de clase", () => {
+      const meta = getMetadata(AuthClassCtrl);
       expect(meta.openApiClassSecurity).toBeDefined();
       expect(meta.openApiClassSecurity![0].name).toBe("bearerAuth");
     });
 
-    it("Deberia almacenar bearerAuth a nivel de metodo", () => {
-      @Controller("/test")
-      class TestCtrl {
-        @Get("/")
-        @ApiBearerAuth("customBearer")
-        get() {
-          return "ok";
-        }
+    @Controller("/test")
+    class AuthMethodCtrl {
+      @Get("/")
+      @ApiBearerAuth("customBearer")
+      get() {
+        return "ok";
       }
+    }
 
-      const meta = getMetadata(TestCtrl);
+    it("Deberia almacenar bearerAuth a nivel de metodo", () => {
+      const meta = getMetadata(AuthMethodCtrl);
       const methodSec = meta.openApiMethodSecurity?.["get"];
       expect(methodSec).toBeDefined();
       expect(methodSec![0].name).toBe("customBearer");
@@ -168,17 +161,17 @@ describe("Decoradores OpenAPI", () => {
   });
 
   describe("@ApiSecurity", () => {
-    it("Deberia almacenar security scheme con scopes a nivel de clase", () => {
-      @ApiSecurity("oauth2", ["read:users", "write:users"])
-      @Controller("/test")
-      class TestCtrl {
-        @Get("/")
-        get() {
-          return "ok";
-        }
+    @ApiSecurity("oauth2", ["read:users", "write:users"])
+    @Controller("/test")
+    class SecurityClassCtrl {
+      @Get("/")
+      get() {
+        return "ok";
       }
+    }
 
-      const meta = getMetadata(TestCtrl);
+    it("Deberia almacenar security scheme con scopes a nivel de clase", () => {
+      const meta = getMetadata(SecurityClassCtrl);
       expect(meta.openApiClassSecurity).toBeDefined();
       expect(meta.openApiClassSecurity![0].name).toBe("oauth2");
       expect(meta.openApiClassSecurity![0].scopes).toEqual([
@@ -187,17 +180,17 @@ describe("Decoradores OpenAPI", () => {
       ]);
     });
 
-    it("Deberia almacenar apiKey a nivel de metodo", () => {
-      @Controller("/test")
-      class TestCtrl {
-        @Get("/")
-        @ApiSecurity("apiKeyAuth")
-        get() {
-          return "ok";
-        }
+    @Controller("/test")
+    class SecurityMethodCtrl {
+      @Get("/")
+      @ApiSecurity("apiKeyAuth")
+      get() {
+        return "ok";
       }
+    }
 
-      const meta = getMetadata(TestCtrl);
+    it("Deberia almacenar apiKey a nivel de metodo", () => {
+      const meta = getMetadata(SecurityMethodCtrl);
       const methodSec = meta.openApiMethodSecurity?.["get"];
       expect(methodSec).toBeDefined();
       expect(methodSec![0].name).toBe("apiKeyAuth");
@@ -205,21 +198,21 @@ describe("Decoradores OpenAPI", () => {
   });
 
   describe("@ApiParam", () => {
-    it("Deberia almacenar parametros de ruta", () => {
-      @Controller("/test")
-      class TestCtrl {
-        @Get("/:id")
-        @ApiParam({
-          name: "id",
-          description: "ID del recurso",
-          example: "abc-123",
-        })
-        get(id: string) {
-          return id;
-        }
+    @Controller("/test")
+    class ParamCtrl {
+      @Get("/:id")
+      @ApiParam({
+        name: "id",
+        description: "ID del recurso",
+        example: "abc-123",
+      })
+      get(id: string) {
+        return id;
       }
+    }
 
-      const meta = getMetadata(TestCtrl);
+    it("Deberia almacenar parametros de ruta", () => {
+      const meta = getMetadata(ParamCtrl);
       const params = meta.openApiParameters?.["get"];
       expect(params).toBeDefined();
       expect(params![0]).toMatchObject({
@@ -233,23 +226,23 @@ describe("Decoradores OpenAPI", () => {
   });
 
   describe("@ApiQuery", () => {
-    it("Deberia almacenar query parameters", () => {
-      @Controller("/test")
-      class TestCtrl {
-        @Get("/")
-        @ApiQuery({
-          name: "page",
-          description: "Numero de pagina",
-          example: 1,
-          required: false,
-        })
-        @ApiQuery({ name: "limit", description: "Resultados", example: 20 })
-        getAll() {
-          return [];
-        }
+    @Controller("/test")
+    class QueryCtrl {
+      @Get("/")
+      @ApiQuery({
+        name: "page",
+        description: "Numero de pagina",
+        example: 1,
+        required: false,
+      })
+      @ApiQuery({ name: "limit", description: "Resultados", example: 20 })
+      getAll() {
+        return [];
       }
+    }
 
-      const meta = getMetadata(TestCtrl);
+    it("Deberia almacenar query parameters", () => {
+      const meta = getMetadata(QueryCtrl);
       const params = meta.openApiParameters?.["getAll"];
       expect(params).toBeDefined();
       expect(params![0]).toMatchObject({
@@ -263,22 +256,22 @@ describe("Decoradores OpenAPI", () => {
       });
     });
 
-    it("Deberia almacenar style y explode para query params", () => {
-      @Controller("/test")
-      class TestCtrl {
-        @Get("/")
-        @ApiQuery({
-          name: "ids",
-          description: "IDs filtrados",
-          style: "pipeDelimited",
-          explode: false,
-        })
-        filter() {
-          return [];
-        }
+    @Controller("/test")
+    class QueryStyleCtrl {
+      @Get("/")
+      @ApiQuery({
+        name: "ids",
+        description: "IDs filtrados",
+        style: "pipeDelimited",
+        explode: false,
+      })
+      filter() {
+        return [];
       }
+    }
 
-      const meta = getMetadata(TestCtrl);
+    it("Deberia almacenar style y explode para query params", () => {
+      const meta = getMetadata(QueryStyleCtrl);
       const params = meta.openApiParameters?.["filter"];
       expect(params![0].style).toBe("pipeDelimited");
       expect(params![0].explode).toBe(false);
@@ -286,21 +279,21 @@ describe("Decoradores OpenAPI", () => {
   });
 
   describe("@ApiHeader", () => {
-    it("Deberia almacenar headers", () => {
-      @Controller("/test")
-      class TestCtrl {
-        @Get("/")
-        @ApiHeader({
-          name: "X-Request-ID",
-          description: "ID de trazabilidad",
-          example: "req-001",
-        })
-        get() {
-          return "ok";
-        }
+    @Controller("/test")
+    class HeaderCtrl {
+      @Get("/")
+      @ApiHeader({
+        name: "X-Request-ID",
+        description: "ID de trazabilidad",
+        example: "req-001",
+      })
+      get() {
+        return "ok";
       }
+    }
 
-      const meta = getMetadata(TestCtrl);
+    it("Deberia almacenar headers", () => {
+      const meta = getMetadata(HeaderCtrl);
       const params = meta.openApiParameters?.["get"];
       expect(params).toBeDefined();
       expect(params![0]).toMatchObject({
@@ -313,19 +306,20 @@ describe("Decoradores OpenAPI", () => {
   });
 
   describe("@ApiProperty", () => {
+    @ApiSchema({ name: "TestDto", description: "DTO de prueba" })
+    class TestDto {
+      @ApiProperty({ example: 42, description: "El ID" })
+      id!: number;
+
+      @ApiProperty({ example: "Angel", minLength: 3, maxLength: 50 })
+      username!: string;
+    }
+
     it("Deberia almacenar metadatos de propiedad en la clase", () => {
-      @ApiSchema({ name: "TestDto", description: "DTO de prueba" })
-      class TestDto {
-        @ApiProperty({ example: 42, description: "El ID" })
-        id!: number;
-
-        @ApiProperty({ example: "Angel", minLength: 3, maxLength: 50 })
-        username!: string;
-      }
-
       const inst = new TestDto();
-      const cls = (inst as any).constructor;
-      const props = cls[OPENAPI_PROPERTY_METADATA];
+      const props = (
+        Object.getPrototypeOf(inst).constructor as Record<symbol, unknown>
+      )[OPENAPI_PROPERTY_METADATA] as Record<string, unknown>;
       expect(props).toBeDefined();
       expect(props["id"]).toEqual({ example: 42, description: "El ID" });
       expect(props["username"]).toEqual({
@@ -337,32 +331,32 @@ describe("Decoradores OpenAPI", () => {
   });
 
   describe("@ApiSchema", () => {
-    it("Deberia almacenar opciones de esquema en metadata", () => {
-      @ApiSchema({ name: "User", description: "Entidad de usuario" })
-      class UserDto {
-        name!: string;
-      }
+    @ApiSchema({ name: "User", description: "Entidad de usuario" })
+    class UserDto {
+      name!: string;
+    }
 
+    it("Deberia almacenar opciones de esquema en metadata", () => {
       const meta = getMetadata(UserDto);
       expect(meta.openApiSchema).toBeDefined();
       expect(meta.openApiSchema!.name).toBe("User");
       expect(meta.openApiSchema!.description).toBe("Entidad de usuario");
     });
 
+    class CatDto {}
+    class DogDto {}
+
+    @ApiSchema({
+      name: "Animal",
+      oneOf: [CatDto, DogDto],
+      discriminator: {
+        propertyName: "type",
+        mapping: { cat: "Cat", dog: "Dog" },
+      },
+    })
+    abstract class AnimalDto {}
+
     it("Deberia almacenar oneOf con discriminador", () => {
-      class CatDto {}
-      class DogDto {}
-
-      @ApiSchema({
-        name: "Animal",
-        oneOf: [CatDto, DogDto],
-        discriminator: {
-          propertyName: "type",
-          mapping: { cat: "Cat", dog: "Dog" },
-        },
-      })
-      abstract class AnimalDto {}
-
       const meta = getMetadata(AnimalDto);
       expect(meta.openApiSchema!.oneOf).toEqual([CatDto, DogDto]);
       expect(meta.openApiSchema!.discriminator).toEqual({
@@ -373,18 +367,19 @@ describe("Decoradores OpenAPI", () => {
   });
 
   describe("@ApiExample", () => {
-    it("Deberia almacenar ejemplos en la clase", () => {
-      @ApiExample("admin", { id: 1, role: "admin" })
-      @ApiExample(
-        "user",
-        { id: 2, role: "user" },
-        "Usuario basico",
-        "Ejemplo de usuario regular",
-      )
-      class UserDto {}
+    @ApiExample("admin", { id: 1, role: "admin" })
+    @ApiExample(
+      "user",
+      { id: 2, role: "user" },
+      "Usuario basico",
+      "Ejemplo de usuario regular",
+    )
+    class ExampleUserDto {}
 
-      const cls = UserDto as any;
-      const examples = cls[OPENAPI_EXAMPLES_METADATA];
+    it("Deberia almacenar ejemplos en la clase", () => {
+      const examples = (ExampleUserDto as Record<symbol, unknown>)[
+        OPENAPI_EXAMPLES_METADATA
+      ] as Record<string, unknown>;
       expect(examples).toBeDefined();
       expect(examples["admin"]).toEqual({
         value: { id: 1, role: "admin" },
@@ -400,49 +395,49 @@ describe("Decoradores OpenAPI", () => {
   });
 
   describe("@ApiExcludeEndpoint", () => {
-    it("Deberia marcar el endpoint como excluido", () => {
-      @Controller("/test")
-      class TestCtrl {
-        @Get("/secret")
-        @ApiExcludeEndpoint()
-        secret() {
-          return "hidden";
-        }
+    @Controller("/test")
+    class ExcludeEndpointCtrl {
+      @Get("/secret")
+      @ApiExcludeEndpoint()
+      secret() {
+        return "hidden";
       }
+    }
 
-      const meta = getMetadata(TestCtrl);
+    it("Deberia marcar el endpoint como excluido", () => {
+      const meta = getMetadata(ExcludeEndpointCtrl);
       expect(meta.openApiExcludeEndpoint?.["secret"]).toBe(true);
     });
   });
 
   describe("@ApiExcludeController", () => {
-    it("Deberia marcar el controlador como excluido", () => {
-      @ApiExcludeController()
-      @Controller("/internal")
-      class InternalCtrl {
-        @Get("/")
-        get() {
-          return "ok";
-        }
+    @ApiExcludeController()
+    @Controller("/internal")
+    class InternalCtrl {
+      @Get("/")
+      get() {
+        return "ok";
       }
+    }
 
+    it("Deberia marcar el controlador como excluido", () => {
       const meta = getMetadata(InternalCtrl);
       expect(meta.openApiExcludeController).toBe(true);
     });
   });
 
   describe("@ApiServer", () => {
-    it("Deberia almacenar servidores a nivel de clase", () => {
-      @ApiServer("https://uploads.example.com", "Servidor de archivos")
-      @Controller("/files")
-      class FilesCtrl {
-        @Post("/")
-        upload() {
-          return "ok";
-        }
+    @ApiServer("https://uploads.example.com", "Servidor de archivos")
+    @Controller("/files")
+    class ServerCtrl {
+      @Post("/")
+      upload() {
+        return "ok";
       }
+    }
 
-      const meta = getMetadata(FilesCtrl);
+    it("Deberia almacenar servidores a nivel de clase", () => {
+      const meta = getMetadata(ServerCtrl);
       expect(meta.openApiClassServers).toBeDefined();
       expect(meta.openApiClassServers![0]).toEqual({
         url: "https://uploads.example.com",

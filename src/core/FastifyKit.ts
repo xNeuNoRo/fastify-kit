@@ -143,9 +143,20 @@ export interface SwaggerOptions {
   /** Requisitos de seguridad globales aplicados a todos los endpoints. */
   security?: Record<string, string[]>[];
   /** Servidores (URLs) de la API para desarrollo/producción. */
-  servers?: { url: string; description?: string; variables?: Record<string, any> }[];
+  servers?: {
+    url: string;
+    description?: string;
+    variables?: Record<
+      string,
+      { default: string; description?: string; enum?: string[] }
+    >;
+  }[];
   /** Tags globales con descripciones para agrupar endpoints en Scalar. */
-  tags?: { name: string; description?: string; externalDocs?: { description?: string; url: string } }[];
+  tags?: {
+    name: string;
+    description?: string;
+    externalDocs?: { description?: string; url: string };
+  }[];
   /** Configuración de la UI de Scalar. */
   scalar?: ScalarConfig;
   /** Estrategia de versionado para la API. */
@@ -156,8 +167,6 @@ export interface SwaggerOptions {
     /** Versiones de la API a documentar en OpenAPI. Cada una genera un server. */
     versions?: { version: string; description?: string }[];
   };
-  /** Extensiones personalizadas (x-*). */
-  [key: string]: any;
 }
 
 export interface FastifyKitOptions {

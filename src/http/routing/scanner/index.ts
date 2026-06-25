@@ -7,6 +7,7 @@ import { extractArguments } from "./parameter.resolver.js";
 import { FastifyKitMetadata } from "../../decorators/types.js";
 import { getGlobalMaxFileSize } from "./multipart.handler.js";
 import { openApiRegistry } from "../../../openapi/OpenApiRegistry.js";
+import { FASTIFY_KIT_METADATA_SYMBOL as metadataSymbol } from "../../../core/constants/symbols.js";
 import type {
   ExecutionContext,
   Interceptor,
@@ -19,11 +20,6 @@ import {
 } from "./static/static.handler.js";
 
 export type Constructor<T = any> = new (...args: any[]) => T;
-
-// Usamos un símbolo único para almacenar la metadata de los decoradores en las clases
-// y métodos de los controladores, evitando así conflictos con otras propiedades o símbolos que puedan existir en el futuro.
-const metadataSymbol: symbol =
-  (Symbol as any).metadata ?? Symbol.for("Symbol.metadata");
 
 /**
  * @description Construye y normaliza la ruta final a registrar en Fastify.
@@ -70,7 +66,7 @@ function buildGuardHandler(guards: Constructor[]) {
 /**
  * @description Formatea la respuesta devuelta por el método del controlador.
  */
-async function formatResponse(result: any, reply: FastifyReply) {
+async function formatResponse(result: unknown, reply: FastifyReply) {
   if (reply.sent) return;
 
   if (result === reply) return;
@@ -93,7 +89,7 @@ export async function registerControllers(
 ) {
   // Iteramos sobre cada controlador registrado
   for (const ControllerClass of controllers) {
-    const metadata = (ControllerClass as any)[
+    const metadata = (ControllerClass as unknown as Record<symbol, unknown>)[
       metadataSymbol
     ] as FastifyKitMetadata;
 
@@ -283,8 +279,8 @@ export async function registerControllers(
           // Si se especifico un type (DTO class) y tiene @ApiSchema, usamos $ref
           if (responseMeta.type) {
             const cls = responseMeta.type;
-            const meta = (cls as any)[
-              (Symbol as any).metadata ?? Symbol.for("Symbol.metadata")
+            const meta = (cls as unknown as Record<symbol, unknown>)[
+              metadataSymbol
             ] as FastifyKitMetadata;
             if (meta?.openApiSchema?.name) {
               // Registrar si no esta en el registry

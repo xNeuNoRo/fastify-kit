@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import type { OpenAPIV3_1 } from "openapi-types";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 import { FastifyKit } from "../../../src/core/FastifyKit.js";
@@ -12,9 +13,7 @@ import {
   ApiBearerAuth,
 } from "../../../src/http/decorators/openapi/index.js";
 
-if (!(Symbol as any).metadata) {
-  (Symbol as any).metadata = Symbol.for("Symbol.metadata");
-}
+// FASTIFY_KIT_METADATA_SYMBOL polyfill ya se ejecuta al importar los decoradores
 
 describe("Integracion OpenAPI (E2E)", () => {
   let app: FastifyInstance;
@@ -77,7 +76,9 @@ describe("Integracion OpenAPI (E2E)", () => {
   });
 
   it("Deberia generar spec OpenAPI 3.1 completa", () => {
-    const spec = (app as any).swagger();
+    const spec = (
+      app as unknown as { swagger: () => OpenAPIV3_1.Document }
+    ).swagger();
 
     expect(spec.openapi).toBe("3.1.0");
     expect(spec.info.title).toBe("Test API");
@@ -99,7 +100,9 @@ describe("Integracion OpenAPI (E2E)", () => {
 
     // Parameters
     expect(getOp.parameters).toBeDefined();
-    const param = getOp.parameters.find((p: any) => p.name === "id");
+    const param = getOp.parameters.find(
+      (p: OpenAPIV3_1.ParameterObject) => p.name === "id",
+    );
     expect(param).toBeDefined();
     expect(param.in).toBe("path");
 

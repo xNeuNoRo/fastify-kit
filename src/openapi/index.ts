@@ -4,4 +4,4 @@
  */
 
 export { OpenApiRegistry, openApiRegistry } from "./OpenApiRegistry.js";
-export type { OpenApiSchemaObject } from "./OpenApiRegistry.js";
+export type { OpenApiSchemaObject, OpenApiSchemas } from "./types.js";

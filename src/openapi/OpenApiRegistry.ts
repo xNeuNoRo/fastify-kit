@@ -1,17 +1,8 @@
 import type { Constructor } from "../http/routing/scanner/index.js";
 import type { FastifyKitMetadata } from "../http/decorators/types.js";
 import type { TSchema } from "@sinclair/typebox";
-
-/**
- * @description Símbolo único usado para acceder a la metadata de los decoradores Stage 3.
- */
-const metadataSymbol: symbol =
-  (Symbol as any).metadata ?? Symbol.for("Symbol.metadata");
-
-/**
- * @description Mapa que representa un schema OpenAPI 3.1 (JSON Schema).
- */
-export type OpenApiSchemaObject = Record<string, any>;
+import type { OpenApiSchemaObject } from "./types.js";
+import { FASTIFY_KIT_METADATA_SYMBOL as metadataSymbol } from "../core/constants/symbols.js";
 
 /**
  * @description Registro central de schemas reutilizables para OpenAPI 3.1.
@@ -34,7 +25,9 @@ export class OpenApiRegistry {
    * @returns El objeto schema OpenAPI registrado.
    */
   registerSchema(cls: Constructor): OpenApiSchemaObject {
-    const meta = (cls as any)[metadataSymbol] as FastifyKitMetadata;
+    const meta = (cls as unknown as Record<symbol, unknown>)[
+      metadataSymbol
+    ] as FastifyKitMetadata;
     const options = meta?.openApiSchema;
 
     if (!options) {
@@ -121,7 +114,9 @@ export class OpenApiRegistry {
    * @returns El schema OpenAPI o una referencia $ref.
    */
   resolveConstructorSchema(cls: Constructor): OpenApiSchemaObject {
-    const meta = (cls as any)[metadataSymbol] as FastifyKitMetadata;
+    const meta = (cls as unknown as Record<symbol, unknown>)[
+      metadataSymbol
+    ] as FastifyKitMetadata;
     const options = meta?.openApiSchema;
 
     if (options && this.schemas.has(options.name)) {
@@ -150,7 +145,9 @@ export class OpenApiRegistry {
     // Si es una clase (constructor), intentamos usar $ref
     if (typeof schemaOrClass === "function" && schemaOrClass.prototype) {
       const cls = schemaOrClass as Constructor;
-      const meta = (cls as any)[metadataSymbol] as FastifyKitMetadata;
+      const meta = (cls as unknown as Record<symbol, unknown>)[
+        metadataSymbol
+      ] as FastifyKitMetadata;
       if (meta?.openApiSchema?.name) {
         // Aseguramos que esté registrado
         if (!this.schemas.has(meta.openApiSchema.name)) {
@@ -164,7 +161,8 @@ export class OpenApiRegistry {
 
     // Si es un TSchema de TypeBox, devolvemos el JSON Schema inline
     // Los TSchema de TypeBox ya son compatibles con OpenAPI 3.1
-    return (schemaOrClass as any).toJSON?.() ?? { type: "object" };
+    const tschema = schemaOrClass as TSchema;
+    return tschema.toJSON?.() ?? { type: "object" };
   }
 
   /**
@@ -201,25 +199,29 @@ export class OpenApiRegistry {
    */
   private collectProperties(
     cls: Constructor,
-  ): Record<string, any> {
-    const inst = new (cls as any)();
-    const constructor = (inst as any).constructor;
-    const symbol = Symbol.for("fastifykit:openapi:property");
-    return constructor[symbol] || {};
+  ): Record<string, import("../http/decorators/types.js").ApiPropertyOptions> {
+    const inst = new (cls as new () => Record<string, unknown>)();
+    const constructor = Object.getPrototypeOf(inst).constructor as Record<
+      symbol,
+      unknown
+    >;
+    const symbol: symbol = Symbol.for("fastifykit:openapi:property");
+    return (constructor[symbol] as Record<
+      string,
+      import("../http/decorators/types.js").ApiPropertyOptions
+    >) || {};
   }
 
   /**
    * @description Transforma las propiedades recolectadas a propiedades de schema OpenAPI.
    */
   private transformProperties(
-    properties: Record<string, any>,
+    properties: Record<string, import("../http/decorators/types.js").ApiPropertyOptions>,
   ): Record<string, OpenApiSchemaObject> {
     const result: Record<string, OpenApiSchemaObject> = {};
 
     for (const [propName, options] of Object.entries(properties)) {
-      const propSchema: OpenApiSchemaObject = {
-        type: "string",
-      };
+      const propSchema: OpenApiSchemaObject = { type: "string" };
 
       if (options.description) {
         propSchema.description = options.description;
@@ -274,7 +276,7 @@ export class OpenApiRegistry {
    * @description Obtiene las propiedades requeridas de un conjunto de opciones.
    */
   private getRequiredProperties(
-    properties: Record<string, any>,
+    properties: Record<string, import("../http/decorators/types.js").ApiPropertyOptions>,
   ): string[] {
     return Object.entries(properties)
       .filter(

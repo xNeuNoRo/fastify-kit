@@ -3,7 +3,12 @@ import { fastifyKitRequestContext } from "../../http/plugins/requestContext.js";
 import { fastifyKitErrorHandler } from "../../http/plugins/errorHandler.js";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import type { FastifyJWTOptions } from "@fastify/jwt";
-import { defaultHelmetConfig, FastifyKitOptions } from "../FastifyKit.js";
+import {
+  defaultHelmetConfig,
+  FastifyKitOptions,
+  type OpenApiSecurityScheme,
+  type ScalarConfig,
+} from "../FastifyKit.js";
 import { openApiRegistry } from "../../openapi/OpenApiRegistry.js";
 
 /**
@@ -155,8 +160,8 @@ export async function registerDocumentationPlugin(
     const componentsSchemas = openApiRegistry.getComponentsSchemas();
 
     // Auto-detectar security schemes si no se definieron explicitamente
-    const securitySchemes: Record<string, any> = {
-      ...((options.swagger as any).securitySchemes || {}),
+    const securitySchemes: Record<string, OpenApiSecurityScheme> = {
+      ...(options.swagger.securitySchemes || {}),
     };
 
     // Si el usuario activo JWT y no definio bearerAuth, lo registramos automaticamente
@@ -165,13 +170,12 @@ export async function registerDocumentationPlugin(
         type: "http",
         scheme: "bearer",
         bearerFormat: "JWT",
-        description:
-          "Token JWT obtenido del endpoint de autenticacion",
+        description: "Token JWT obtenido del endpoint de autenticacion",
       };
     }
 
     // Generamos servers basados en versioning si esta configurado y no hay servers explicitos
-    let servers = (options.swagger as any).servers || [];
+    let servers = options.swagger.servers || [];
     if (
       !servers.length &&
       options.swagger.versioning?.type === "path" &&
@@ -194,21 +198,19 @@ export async function registerDocumentationPlugin(
           ...(Object.keys(componentsSchemas).length
             ? { schemas: componentsSchemas }
             : {}),
-        },
-        ...((options.swagger as any).security
-          ? { security: (options.swagger as any).security }
+        } as Record<string, unknown>,
+        ...(options.swagger.security
+          ? { security: options.swagger.security }
           : {}),
         ...(servers.length ? { servers } : {}),
-        ...((options.swagger as any).tags
-          ? { tags: (options.swagger as any).tags }
-          : {}),
-        ...((options.swagger as any).externalDocs
-          ? { externalDocs: (options.swagger as any).externalDocs }
+        ...(options.swagger.tags ? { tags: options.swagger.tags } : {}),
+        ...(options.swagger.externalDocs
+          ? { externalDocs: options.swagger.externalDocs }
           : {}),
       },
     });
     // Configuramos Scalar con las opciones del usuario (solo las definidas)
-    const scalarConfig: Record<string, any> = {
+    const scalarConfig: Record<string, unknown> = {
       theme: options.swagger.scalar?.theme ?? "purple",
       layout: options.swagger.scalar?.layout ?? "modern",
       hideDownloadButton: options.swagger.scalar?.hideDownloadButton ?? false,
