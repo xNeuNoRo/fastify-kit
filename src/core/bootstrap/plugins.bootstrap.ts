@@ -196,13 +196,42 @@ export async function registerDocumentationPlugin(
           : {}),
       },
     });
+    // Configuramos Scalar con las opciones del usuario (solo las definidas)
+    const scalarConfig: Record<string, any> = {
+      theme: options.swagger.scalar?.theme ?? "purple",
+      layout: options.swagger.scalar?.layout ?? "modern",
+      hideDownloadButton: options.swagger.scalar?.hideDownloadButton ?? false,
+      hideModels: options.swagger.scalar?.hideModels ?? false,
+      hideClientButton: options.swagger.scalar?.hideClientButton ?? false,
+      metaData: {
+        title: options.swagger.title,
+        ...(options.swagger.scalar?.metaData || {}),
+      },
+    };
+
+    // Solo agregamos propiedades opcionales si estan definidas
+    if (options.swagger.scalar?.favicon) {
+      scalarConfig.favicon = options.swagger.scalar.favicon;
+    }
+    if (options.swagger.scalar?.customCss) {
+      scalarConfig.customCss = options.swagger.scalar.customCss;
+    }
+    if (options.swagger.scalar?.customJs) {
+      scalarConfig.customJs = options.swagger.scalar.customJs;
+    }
+    if (options.swagger.scalar?.defaultHttpClient) {
+      scalarConfig.defaultHttpClient = options.swagger.scalar.defaultHttpClient;
+    }
+    if (options.swagger.scalar?.authentication) {
+      scalarConfig.authentication = options.swagger.scalar.authentication;
+    }
+    if (options.swagger.scalar?.searchHotKey) {
+      scalarConfig.searchHotKey = options.swagger.scalar.searchHotKey;
+    }
+
     await app.register(import("@scalar/fastify-api-reference"), {
       routePrefix: "/docs",
-      configuration: {
-        theme: "purple",
-        layout: "modern",
-        metaData: { title: options.swagger.title },
-      },
+      configuration: scalarConfig,
     });
   }
 }

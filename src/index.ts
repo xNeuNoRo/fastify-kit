@@ -183,6 +183,11 @@ export type {
 // OpenAPI Schema Registry
 export { OpenApiRegistry, openApiRegistry } from "./openapi/index.js";
 export type { OpenApiSchemaObject } from "./openapi/index.js";
+export type {
+  SwaggerOptions,
+  ScalarConfig,
+  OpenApiSecurityScheme,
+} from "./core/FastifyKit.js";
 
 // ----------------------------------------------
 // Observability & Logging
