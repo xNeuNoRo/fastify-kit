@@ -34,6 +34,10 @@ export interface TraceOptions {
  * Inyecta el TracerService del contenedor DI y maneja tanto métodos síncronos como asíncronos.
  * Si el tracer no está disponible o está desactivado, el método se ejecuta normalmente sin overhead.
  *
+ * Acepta dos formas de uso:
+ * - @Trace("nombre.del.span") — solo nombre del span
+ * - @Trace({ name: "nombre", kind: SpanKind.CLIENT, attributes: {...} }) — config completa
+ *
  * El span registra automáticamente:
  * - Atributos semánticos: code.function (nombre del método), code.namespace (nombre de la clase)
  * - Atributos de negocio: los especificados en `attributes`
@@ -41,16 +45,13 @@ export interface TraceOptions {
  * - Resultado: si captureResult está activado
  * - Excepciones: recordException + SpanStatusCode.ERROR
  *
- * @param options Opciones de configuración del span
+ * @param nameOrOptions Nombre del span (string) u opciones completas (TraceOptions)
  * @returns Un decorador de método que envuelve la función original con un span de traza
  *
  * @example
- * // Span automático con nombre personalizado y atributos de negocio
+ * // Span automático con nombre simple
  * class OrderService {
- *   @Trace("order.create", {
- *     kind: SpanKind.INTERNAL,
- *     attributes: { "business.operation": "create_order" }
- *   })
+ *   @Trace("order.create")
  *   async createOrder(dto: CreateOrderDto) {
  *     // El span se crea al entrar y se cierra al salir
  *     await this.repo.save(dto);
@@ -58,15 +59,20 @@ export interface TraceOptions {
  * }
  *
  * @example
- * // Capturar argumentos para debugging (solo en desarrollo)
+ * // Span con atributos de negocio
  * class PaymentService {
- *   @Trace("payment.process", { captureArgs: true })
+ *   @Trace({ name: "payment.process", captureArgs: true })
  *   async processPayment(amount: number, currency: string) {
  *     // El span tendrá: fn.args = '[100,"USD"]'
  *   }
  * }
  */
-export function Trace(options: TraceOptions = {}) {
+export function Trace(nameOrOptions: string | TraceOptions = {}) {
+  const options: TraceOptions =
+    typeof nameOrOptions === "string"
+      ? { name: nameOrOptions }
+      : nameOrOptions;
+
   return function <This, Args extends any[], Return>(
     target: (this: This, ...args: Args) => Return,
     context: ClassMethodDecoratorContext<

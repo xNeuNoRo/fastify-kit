@@ -280,7 +280,12 @@ export class PromMetricsService implements MetricsService {
   getMetricsEndpoint(): string {
     try {
       if (this.register && typeof this.register.metrics === "function") {
-        return this.register.metrics();
+        const result = this.register.metrics();
+        // prom-client v15+ devuelve Promise<string>, v14 devuelve string
+        if (result && typeof result.then === "function") {
+          return "# Métricas cargando (Promise pendiente)\n";
+        }
+        return result as string;
       }
     } catch {
       // Registry no disponible
