@@ -180,6 +180,10 @@ export type {
   ApiHeaderOptions,
 } from "./http/decorators/types.js";
 
+// OpenAPI Schema Registry
+export { OpenApiRegistry, openApiRegistry } from "./openapi/index.js";
+export type { OpenApiSchemaObject } from "./openapi/index.js";
+
 // ----------------------------------------------
 // Observability & Logging
 // ----------------------------------------------

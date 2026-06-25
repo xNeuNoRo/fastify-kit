@@ -4,6 +4,7 @@ import { fastifyKitErrorHandler } from "../../http/plugins/errorHandler.js";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import type { FastifyJWTOptions } from "@fastify/jwt";
 import { defaultHelmetConfig, FastifyKitOptions } from "../FastifyKit.js";
+import { openApiRegistry } from "../../openapi/OpenApiRegistry.js";
 
 /**
  * @description Método privado para registrar los plugins esenciales en la instancia de Fastify, incluyendo multipart para manejo de archivos, cookies para manejo de cookies, websockets para manejo de gateways de WebSocket, plugins personalizados para manejo de contexto de solicitud y manejo de errores, plugins de seguridad (CORS, Helmet, rate limit) según las opciones proporcionadas por el usuario, y el plugin de documentación (Swagger/Scalar) si se ha configurado la opción de Swagger.
@@ -150,10 +151,49 @@ export async function registerDocumentationPlugin(
 ) {
   // Si el usuario activa Swagger/Scalar, registramos el plugin de Scalar para generar una documentación interactiva y visualmente atractiva de la API en la ruta /docs
   if (options.swagger) {
+    // Recolectamos los schemas registrados via @ApiSchema y @ApiProperty
+    const componentsSchemas = openApiRegistry.getComponentsSchemas();
+
+    // Auto-detectar security schemes si no se definieron explicitamente
+    const securitySchemes: Record<string, any> = {
+      ...((options.swagger as any).securitySchemes || {}),
+    };
+
+    // Si el usuario activo JWT y no definio bearerAuth, lo registramos automaticamente
+    if (options.jwt && !securitySchemes.bearerAuth) {
+      securitySchemes.bearerAuth = {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "JWT",
+        description:
+          "Token JWT obtenido del endpoint de autenticacion",
+      };
+    }
+
     await app.register(import("@fastify/swagger"), {
       openapi: {
-        openapi: "3.0.0",
+        openapi: "3.1.0",
         info: options.swagger,
+        components: {
+          ...(Object.keys(securitySchemes).length
+            ? { securitySchemes }
+            : {}),
+          ...(Object.keys(componentsSchemas).length
+            ? { schemas: componentsSchemas }
+            : {}),
+        },
+        ...((options.swagger as any).security
+          ? { security: (options.swagger as any).security }
+          : {}),
+        ...((options.swagger as any).servers
+          ? { servers: (options.swagger as any).servers }
+          : {}),
+        ...((options.swagger as any).tags
+          ? { tags: (options.swagger as any).tags }
+          : {}),
+        ...((options.swagger as any).externalDocs
+          ? { externalDocs: (options.swagger as any).externalDocs }
+          : {}),
       },
     });
     await app.register(import("@scalar/fastify-api-reference"), {

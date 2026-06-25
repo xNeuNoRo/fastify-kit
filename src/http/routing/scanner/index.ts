@@ -6,6 +6,7 @@ import { getLogger } from "../../../logger/logger.factory.js";
 import { extractArguments } from "./parameter.resolver.js";
 import { FastifyKitMetadata } from "../../decorators/types.js";
 import { getGlobalMaxFileSize } from "./multipart.handler.js";
+import { openApiRegistry } from "../../../openapi/OpenApiRegistry.js";
 import type {
   ExecutionContext,
   Interceptor,
@@ -254,6 +255,74 @@ export async function registerControllers(
             ...methodResponses,
           },
         };
+        enhanced = true;
+      }
+
+      // Resolvemos las respuestas de @ApiResponseDoc con type: DtoClass
+      // para generar $ref a components/schemas en OpenAPI
+      const openApiResponses =
+        metadata.openApiResponseMetas?.[route.handlerName];
+      if (openApiResponses) {
+        routeSchema = { ...(routeSchema || {}) };
+        const existingResponse =
+          (routeSchema.response as Record<string, any>) || {};
+        routeSchema.response = { ...existingResponse };
+
+        for (const [
+          statusCode,
+          responseMeta,
+        ] of Object.entries(openApiResponses)) {
+          const statusNum = Number(statusCode);
+          const statusResp: Record<string, any> = {};
+
+          // Descripcion desde @ApiResponseDoc
+          if (responseMeta.description) {
+            statusResp.description = responseMeta.description;
+          }
+
+          // Si se especifico un type (DTO class) y tiene @ApiSchema, usamos $ref
+          if (responseMeta.type) {
+            const cls = responseMeta.type;
+            const meta = (cls as any)[
+              (Symbol as any).metadata ?? Symbol.for("Symbol.metadata")
+            ] as FastifyKitMetadata;
+            if (meta?.openApiSchema?.name) {
+              // Registrar si no esta en el registry
+              openApiRegistry.registerSchema(cls);
+              statusResp.content = {
+                [responseMeta.contentType || "application/json"]: {
+                  schema: {
+                    $ref: `#/components/schemas/${meta.openApiSchema.name}`,
+                  },
+                },
+              };
+            }
+          }
+
+          // Headers desde @ApiResponseDoc
+          if (responseMeta.headers) {
+            statusResp.headers = responseMeta.headers;
+          }
+
+          // Links HATEOAS
+          if (responseMeta.links) {
+            statusResp.links = responseMeta.links;
+          }
+
+          // Mergeamos con lo existente (de @Serialize o esquemas previos)
+          if (!existingResponse[statusNum]) {
+            (routeSchema.response as any)[statusNum] = statusResp;
+          } else {
+            const prev = existingResponse[statusNum];
+            (routeSchema.response as any)[statusNum] = {
+              ...prev,
+              ...statusResp,
+              content: statusResp.content
+                ? { ...(prev.content || {}), ...statusResp.content }
+                : prev.content,
+            };
+          }
+        }
         enhanced = true;
       }
 
