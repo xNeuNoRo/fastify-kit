@@ -97,9 +97,7 @@ export const ObservabilityConfigSchema = Type.Object(
       /** Endpoint del OpenTelemetry Collector (ej: http://otel-collector:4318/v1/traces) */
       otlpEndpoint: Type.Optional(Type.String()),
       /** Headers HTTP adicionales para autenticación con el collector */
-      otlpHeaders: Type.Optional(
-        Type.Record(Type.String(), Type.String()),
-      ),
+      otlpHeaders: Type.Optional(Type.Record(Type.String(), Type.String())),
     }),
 
     /** Configuración de métricas (Prometheus) */
@@ -163,7 +161,11 @@ export function getDefaultObservabilityConfig(): {
     exporter: string;
     otlpEndpoint?: string;
   };
-  metrics: { enabled: boolean; endpoint: string; defaultLabels: Record<string, string> };
+  metrics: {
+    enabled: boolean;
+    endpoint: string;
+    defaultLabels: Record<string, string>;
+  };
   instrumentations: {
     http: boolean;
     redis: boolean;
