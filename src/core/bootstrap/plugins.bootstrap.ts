@@ -170,6 +170,19 @@ export async function registerDocumentationPlugin(
       };
     }
 
+    // Generamos servers basados en versioning si esta configurado y no hay servers explicitos
+    let servers = (options.swagger as any).servers || [];
+    if (
+      !servers.length &&
+      options.swagger.versioning?.type === "path" &&
+      options.swagger.versioning?.versions?.length
+    ) {
+      servers = options.swagger.versioning.versions.map((v) => ({
+        url: `/v${v.version}`,
+        description: v.description || `API v${v.version}`,
+      }));
+    }
+
     await app.register(import("@fastify/swagger"), {
       openapi: {
         openapi: "3.1.0",
@@ -185,9 +198,7 @@ export async function registerDocumentationPlugin(
         ...((options.swagger as any).security
           ? { security: (options.swagger as any).security }
           : {}),
-        ...((options.swagger as any).servers
-          ? { servers: (options.swagger as any).servers }
-          : {}),
+        ...(servers.length ? { servers } : {}),
         ...((options.swagger as any).tags
           ? { tags: (options.swagger as any).tags }
           : {}),

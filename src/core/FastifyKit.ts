@@ -153,6 +153,8 @@ export interface SwaggerOptions {
     type: "path" | "header" | "servers";
     headerName?: string;
     defaultVersion?: string;
+    /** Versiones de la API a documentar en OpenAPI. Cada una genera un server. */
+    versions?: { version: string; description?: string }[];
   };
   /** Extensiones personalizadas (x-*). */
   [key: string]: any;
