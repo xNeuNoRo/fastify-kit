@@ -419,6 +419,7 @@ export { PingHealthIndicator } from "./health/indicators/PingHealthIndicator.js"
 export { DiskSpaceHealthIndicator } from "./health/indicators/DiskSpaceHealthIndicator.js";
 export { EventLoopHealthIndicator } from "./health/indicators/EventLoopHealthIndicator.js";
 export { WebRtcHealthIndicator } from "./health/indicators/WebRtcHealthIndicator.js";
+export { ObservabilityHealthIndicator } from "./health/indicators/ObservabilityHealthIndicator.js";
 
 // Tipos
 export type {

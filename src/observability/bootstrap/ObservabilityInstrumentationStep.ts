@@ -9,6 +9,7 @@ import { instrumentHttpServer } from "../instrumentations/http.instrumentation.j
 import { instrumentRedisConnection } from "../instrumentations/redis.instrumentation.js";
 import { instrumentQueueManager } from "../instrumentations/queue.instrumentation.js";
 import { instrumentWsGatewayRegistry } from "../instrumentations/ws.instrumentation.js";
+import { METRICS_ENDPOINT_TOKEN } from "./ObservabilityBootstrapStep.js";
 
 export class ObservabilityInstrumentationStep implements BootstrapStep {
   readonly name = "ObservabilityInstrumentationStep";
@@ -35,6 +36,21 @@ export class ObservabilityInstrumentationStep implements BootstrapStep {
     // HTTP instrumentation (Fastify hooks)
     if (ctx.app) {
       instrumentHttpServer(ctx.app, tracer, metrics);
+    }
+
+    // Register /metrics endpoint on Fastify app
+    if (ctx.app && container.has(METRICS_ENDPOINT_TOKEN)) {
+      const endpointInfo = container.resolve<any>(METRICS_ENDPOINT_TOKEN);
+      if (endpointInfo?.endpoint) {
+        ctx.app.get(endpointInfo.endpoint, async (_request, reply) => {
+          reply
+            .header("Content-Type", endpointInfo.getContentType())
+            .send(endpointInfo.getContent());
+        });
+        logger?.info?.(
+          `[ObservabilityInstrumentationStep] Metrics endpoint registered at ${endpointInfo.endpoint}`,
+        );
+      }
     }
 
     // Redis instrumentation
