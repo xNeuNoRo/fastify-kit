@@ -100,8 +100,8 @@ export function instrumentHttpServer(
     });
 
     // Guardamos el span y el timestamp en el request para los hooks posteriores
-    (request as any).__otelSpan = span;
-    (request as any).__startTime = performance.now();
+    request.__otelSpan = span;
+    request.__startTime = performance.now();
 
     // Inyectamos traceparent en la respuesta para que el cliente pueda continuar la traza
     const headers: Record<string, string> = {};
@@ -123,8 +123,8 @@ export function instrumentHttpServer(
    * Cierra el span y registra las métricas RED.
    */
   app.addHook("onResponse", async (request, reply) => {
-    const span = (request as any).__otelSpan;
-    const startTime = (request as any).__startTime;
+    const span = request.__otelSpan;
+    const startTime = request.__startTime;
 
     if (span && startTime) {
       const duration = (performance.now() - startTime) / 1000;
@@ -170,7 +170,7 @@ export function instrumentHttpServer(
    * Registra la excepción en el span para diagnóstico.
    */
   app.addHook("onError", async (request, _reply, error) => {
-    const span = (request as any).__otelSpan;
+    const span = request.__otelSpan;
 
     if (span) {
       span.recordException(error);

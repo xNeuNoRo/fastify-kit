@@ -119,7 +119,7 @@ export class OtelTracerService implements TracerService {
       otlpEndpoint?: string;
       otlpHeaders?: Record<string, string>;
     },
-    private logger: LoggerContract,
+    private logger?: LoggerContract,
   ) {
     this.config = config;
     if (config.enabled) {
@@ -159,12 +159,12 @@ export class OtelTracerService implements TracerService {
       await this.sdk.start();
       this.tracer = otelApi.trace.getTracer("fastify-kit", "1.0.0");
 
-      this.logger.info("[OtelTracerService] SDK de OpenTelemetry iniciado", {
+      this.logger?.info("[OtelTracerService] SDK de OpenTelemetry iniciado", {
         sampler: this.config.sampler,
         exporter: this.config.exporter,
       });
     } catch (err) {
-      this.logger.warn(
+      this.logger?.warn(
         "[OtelTracerService] Error inicializando SDK de OpenTelemetry, tracing desactivado",
         { error: (err as Error).message },
       );
@@ -411,7 +411,7 @@ export class OtelTracerService implements TracerService {
       if (!baggage) return {};
       const result: Record<string, string> = {};
       baggage.getAllEntries().forEach(
-        ([key, entry]: [string, any]) => {
+        ([key, entry]: [string, { value: string }]) => {
           result[key] = entry.value;
         },
       );

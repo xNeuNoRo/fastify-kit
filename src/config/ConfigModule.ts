@@ -14,9 +14,9 @@ import {
 } from "../observability/contracts/ObservabilityConfig.js";
 
 function deepMerge(
-  target: Record<string, any>,
-  source: Record<string, any>,
-): Record<string, any> {
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): Record<string, unknown> {
   const output = { ...target };
   for (const key of Object.keys(source)) {
     if (
@@ -27,7 +27,10 @@ function deepMerge(
       typeof target[key] === "object" &&
       !Array.isArray(target[key])
     ) {
-      output[key] = deepMerge(target[key], source[key]);
+      output[key] = deepMerge(
+        target[key] as Record<string, unknown>,
+        source[key] as Record<string, unknown>,
+      );
     } else {
       output[key] = source[key];
     }
@@ -110,7 +113,10 @@ export class ConfigModule {
 
     // Extraemos solo las variables de entorno relevantes según el prefijo
     const extractedEnv: Record<string, unknown> = {};
-    const schemaKeys = Object.keys((options.schema as any).properties || {});
+    const schemaKeys = Object.keys(
+      (options.schema as { properties?: Record<string, unknown> }).properties ||
+        {},
+    );
 
     for (const key of schemaKeys) {
       const envKey = envPrefix ? `${envPrefix}${key}` : key;
@@ -186,7 +192,9 @@ export class ConfigModule {
 
     // Registramos cada variable validada en el ConfigService
     const configService = new DefaultConfigService();
-    for (const [key, value] of Object.entries(coerced as Record<string, any>)) {
+    for (const [key, value] of Object.entries(
+      coerced as Record<string, string | number | boolean>,
+    )) {
       configService.setConfig(key, value);
     }
 
@@ -196,7 +204,10 @@ export class ConfigModule {
     // Registramos la configuracion de observabilidad si fue proporcionada
     if (options.observability) {
       const defaults = getDefaultObservabilityConfig();
-      const merged = deepMerge(defaults as any, options.observability as any);
+      const merged = deepMerge(
+        defaults as unknown as Record<string, unknown>,
+        options.observability as unknown as Record<string, unknown>,
+      );
       configService.setConfig(OBSERVABILITY_CONFIG_KEY, merged);
     }
 
@@ -240,7 +251,7 @@ export class ConfigModule {
             const validated = ConfigValidator.validate(compiler, newCoerced);
 
             for (const [key, value] of Object.entries(
-              validated as Record<string, any>,
+              validated as Record<string, string | number | boolean>,
             )) {
               configService.setConfig(key, value);
             }

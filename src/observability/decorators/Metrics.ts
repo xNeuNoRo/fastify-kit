@@ -1,8 +1,8 @@
 import { METRICS_SERVICE_TOKEN } from "../contracts/MetricsService.js";
+import type { MetricsService } from "../contracts/MetricsService.js";
 import { container } from "../../container/DIContainer.js";
 
-type AllowedLabelValue = string | number | boolean;
-type LabelRecord = Record<string, AllowedLabelValue>;
+type LabelRecord = Record<string, string>;
 
 /**
  * @description Opciones del decorador \@Metrics para instrumentar un metodo
@@ -98,8 +98,8 @@ export function Metrics(options: MetricsOptions) {
     }
 
     const methodName = String(context.name);
-    const className =
-      (context.metadata as any)?.className || "UnknownClass";
+    const meta = (context.metadata ?? {}) as Record<string, unknown>;
+    const className = (meta.className as string) || "UnknownClass";
     // Si el usuario no define nombres, generamos unos predecibles basados en clase+metodo
     const counterName =
       counter || `${className.toLowerCase()}_${methodName}_total`;
@@ -110,7 +110,7 @@ export function Metrics(options: MetricsOptions) {
       gauge || `${className.toLowerCase()}_${methodName}_active`;
 
     return function (this: This, ...args: Args): Return {
-      let metrics: any;
+      let metrics: MetricsService;
 
       // Resolucion lazy desde el contenedor DI: si no hay servicio de metricas,
       // simplemente ejecutamos el metodo original sin instrumentar

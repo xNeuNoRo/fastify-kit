@@ -53,13 +53,35 @@ export class ObservabilityInstrumentationStep implements BootstrapStep {
 
     // 2. Registrar endpoint /metrics en Fastify (Prometheus scrape target)
     if (ctx.app && container.has(METRICS_ENDPOINT_TOKEN)) {
-      const endpointInfo = container.resolve<any>(METRICS_ENDPOINT_TOKEN);
+      const endpointInfo = container.resolve<{
+        endpoint: string;
+        getContent: () => string;
+        getContentType: () => string;
+      }>(METRICS_ENDPOINT_TOKEN);
       if (endpointInfo?.endpoint) {
-        ctx.app.get(endpointInfo.endpoint, async (_request, reply) => {
-          reply
-            .header("Content-Type", endpointInfo.getContentType())
-            .send(endpointInfo.getContent());
-        });
+        ctx.app.get(
+          endpointInfo.endpoint,
+          {
+            schema: {
+              tags: ["System"],
+              summary: "Métricas de Prometheus",
+              description:
+                "Endpoint de métricas en formato Prometheus para scrape por el Prometheus Server.",
+              response: {
+                200: {
+                  type: "string",
+                  description: "Métricas en formato de exposición Prometheus",
+                  contentMediaType: "text/plain; charset=utf-8",
+                } as Record<string, unknown>,
+              },
+            },
+          },
+          async (_request, reply) => {
+            reply
+              .header("Content-Type", endpointInfo.getContentType())
+              .send(endpointInfo.getContent());
+          },
+        );
       }
     }
 

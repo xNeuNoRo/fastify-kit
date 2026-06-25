@@ -14,7 +14,7 @@ function logAtLevel(
   logger: LoggerContract,
   level: LogLevel,
   message: string,
-  context?: Record<string, any>,
+  context?: Record<string, unknown>,
 ): void {
   switch (level) {
     case "debug": logger.debug(message, context); break;
@@ -44,7 +44,7 @@ export interface LogOptions {
    */
   message: string;
   /** Contexto adicional fijo que se adjunta a todos los logs de este metodo (ej: { modulo: "pagos" }) */
-  context?: Record<string, any>;
+  context?: Record<string, unknown>;
   /**
    * Si es true, captura todos los argumentos del metodo en el log de entrada.
    * Si es un array, solo captura los argumentos listados.
@@ -120,10 +120,9 @@ export function Log(options: LogOptions) {
     }
 
     const methodName = String(context.name);
-    const className =
-      (context.metadata as any)?.className || "UnknownClass";
-    const paramNames =
-      ((context.metadata as any)?.paramNames as string[]) || [];
+    const meta = (context.metadata ?? {}) as Record<string, unknown>;
+    const className = (meta.className as string) || "UnknownClass";
+    const paramNames = (meta.paramNames as string[]) || [];
 
     return function (this: This, ...args: Args): Return {
       let logger: LoggerContract;
@@ -144,7 +143,7 @@ export function Log(options: LogOptions) {
         paramNames,
       );
 
-      const baseContext: Record<string, any> = {
+      const baseContext: Record<string, unknown> = {
         class: className,
         method: methodName,
         ...staticContext,
@@ -154,14 +153,14 @@ export function Log(options: LogOptions) {
       if (logInput) {
         const inputKeys =
           logInput === true ? paramNames : logInput;
-        const inputContext: Record<string, any> = {};
+        const inputContext: Record<string, unknown> = {};
         inputKeys.forEach((key: string, i: number) => {
           if (args[i] !== undefined) {
             try {
               inputContext[key] =
                 typeof args[i] === "object"
                   ? "[object]"
-                  : args[i];
+                  : String(args[i]);
             } catch {
               inputContext[key] = "[circular]";
             }
@@ -181,12 +180,12 @@ export function Log(options: LogOptions) {
 
           // Log de salida exitosa con duracion y resultado (si el usuario lo pidio)
           if (logOutput) {
-            let outputValue: any;
+            let outputValue: unknown;
             try {
               outputValue =
                 typeof res === "object"
                   ? "[object]"
-                  : res;
+                  : String(res);
             } catch {
               outputValue = "[circular]";
             }
@@ -271,7 +270,7 @@ export function Log(options: LogOptions) {
  */
 function interpolateMessage(
   template: string,
-  args: any[],
+  args: unknown[],
   paramNames: string[],
 ): string {
   return template.replace(/\{\{(\w+)\}\}/g, (_match, key) => {

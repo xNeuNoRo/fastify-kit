@@ -1,5 +1,5 @@
 import { TRACER_SERVICE_TOKEN, SpanKind, SpanStatusCode } from "../contracts/TracerService.js";
-import type { SpanOptions } from "../contracts/TracerService.js";
+import type { SpanOptions, TracerService } from "../contracts/TracerService.js";
 import {
   SEMATTR_CODE_FUNCTION,
   SEMATTR_CODE_NAMESPACE,
@@ -85,13 +85,13 @@ export function Trace(nameOrOptions: string | TraceOptions = {}) {
     }
 
     const methodName = String(context.name);
-    const className =
-      (context.metadata as any)?.className || "UnknownClass";
+    const meta = (context.metadata ?? {}) as Record<string, unknown>;
+    const className = (meta.className as string) || "UnknownClass";
     const spanName =
       options.name || `${className}.${methodName}`;
 
     return function (this: This, ...args: Args): Return {
-      let tracer: any;
+      let tracer: TracerService;
 
       // Resolvemos el tracer del contenedor DI de forma lazy: asi si no hay
       // observabilidad configurada, el costo de este decorador es practicamente nulo
@@ -120,12 +120,12 @@ export function Trace(nameOrOptions: string | TraceOptions = {}) {
       if (options.captureArgs) {
         const argNames =
           options.captureArgs === true ? [] : options.captureArgs;
-        const captured: Record<string, any> = {};
+        const captured: Record<string, unknown> = {};
         args.forEach((arg, i) => {
           if (argNames.length === 0 || argNames.includes(String(i))) {
             try {
               captured[String(i)] =
-                typeof arg === "object" ? "[object]" : arg;
+                typeof arg === "object" ? "[object]" : String(arg);
             } catch {
               captured[String(i)] = "[circular]";
             }
