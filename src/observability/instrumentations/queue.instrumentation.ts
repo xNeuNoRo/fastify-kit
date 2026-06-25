@@ -16,6 +16,28 @@ import {
 import { SpanKind, SpanStatusCode } from "../contracts/TracerService.js";
 import { QueueManager } from "../../queues/QueueManager.js";
 
+/**
+ * @description Instrumenta el QueueManager para crear spans de traza al despachar
+ * trabajos a colas (dispatch). Inyecta el contexto de traza (W3C traceparent) en
+ * el payload del job para que el worker pueda continuar la traza al procesarlo.
+ *
+ * Esto permite trazar el camino completo de un mensaje:
+ * HTTP Request → Queue.publish → Worker.process → DB/Redis/External API
+ *
+ * Métricas registradas:
+ * - queue_jobs_total{queue, status, adapter}
+ *
+ * Atributos semánticos:
+ * - messaging.system: "in_process" (o "bullmq" según adapter)
+ * - messaging.operation: "publish"
+ * - messaging.destination: nombre de la cola
+ * - messaging.destination_kind: "queue"
+ * - messaging.message_payload_size: tamaño en bytes del payload
+ *
+ * @param container Contenedor DI para resolver QueueManager
+ * @param tracer Servicio de trazas para crear spans PRODUCER
+ * @param metrics Servicio de métricas para el contador de jobs
+ */
 export function instrumentQueueManager(
   container: DIContainer,
   tracer: TracerService,
@@ -27,6 +49,10 @@ export function instrumentQueueManager(
 
     const originalDispatch = queueManager.dispatch.bind(queueManager);
 
+    /**
+     * Wrapper que envuelve dispatch() para crear un span PRODUCER
+     * e inyectar el contexto de traza en el payload del job.
+     */
     queueManager.dispatch = async function <T>(
       queueName: string,
       payload: T,
@@ -44,6 +70,7 @@ export function instrumentQueueManager(
         },
       });
 
+      // Inyectamos el contexto de traza en el payload para que el worker lo reciba
       const carrier: Record<string, string> = {};
       tracer.inject(carrier);
 
@@ -79,6 +106,6 @@ export function instrumentQueueManager(
 
     (queueManager as any).__otelPatched = true;
   } catch {
-    // QueueManager not available
+    // QueueManager no disponible (no se configuró colas)
   }
 }

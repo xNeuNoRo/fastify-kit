@@ -11,6 +11,24 @@ import { instrumentQueueManager } from "../instrumentations/queue.instrumentatio
 import { instrumentWsGatewayRegistry } from "../instrumentations/ws.instrumentation.js";
 import { METRICS_ENDPOINT_TOKEN } from "./ObservabilityBootstrapStep.js";
 
+/**
+ * @description Paso de instrumentación automática del pipeline de bootstrap.
+ * Se ejecuta después de CorePluginsStep (cuando la app Fastify ya tiene plugins)
+ * y antes de LifecycleAndRoutesStep (antes de registrar rutas de usuario).
+ *
+ * Aplica monkey-patching ligero a los servicios del framework para añadir
+ * spans de traza y métricas automáticas sin que el usuario tenga que
+ * modificar su código.
+ *
+ * Instrumentaciones aplicadas según la configuración:
+ * 1. HTTP: Registra hooks onRequest/onResponse/onError en Fastify
+ * 2. /metrics: Monta el endpoint de Prometheus en la app Fastify
+ * 3. Redis: Envuelve comandos ioredis con spans y métricas de latencia
+ * 4. Colas: Envuelve QueueManager.dispatch con spans y trace context en payloads
+ * 5. WebSockets: Envuelve WsMessageRouter.processIncomingMessage con spans
+ *
+ * Si el tracer está desactivado (tracing.enabled = false), no se aplica nada.
+ */
 export class ObservabilityInstrumentationStep implements BootstrapStep {
   readonly name = "ObservabilityInstrumentationStep";
 
@@ -24,7 +42,7 @@ export class ObservabilityInstrumentationStep implements BootstrapStep {
       metrics = container.resolve<MetricsService>(METRICS_SERVICE_TOKEN);
     } catch {
       logger?.warn?.(
-        "[ObservabilityInstrumentationStep] No observability services found, skipping instrumentation",
+        "[ObservabilityInstrumentationStep] Servicios de observabilidad no encontrados, omitiendo instrumentacion",
       );
       return;
     }
@@ -33,12 +51,12 @@ export class ObservabilityInstrumentationStep implements BootstrapStep {
       return;
     }
 
-    // HTTP instrumentation (Fastify hooks)
+    // 1. Instrumentación HTTP: hooks onRequest/onResponse/onError en Fastify
     if (ctx.app) {
       instrumentHttpServer(ctx.app, tracer, metrics);
     }
 
-    // Register /metrics endpoint on Fastify app
+    // 2. Registrar endpoint /metrics en Fastify (Prometheus scrape target)
     if (ctx.app && container.has(METRICS_ENDPOINT_TOKEN)) {
       const endpointInfo = container.resolve<any>(METRICS_ENDPOINT_TOKEN);
       if (endpointInfo?.endpoint) {
@@ -48,18 +66,18 @@ export class ObservabilityInstrumentationStep implements BootstrapStep {
             .send(endpointInfo.getContent());
         });
         logger?.info?.(
-          `[ObservabilityInstrumentationStep] Metrics endpoint registered at ${endpointInfo.endpoint}`,
+          `[ObservabilityInstrumentationStep] Endpoint de metricas registrado en ${endpointInfo.endpoint}`,
         );
       }
     }
 
-    // Redis instrumentation
+    // 3. Instrumentación Redis: comandos ioredis con spans y métricas
     instrumentRedisConnection(container, tracer, metrics);
 
-    // Queue instrumentation
+    // 4. Instrumentación Colas: QueueManager.dispatch con spans
     instrumentQueueManager(container, tracer, metrics);
 
-    // WebSocket instrumentation
+    // 5. Instrumentación WebSockets: WsMessageRouter con spans
     instrumentWsGatewayRegistry(container, tracer, metrics);
   }
 }

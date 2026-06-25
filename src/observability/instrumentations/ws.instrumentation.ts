@@ -13,6 +13,27 @@ import {
 import { SpanKind, SpanStatusCode } from "../contracts/TracerService.js";
 import { WsGatewayRegistry } from "../../websockets/WsGatewayRegistry.js";
 
+/**
+ * @description Instrumenta el WsGatewayRegistry para crear spans de traza
+ * al recibir mensajes WebSocket. Envuelve el processIncomingMessage del
+ * messageRouter para capturar cada mensaje entrante.
+ *
+ * Esto permite trazar la comunicación en tiempo real:
+ * Cliente WS → WsGateway → processIncomingMessage → Controller Handler
+ *
+ * Métricas registradas:
+ * - ws_messages_total{gateway, type, direction}
+ *
+ * Atributos semánticos:
+ * - messaging.system: "ws"
+ * - messaging.operation: "receive"
+ * - ws.message.type: tipo de mensaje (json, binary, text)
+ * - ws.connection.id: ID de la conexión WebSocket
+ *
+ * @param container Contenedor DI para resolver WsGatewayRegistry
+ * @param tracer Servicio de trazas para crear spans CONSUMER
+ * @param metrics Servicio de métricas para el contador de mensajes
+ */
 export function instrumentWsGatewayRegistry(
   container: DIContainer,
   tracer: TracerService,
@@ -25,6 +46,10 @@ export function instrumentWsGatewayRegistry(
     const originalRegister =
       gatewayRegistry.registerGateways.bind(gatewayRegistry);
 
+    /**
+     * Wrapper que envuelve registerGateways para instrumentar el
+     * procesamiento de mensajes entrantes (processIncomingMessage).
+     */
     gatewayRegistry.registerGateways = function (
       app: any,
       gateways: any[],
@@ -32,6 +57,7 @@ export function instrumentWsGatewayRegistry(
       const origProcessIncoming =
         (gatewayRegistry as any).messageRouter?.processIncomingMessage;
 
+      // Si existe el messageRouter, envolvemos su método de procesamiento
       if (origProcessIncoming) {
         (gatewayRegistry as any).messageRouter.processIncomingMessage =
           async function (params: any) {
@@ -73,6 +99,6 @@ export function instrumentWsGatewayRegistry(
 
     (gatewayRegistry as any).__otelPatched = true;
   } catch {
-    // WsGatewayRegistry not available
+    // WsGatewayRegistry no disponible (no se configuraron WebSockets)
   }
 }

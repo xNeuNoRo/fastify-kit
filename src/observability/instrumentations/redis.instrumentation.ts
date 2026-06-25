@@ -12,8 +12,28 @@ import {
 import { SpanKind, SpanStatusCode } from "../contracts/TracerService.js";
 import { REDIS_CONNECTION_TOKEN } from "../../distributed/redis.factory.js";
 
-let originalFactory: ((c: DIContainer) => any) | null = null;
-
+/**
+ * @description Instrumenta automáticamente los comandos de Redis (ioredis)
+ * para registrar spans de traza y métricas de latencia.
+ *
+ * Envuelve el método redis.command() capturando:
+ * - Nombre del comando (SET, GET, HSET, etc.)
+ * - Clave de Redis accedida
+ * - Duración del comando en segundos (histograma)
+ * - Estado (ok/error) según el resultado
+ *
+ * Métricas registradas:
+ * - redis_command_duration_seconds{command, status}
+ *
+ * Atributos semánticos:
+ * - db.system: "redis"
+ * - db.redis.command: nombre del comando (minúsculas)
+ * - db.redis.key: clave accedida (primer argumento)
+ *
+ * @param container Contenedor DI para resolver la conexión Redis
+ * @param tracer Servicio de trazas para crear spans CLIENT
+ * @param metrics Servicio de métricas para el histograma
+ */
 export function instrumentRedisConnection(
   container: DIContainer,
   tracer: TracerService,
@@ -25,9 +45,14 @@ export function instrumentRedisConnection(
     const redis = container.resolve<any>(REDIS_CONNECTION_TOKEN);
     if (!redis || redis.__otelPatched) return;
 
+    // Guardamos referencia al comando original para usarlo en el wrapper
     const originalCommand = redis.command?.bind(redis);
     if (!originalCommand) return;
 
+    /**
+     * Wrapper que crea un span CLIENT por cada comando Redis.
+     * Mide latencia y registra métricas.
+     */
     redis.command = function (command: string, ...args: any[]) {
       const start = process.hrtime.bigint();
       const span = tracer.startSpan(`redis.${command}`, {
@@ -64,8 +89,9 @@ export function instrumentRedisConnection(
         });
     };
 
+    // Marcamos como instrumentado para no volver a parchear
     (redis as any).__otelPatched = true;
   } catch {
-    // Redis not available or already instrumented
+    // Redis no disponible o ya instrumentado
   }
 }

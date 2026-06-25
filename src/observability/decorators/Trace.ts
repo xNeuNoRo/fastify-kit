@@ -6,14 +6,66 @@ import {
 } from "../utils/semantic-conventions.js";
 import { container } from "../../container/DIContainer.js";
 
+/**
+ * @description Opciones para el decorador @Trace.
+ * Permite personalizar el nombre del span, el tipo (SpanKind),
+ * atributos estáticos y captura de argumentos/resultado.
+ */
 export interface TraceOptions {
+  /** Nombre personalizado del span. Si no se especifica, se usa "ClassName.methodName" */
   name?: string;
+  /** Tipo de span (INTERNAL, SERVER, CLIENT, PRODUCER, CONSUMER). Por defecto INTERNAL */
   kind?: SpanKind;
+  /** Atributos semánticos estáticos que se añaden al span siempre */
   attributes?: Record<string, string | number | boolean>;
+  /**
+   * Capturar los argumentos del método como atributos del span.
+   * - true: captura todos los argumentos
+   * - ["userId", "orderId"]: captura solo los argumentos con esos nombres (si usas @UseParams)
+   * Cuidado: no capturar datos sensibles (contraseñas, tokens, PII)
+   */
   captureArgs?: boolean | string[];
+  /** Capturar el valor de retorno como atributo del span. Útil para debugging */
   captureResult?: boolean;
 }
 
+/**
+ * @description Decorador para crear un span de traza automático alrededor de un método.
+ * Inyecta el TracerService del contenedor DI y maneja tanto métodos síncronos como asíncronos.
+ * Si el tracer no está disponible o está desactivado, el método se ejecuta normalmente sin overhead.
+ *
+ * El span registra automáticamente:
+ * - Atributos semánticos: code.function (nombre del método), code.namespace (nombre de la clase)
+ * - Atributos de negocio: los especificados en `attributes`
+ * - Argumentos: si captureArgs está activado
+ * - Resultado: si captureResult está activado
+ * - Excepciones: recordException + SpanStatusCode.ERROR
+ *
+ * @param options Opciones de configuración del span
+ * @returns Un decorador de método que envuelve la función original con un span de traza
+ *
+ * @example
+ * // Span automático con nombre personalizado y atributos de negocio
+ * class OrderService {
+ *   @Trace("order.create", {
+ *     kind: SpanKind.INTERNAL,
+ *     attributes: { "business.operation": "create_order" }
+ *   })
+ *   async createOrder(dto: CreateOrderDto) {
+ *     // El span se crea al entrar y se cierra al salir
+ *     await this.repo.save(dto);
+ *   }
+ * }
+ *
+ * @example
+ * // Capturar argumentos para debugging (solo en desarrollo)
+ * class PaymentService {
+ *   @Trace("payment.process", { captureArgs: true })
+ *   async processPayment(amount: number, currency: string) {
+ *     // El span tendrá: fn.args = '[100,"USD"]'
+ *   }
+ * }
+ */
 export function Trace(options: TraceOptions = {}) {
   return function <This, Args extends any[], Return>(
     target: (this: This, ...args: Args) => Return,
@@ -22,6 +74,7 @@ export function Trace(options: TraceOptions = {}) {
       (this: This, ...args: Args) => Return
     >,
   ) {
+    // Validamos que el decorador se aplique solo a métodos de clase
     if (context.kind !== "method") {
       throw new Error("@Trace solo puede ser aplicado a métodos de clase");
     }
@@ -35,9 +88,11 @@ export function Trace(options: TraceOptions = {}) {
     return function (this: This, ...args: Args): Return {
       let tracer: any;
 
+      // Resolvemos el tracer del contenedor DI (lazy, no en tiempo de definición)
       try {
         tracer = container.resolve(TRACER_SERVICE_TOKEN);
       } catch {
+        // Si no hay tracer registrado, ejecutamos el método sin span
         return target.apply(this, args);
       }
 
@@ -45,12 +100,14 @@ export function Trace(options: TraceOptions = {}) {
         return target.apply(this, args);
       }
 
+      // Construimos los atributos del span
       const attributes: Record<string, string | number | boolean> = {
         [SEMATTR_CODE_FUNCTION]: methodName,
         [SEMATTR_CODE_NAMESPACE]: className,
         ...(options.attributes || {}),
       };
 
+      // Capturamos argumentos si el usuario lo pide
       if (options.captureArgs) {
         const argNames =
           options.captureArgs === true ? [] : options.captureArgs;
@@ -73,11 +130,13 @@ export function Trace(options: TraceOptions = {}) {
         attributes,
       };
 
+      // Creamos el span
       const span = tracer.startSpan(spanName, spanOptions);
 
       try {
         const result = target.apply(this, args);
 
+        // Manejamos el resultado (síncrono o asíncrono)
         const handleResult = (res: Return): Return => {
           if (options.captureResult && res !== undefined) {
             try {
@@ -88,7 +147,7 @@ export function Trace(options: TraceOptions = {}) {
                   : String(res),
               );
             } catch {
-              // circular reference or other serialization issue
+              // Referencia circular u otro problema de serialización
             }
           }
           span.setStatus(SpanStatusCode.OK);
