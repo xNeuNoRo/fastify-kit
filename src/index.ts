@@ -184,6 +184,19 @@ export { PromMetricsService } from "./observability/implementations/PromMetricsS
 export { OtelTracerService } from "./observability/implementations/OtelTracerService.js";
 export { PinoLoggerService } from "./observability/implementations/PinoLoggerService.js";
 export {
+  Trace,
+  type TraceOptions,
+} from "./observability/decorators/Trace.js";
+export {
+  Metrics,
+  validateMetricLabels,
+  type MetricsOptions,
+} from "./observability/decorators/Metrics.js";
+export {
+  Log,
+  type LogOptions,
+} from "./observability/decorators/Log.js";
+export {
   injectTraceContext,
   extractTraceContext,
   injectBaggage,

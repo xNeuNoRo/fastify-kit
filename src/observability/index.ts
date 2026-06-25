@@ -27,6 +27,22 @@ export { PinoLoggerService } from "./implementations/PinoLoggerService.js";
 export { ObservabilityBootstrapStep } from "./bootstrap/ObservabilityBootstrapStep.js";
 export { ObservabilityInstrumentationStep } from "./bootstrap/ObservabilityInstrumentationStep.js";
 
+export {
+  Trace,
+  type TraceOptions,
+} from "./decorators/Trace.js";
+
+export {
+  Metrics,
+  validateMetricLabels,
+  type MetricsOptions,
+} from "./decorators/Metrics.js";
+
+export {
+  Log,
+  type LogOptions,
+} from "./decorators/Log.js";
+
 export { instrumentHttpServer } from "./instrumentations/http.instrumentation.js";
 export { instrumentRedisConnection } from "./instrumentations/redis.instrumentation.js";
 export { instrumentQueueManager } from "./instrumentations/queue.instrumentation.js";
