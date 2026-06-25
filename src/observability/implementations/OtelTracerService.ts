@@ -9,6 +9,11 @@ import {
 } from "../contracts/TracerService.js";
 import type { LoggerContract } from "../../logger/LoggerContract.js";
 
+/**
+ * Variables para carga dinámica de paquetes OpenTelemetry.
+ * Todos los imports son dinámicos para que el framework funcione
+ * sin OTel si el usuario no lo necesita (tracing.enabled = false).
+ */
 let otelApi: any = null;
 let otelSdk: any = null;
 let otelResource: any = null;
@@ -16,6 +21,10 @@ let otelExporterOtlpGrpc: any = null;
 let otelExporterOtlpHttp: any = null;
 let otelExporterConsole: any = null;
 
+/**
+ * Carga dinámica de todos los paquetes OpenTelemetry necesarios.
+ * Se ejecuta una sola vez (cache global) al iniciar el tracer.
+ */
 async function loadOtel() {
   if (!otelApi) {
     otelApi = await import("@opentelemetry/api");
@@ -31,6 +40,11 @@ async function loadOtel() {
   }
 }
 
+/**
+ * Span que no hace nada. Se usa como fallback cuando el tracer está desactivado
+ * o OTel no está disponible, para que el código de usuario no tenga que
+ * verificar null en cada span.
+ */
 class NoopSpan implements Span {
   spanId = "";
   traceId = "";
@@ -49,6 +63,38 @@ class NoopSpan implements Span {
   end(_endTime?: bigint): void {}
 }
 
+/**
+ * @description Implementación del TracerService usando OpenTelemetry SDK.
+ * Gestiona el ciclo de vida completo del SDK (start → spans → shutdown),
+ * configuración de muestreo (sampler) y exportadores (console, OTLP gRPC/HTTP).
+ *
+ * NO usa auto-instrumentation: toda la instrumentación es manual y selectiva,
+ * lo que da control total sobre qué se traza y con qué atributos semánticos.
+ *
+ * Características:
+ * - Muestreo configurable (always_on, traceidratio, parentbased_traceidratio)
+ * - Exportación a OTLP Collector (gRPC o HTTP) o console
+ * - Propagación de contexto W3C (traceparent + baggage) entre servicios
+ * - Baggage para datos de negocio (userId, tenantId, featureFlags)
+ * - NoopSpan como fallback cuando el tracer está desactivado
+ *
+ * Se instancia en el ObservabilityBootstrapStep y se registra con TRACER_SERVICE_TOKEN.
+ *
+ * @example
+ * class OrderService {
+ *   constructor(@Inject(TRACER_SERVICE_TOKEN) private tracer: TracerService) {}
+ *
+ *   async create(dto: CreateOrderDto) {
+ *     // Span activo gestionado automáticamente
+ *     return this.tracer.startActiveSpan("order.create", async (span) => {
+ *       span.setAttribute("order.id", dto.id);
+ *       tracer.setBaggage("userId", dto.userId);
+ *       await this.repo.save(dto);
+ *       span.setStatus(SpanStatusCode.OK);
+ *     });
+ *   }
+ * }
+ */
 @Injectable()
 export class OtelTracerService implements TracerService {
   private initialized = false;
@@ -81,6 +127,11 @@ export class OtelTracerService implements TracerService {
     }
   }
 
+  /**
+   * Inicializa el SDK de OpenTelemetry con la configuración proporcionada.
+   * Configura resource (nombre del servicio, entorno), sampler, y exporter.
+   * Si falla, el tracer queda desactivado y los spans serán NoopSpan.
+   */
   private async init(): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
@@ -108,18 +159,27 @@ export class OtelTracerService implements TracerService {
       await this.sdk.start();
       this.tracer = otelApi.trace.getTracer("fastify-kit", "1.0.0");
 
-      this.logger.info("[OtelTracerService] OpenTelemetry SDK started", {
+      this.logger.info("[OtelTracerService] SDK de OpenTelemetry iniciado", {
         sampler: this.config.sampler,
         exporter: this.config.exporter,
       });
     } catch (err) {
       this.logger.warn(
-        "[OtelTracerService] Failed to initialize OpenTelemetry SDK, tracing disabled",
+        "[OtelTracerService] Error inicializando SDK de OpenTelemetry, tracing desactivado",
         { error: (err as Error).message },
       );
     }
   }
 
+  /**
+   * Crea el sampler de OpenTelemetry según la configuración.
+   *
+   * - always_on: 100% de trazas (desarrollo)
+   * - always_off: 0% (desactivado)
+   * - traceidratio: Muestrear un % fijo (ej: 10% = una de cada 10)
+   * - parentbased_traceidratio: Respeta decisión del trace padre +
+   *   muestrea % fijo para raíces (producción recomendado)
+   */
   private createSampler(): any {
     if (!otelSdk) return null;
 
@@ -142,6 +202,14 @@ export class OtelTracerService implements TracerService {
     }
   }
 
+  /**
+   * Crea el exportador de spans según la configuración.
+   *
+   * - otlp-grpc: OpenTelemetry Collector via gRPC (puerto 4317)
+   * - otlp-http: OpenTelemetry Collector via HTTP (puerto 4318, recomendado)
+   * - console: Imprime spans en consola (desarrollo local)
+   * - none: No exporta, útil para métricas internas solamente
+   */
   private createExporter(): any {
     try {
       const endpoint = this.config.otlpEndpoint;
@@ -173,23 +241,13 @@ export class OtelTracerService implements TracerService {
           break;
       }
     } catch {
-      // Fallback to console if available
+      // Fallback a console si está disponible
     }
 
     if (otelExporterConsole?.ConsoleSpanExporter) {
       return new otelExporterConsole.ConsoleSpanExporter();
     }
     return { export: () => {}, shutdown: () => Promise.resolve() };
-  }
-
-  private getSpanContext(span: any): SpanContext {
-    const ctx = span.spanContext();
-    return {
-      traceId: ctx.traceId,
-      spanId: ctx.spanId,
-      traceFlags: ctx.traceFlags,
-      traceState: ctx.traceState?.serialize?.() || "",
-    };
   }
 
   startSpan(name: string, options: SpanOptions = {}): Span {
@@ -235,6 +293,15 @@ export class OtelTracerService implements TracerService {
     span.end();
   }
 
+  /**
+   * Inyecta el contexto de traza actual (traceparent W3C) en un carrier HTTP.
+   * Esto permite propagar la traza a servicios downstream en llamadas fetch/axios/gRPC.
+   *
+   * @example
+   * const headers: Record<string, string> = {};
+   * tracer.inject(headers);
+   * // headers = { traceparent: "00-abc...-def...-01" }
+   */
   inject(carrier: Record<string, string>): void {
     if (!otelApi) return;
     try {
@@ -243,10 +310,20 @@ export class OtelTracerService implements TracerService {
         carrier,
       );
     } catch {
-      // propagation not available
+      // Propagación no disponible
     }
   }
 
+  /**
+   * Extrae el contexto de traza de headers HTTP entrantes.
+   * Se usa para continuar trazas iniciadas por servicios upstream.
+   *
+   * @example
+   * const ctx = tracer.extract({ traceparent: "00-abc...-def...-01" });
+   * if (ctx) {
+   *   tracer.startSpan("mi.operacion", { parentContext: ctx });
+   * }
+   */
   extract(carrier: Record<string, string>): SpanContext | null {
     if (!otelApi) return null;
     try {
@@ -264,22 +341,36 @@ export class OtelTracerService implements TracerService {
         };
       }
     } catch {
-      // extraction failed
+      // Extracción fallida
     }
     return null;
   }
 
+  /**
+   * Obtiene el span activo en el contexto actual de AsyncLocalStorage.
+   * Útil para el PromMetricsService al generar exemplars.
+   */
   getActiveSpan(): Span | undefined {
     if (!otelApi) return undefined;
     try {
       const otelSpan = otelApi.trace.getSpan(otelApi.context.active());
       if (otelSpan) return this.wrapSpan(otelSpan);
     } catch {
-      // no active span
+      // Sin span activo
     }
     return undefined;
   }
 
+  /**
+   * Establece un valor de baggage (contexto de negocio que viaja entre servicios).
+   * El baggage se propaga automáticamente en headers HTTP y se mantiene
+   * en el AsyncLocalStorage del request actual.
+   *
+   * @example
+   * tracer.setBaggage("userId", "usr_456");
+   * tracer.setBaggage("tenantId", "tenant_789");
+   * // Se propaga automáticamente al llamar a otros servicios
+   */
   setBaggage(key: string, value: string): void {
     if (!otelApi) return;
     try {
@@ -295,7 +386,7 @@ export class OtelTracerService implements TracerService {
         () => {},
       );
     } catch {
-      // baggage not available
+      // Baggage no disponible
     }
   }
 
@@ -343,7 +434,7 @@ export class OtelTracerService implements TracerService {
         () => {},
       );
     } catch {
-      // baggage not available
+      // Baggage no disponible
     }
   }
 
@@ -351,20 +442,30 @@ export class OtelTracerService implements TracerService {
     return this.config.enabled && !!this.tracer;
   }
 
+  /**
+   * Apaga el SDK de OpenTelemetry gracefulmente.
+   * Vacía los buffers de spans pendientes y libera recursos.
+   * Se llama automáticamente en el shutdown de la aplicación.
+   */
   async shutdown(): Promise<void> {
     if (this.sdk) {
       try {
         await this.sdk.shutdown();
-        this.logger?.info("[OtelTracerService] SDK shut down gracefully");
+        this.logger?.info("[OtelTracerService] SDK apagado correctamente");
       } catch (err) {
         this.logger?.warn(
-          "[OtelTracerService] Error shutting down SDK",
+          "[OtelTracerService] Error apagando SDK",
           { error: (err as Error).message },
         );
       }
     }
   }
 
+  /**
+   * Envuelve un span nativo de OpenTelemetry en nuestra interfaz Span.
+   * Esto permite exponer una API consistente sin acoplar el código
+   * de usuario a los tipos internos de OTel.
+   */
   private wrapSpan(otelSpan: any): Span {
     const spanCtx = otelSpan.spanContext();
     return {

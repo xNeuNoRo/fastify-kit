@@ -6,6 +6,10 @@ import type { ObservabilityConfig } from "../contracts/ObservabilityConfig.js";
 let pinoModule: any = null;
 let pinoLokiModule: any = null;
 
+/**
+ * Carga dinámica de Pino. Usamos import dinámico para que el servicio
+ * sea usable incluso si pino no está instalado (fallback a console).
+ */
 async function loadPino() {
   if (!pinoModule) {
     pinoModule = await import("pino");
@@ -13,6 +17,10 @@ async function loadPino() {
   return pinoModule;
 }
 
+/**
+ * Carga dinámica de pino-loki. Si no está disponible, los logs
+ * se envían solo a stdout (el sidecar de Loki los recogerá igual).
+ */
 async function loadPinoLoki() {
   if (!pinoLokiModule) {
     try {
@@ -24,6 +32,31 @@ async function loadPinoLoki() {
   return pinoLokiModule;
 }
 
+/**
+ * @description Implementación del LoggerContract usando Pino para logging
+ * estructurado con soporte de niveles (trace a fatal), correlación automática
+ * de requestId via AlsStore (AsyncLocalStorage), y envío opcional a Loki.
+ *
+ * Si Pino no está disponible, fallback silencioso a console.log.
+ * Si pino-loki no está disponible, solo se loguea a stdout (sidecar Loki/Promtail).
+ *
+ * Se instancia en ObservabilityBootstrapStep y se registra con LOGGER_TOKEN.
+ * Reemplaza al DefaultConsoleLogger con logs JSON estructurados.
+ *
+ * @example
+ * // El usuario no instancia esto directamente, lo hace el framework:
+ * const logger = new PinoLoggerService({
+ *   level: "info",
+ *   prettyPrint: true,
+ *   loki: { url: "http://loki:3100", labels: { service: "orders-api" } }
+ * });
+ * container.registerInstance(LOGGER_TOKEN, logger);
+ *
+ * // En cualquier servicio, se resuelve normalmente:
+ * @Inject(LOGGER_TOKEN) private logger: LoggerContract;
+ * this.logger.info("Peticion procesada", { userId: "usr_456" });
+ * // Sale como JSON con requestId, timestamp, level...
+ */
 @Injectable()
 export class PinoLoggerService implements LoggerContract {
   private initialized = false;
@@ -55,6 +88,12 @@ export class PinoLoggerService implements LoggerContract {
     this.init().catch(() => {});
   }
 
+  /**
+   * Inicializa Pino de forma asíncrona. Configura transports:
+   * - stdout (siempre) con el nivel solicitado
+   * - Loki (opcional) si se proporcionó URL y pino-loki está disponible
+   * - pretty-print (opcional) para desarrollo local
+   */
   private async init(): Promise<void> {
     if (this.initialized) return;
     this.initialized = true;
@@ -89,7 +128,7 @@ export class PinoLoggerService implements LoggerContract {
           });
         } catch (lokiError) {
           console.warn(
-            "[PinoLoggerService] Failed to configure Loki transport:",
+            "[PinoLoggerService] Error configurando transporte Loki:",
             (lokiError as Error).message,
           );
         }
@@ -117,13 +156,20 @@ export class PinoLoggerService implements LoggerContract {
       this.logger = this.pinoLogger;
     } catch (err) {
       console.warn(
-        "[PinoLoggerService] Failed to initialize pino, falling back to console:",
+        "[PinoLoggerService] Error inicializando Pino, usando console como fallback:",
         (err as Error).message,
       );
       this.logger = console;
     }
   }
 
+  /**
+   * Enriquece el contexto del log con datos del request actual.
+   * Extrae el requestId del AlsStore (AsyncLocalStorage) para
+   * correlacionar logs con la petición que los generó.
+   *
+   * En el futuro también inyectará traceId y spanId del tracer activo.
+   */
   private enrichContext(ctx?: Record<string, any>): Record<string, any> {
     const store = requestContext.getStore();
     return {
@@ -152,6 +198,10 @@ export class PinoLoggerService implements LoggerContract {
     this.logger.fatal(this.enrichContext(ctx), message);
   }
 
+  /**
+   * Expone la instancia interna de Pino para casos avanzados
+   * (ej: integración con pino-http para logs de Fastify).
+   */
   getPinoLogger(): any {
     return this.pinoLogger || this.logger;
   }
