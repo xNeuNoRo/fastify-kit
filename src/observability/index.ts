@@ -25,6 +25,12 @@ export { OtelTracerService } from "./implementations/OtelTracerService.js";
 export { PinoLoggerService } from "./implementations/PinoLoggerService.js";
 
 export { ObservabilityBootstrapStep } from "./bootstrap/ObservabilityBootstrapStep.js";
+export { ObservabilityInstrumentationStep } from "./bootstrap/ObservabilityInstrumentationStep.js";
+
+export { instrumentHttpServer } from "./instrumentations/http.instrumentation.js";
+export { instrumentRedisConnection } from "./instrumentations/redis.instrumentation.js";
+export { instrumentQueueManager } from "./instrumentations/queue.instrumentation.js";
+export { instrumentWsGatewayRegistry } from "./instrumentations/ws.instrumentation.js";
 
 export {
   injectTraceContext,

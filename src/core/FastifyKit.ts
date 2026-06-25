@@ -24,6 +24,7 @@ import { LifecycleAndRoutesStep } from "./bootstrap/steps/LifecycleAndRoutesStep
 import { BootstrapHooksStep } from "./bootstrap/steps/BootstrapHooksStep.js";
 import { GracefulShutdownStep } from "./bootstrap/steps/GracefulShutdownStep.js";
 import { ObservabilityBootstrapStep } from "../observability/bootstrap/ObservabilityBootstrapStep.js";
+import { ObservabilityInstrumentationStep } from "../observability/bootstrap/ObservabilityInstrumentationStep.js";
 import type { Constructor } from "../http/routing/scanner/index.js";
 
 export { FASTIFY_KIT_METADATA_SYMBOL } from "./constants/symbols.js";
@@ -172,6 +173,7 @@ export class FastifyKit {
       .add(new FastifyInstanceStep())
       .add(new ModuleDiscoveryStep())
       .add(new CorePluginsStep())
+      .add(new ObservabilityInstrumentationStep())
       .add(new LifecycleAndRoutesStep())
       .add(new BootstrapHooksStep())
       .add(new GracefulShutdownStep())
