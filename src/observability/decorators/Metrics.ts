@@ -5,78 +5,80 @@ type AllowedLabelValue = string | number | boolean;
 type LabelRecord = Record<string, AllowedLabelValue>;
 
 /**
- * @description Opciones para el decorador @Metrics.
- * Permite registrar automáticamente métricas RED (Rate, Errors, Duration)
- * alrededor de un método, con labels dimensionales y protección de cardinalidad.
+ * @description Opciones del decorador \@Metrics para instrumentar un metodo
+ * con metricas RED (Rate, Errors, Duration) automaticamente.
+ *
+ * El decorador mide la duracion del metodo, cuenta invocaciones exitosas y fallidas,
+ * y opcionalmente mantiene un gauge de operaciones en progreso.
  */
 export interface MetricsOptions {
   /**
-   * Nombre del contador (Counter).
-   * Se incrementa en 1 por cada ejecución del método.
-   * El label 'status' se añade automáticamente ("success" o "error").
-   * Ej: orders_created_total{status="success"} 1
+   * Nombre del contador (Counter) de Prometheus.
+   * Se auto-incrementa en 1 por cada ejecucion, con el label 'status' ("success" | "error").
+   * Ej: definis "orders_total" y ves orders_total{status="success"} en Grafana.
    */
   counter?: string;
   /**
-   * Nombre del histograma (Histogram) para medir la latencia del método.
-   * Registra la duración en segundos con buckets optimizados.
-   * El label 'status' se añade automáticamente.
-   * Ej: order_create_duration_seconds{status="success"} 0.15
+   * Nombre del histograma (Histogram) para medir la latencia del metodo en segundos.
+   * Usa buckets optimizados por defecto; podes sobrescribirlos con histogramBuckets.
+   * Ej: definis "order_duration" y ves el p95 de latencia de creacion de ordenes.
    */
   histogram?: string;
   /**
-   * Nombre del gauge para medir el valor actual de algo.
-   * Se incrementa en 1 al entrar y se decrementa al salir.
-   * Útil para medir "trabajos en progreso".
+   * Nombre del gauge para contar operaciones activas en este momento.
+   * Se incrementa en 1 al entrar al metodo y se decrementa al salir.
+   * Ideal para medir "trabajos en progreso" o "conexiones activas".
    */
   gauge?: string;
   /**
-   * Labels estáticos que se añaden a todas las métricas.
-   * SOLO estas claves están permitidas (cardinality guard).
-   * NO uses IDs de usuario, request IDs, ni valores de alta cardinalidad.
-   * Ej: { version: "v1", region: "eu-west-1" }
+   * Labels fijas que se adjuntan a todas las metricas de este metodo.
+   * IMPORTANTE: nunca uses valores de alta cardinalidad aqui (IDs de usuario,
+   * request IDs, emails) porque eso explota Prometheus.
+   *
+   * Labels recomendadas: { version: "v1", region: "eu-west" }
+   * Labels prohibidas:     { userId: "123", requestId: "abc" }
    */
   labels?: LabelRecord;
-  /**
-   * Buckets personalizados para el histograma.
-   * Si no se especifica, se usan los buckets por defecto.
-   */
+  /** Buckets personalizados para el histograma (si no se definen, se usan buckets optimizados genericos). */
   histogramBuckets?: number[];
 }
 
 /**
- * @description Decorador para métricas automáticas RED (Rate, Errors, Duration).
- * Envuelve un método midiendo su duración, contando invocaciones,
- * y registrando el estado (éxito/error) como label.
+ * @description Decorador que envuelve un metodo con metricas automaticas RED.
  *
- * Protege contra explosión de cardinalidad: solo permite las labels
- * declaradas explícitamente en el decorador.
+ * Al entrar al metodo se inicia un contador de tiempo y se incrementa el gauge si se especifico.
+ * Al salir (exito o error) se registra la duracion en el histograma, se incrementa el counter
+ * con el label 'status' correspondiente, y se decrementa el gauge.
  *
- * Si el MetricsService no está disponible, el método se ejecuta normalmente.
+ * Protege contra el error mas comun en Prometheus: labels de alta cardinalidad.
+ * Solo permite las claves declaradas explicitamente en `labels`.
  *
- * @param options Configuración de las métricas a registrar
- * @returns Un decorador de método que envuelve la función original con métricas
+ * Si el MetricsService no esta disponible en el contenedor DI, el metodo se ejecuta
+ * normalmente sin overhead de medicion.
+ *
+ * @param options Configuracion de las metricas a exponer.
+ * @returns Un decorador de metodo que envuelve la ejecucion con instrumentacion RED.
  *
  * @example
- * // Métricas RED completas con labels de negocio
+ * // Metrica RED completa con labels de version y region
  * class OrderService {
- *   @Metrics({
+ *   \@Metrics({
  *     counter: "orders_created_total",
  *     histogram: "order_create_duration_seconds",
  *     labels: { version: "v1", region: "eu-west" }
  *   })
- *   async createOrder(@Body() dto: CreateOrderDto) {
- *     // Se mide automáticamente: contador, latencia, estado
+ *   async createOrder(dto: CreateOrderDto) {
+ *     // Se mide automaticamente: contador, latencia, estado
  *     return this.repo.save(dto);
  *   }
  * }
  *
  * @example
- * // Gauge para medir trabajos en progreso
+ * // Gauge para saber cuantos batches se estan procesando ahora mismo
  * class BatchProcessor {
- *   @Metrics({ gauge: "batch_processing_active" })
+ *   \@Metrics({ gauge: "batch_processing_active" })
  *   async processBatch(items: Item[]) {
- *     // El gauge sube a 1 al entrar y vuelve a 0 al salir
+ *     // El gauge sube a 1 al entrar y vuelve a 0 al salir, incluso si hay error
  *   }
  * }
  */
@@ -90,7 +92,7 @@ export function Metrics(options: MetricsOptions) {
       (this: This, ...args: Args) => Return
     >,
   ) {
-    // Validamos que el decorador se aplique solo a métodos de clase
+    // El decorador solo aplica a metodos; en propiedades o clases no tiene sentido medir
     if (context.kind !== "method") {
       throw new Error("@Metrics solo puede ser aplicado a métodos de clase");
     }
@@ -98,6 +100,7 @@ export function Metrics(options: MetricsOptions) {
     const methodName = String(context.name);
     const className =
       (context.metadata as any)?.className || "UnknownClass";
+    // Si el usuario no define nombres, generamos unos predecibles basados en clase+metodo
     const counterName =
       counter || `${className.toLowerCase()}_${methodName}_total`;
     const histogramName =
@@ -109,7 +112,8 @@ export function Metrics(options: MetricsOptions) {
     return function (this: This, ...args: Args): Return {
       let metrics: any;
 
-      // Resolvemos el MetricsService del contenedor DI
+      // Resolucion lazy desde el contenedor DI: si no hay servicio de metricas,
+      // simplemente ejecutamos el metodo original sin instrumentar
       try {
         metrics = container.resolve(METRICS_SERVICE_TOKEN);
       } catch {
@@ -119,7 +123,6 @@ export function Metrics(options: MetricsOptions) {
       const start = performance.now();
       let status: "success" | "error" = "success";
 
-      // Incrementamos el gauge al entrar (si se especificó)
       if (gauge) {
         metrics.gauge(gaugeName, 1, labels);
       }
@@ -127,7 +130,6 @@ export function Metrics(options: MetricsOptions) {
       try {
         const result = target.apply(this, args);
 
-        // Manejamos el resultado (síncrono o asíncrono)
         const handleResult = (res: Return): Return => {
           const duration = (performance.now() - start) / 1000;
 
@@ -196,18 +198,19 @@ export function Metrics(options: MetricsOptions) {
 }
 
 /**
- * @description Valida que las labels usadas en runtime estén en el conjunto permitido.
- * Previene explosión de cardinalidad en Prometheus.
+ * @description Valida en runtime que las labels usadas esten dentro del conjunto permitido.
+ * Pensada para evitar el error mas comun con Prometheus: labels de alta cardinalidad
+ * que explotan el almacenamiento y degradan el rendimiento.
  *
- * @param metricName Nombre de la métrica (para el mensaje de error)
- * @param labels Labels que se van a usar
- * @param allowedKeys Conjunto de claves permitidas
- * @throws Error si alguna label no está en el conjunto permitido
+ * @param metricName Nombre de la metrica (para mostrar en el mensaje de error).
+ * @param labels Labels que se pretenden usar.
+ * @param allowedKeys Claves que estan permitidas para esta metrica.
+ * @throws Si alguna label no esta en el conjunto permitido.
  *
  * @example
- * const allowed = new Set(["version", "region"]);
- * validateMetricLabels("orders_total", { version: "v1", userId: "123" }, allowed);
- * // Throws: "Label key 'userId' not allowed for metric 'orders_total'"
+ * const permitidas = new Set(["version", "region"]);
+ * validateMetricLabels("orders_total", { version: "v1", userId: "usr_123" }, permitidas);
+ * // Lanza: "Label 'userId' no permitida para la metrica 'orders_total'"
  */
 export function validateMetricLabels(
   metricName: string,

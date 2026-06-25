@@ -2,12 +2,13 @@ import { LOGGER_TOKEN } from "../../logger/LoggerContract.js";
 import type { LoggerContract } from "../../logger/LoggerContract.js";
 import { container } from "../../container/DIContainer.js";
 
-/** Niveles de log soportados por el decorador @Log, alineados con LoggerContract */
+/** Niveles de log soportados por el decorador \@Log. Mapean 1:1 con los metodos de LoggerContract. */
 type LogLevel = "debug" | "info" | "warn" | "error" | "fatal";
 
 /**
- * Despacha un mensaje de log al nivel correcto del logger.
- * Necesaria porque TypeScript no permite indexar LoggerContract con un string dinámico.
+ * Despacha un mensaje de log al metodo correcto del logger segun el nivel.
+ * Hacemos esto en lugar de logger[level](msg, ctx) porque TypeScript no puede
+ * verificar que un string dinamico sea una clave valida de LoggerContract.
  */
 function logAtLevel(
   logger: LoggerContract,
@@ -25,76 +26,74 @@ function logAtLevel(
 }
 
 /**
- * @description Opciones para el decorador @Log.
- * Permite registrar logs estructurados automáticamente al entrar/salir
- * de un método, con interpolación de argumentos y captura de entrada/salida/errores.
+ * @description Opciones del decorador \@Log para registrar logs estructurados
+ * automaticamente al entrar y salir de un metodo.
+ *
+ * Soporta interpolacion de argumentos via placeholders {{paramName}}
+ * que se reemplazan con los valores reales en tiempo de ejecucion.
  */
 export interface LogOptions {
-  /** Nivel de log (debug, info, warn, error, fatal) */
+  /** Nivel de severidad del log (debug, info, warn, error, fatal) */
   level: LogLevel;
   /**
-   * Mensaje del log. Puede contener placeholders {{paramName}} que se
-   * interpolan con los argumentos del método (si usas @UseParams).
+   * Plantilla del mensaje. Podes usar {{paramName}} para interpolar argumentos
+   * del metodo en el mensaje. Los nombres de parametro se obtienen del metadata
+   * de la clase (si usas \@Body, \@Param, etc.).
    *
-   * Ej: "Creando orden para usuario {{userId}} con monto {{amount}}"
+   * Ej: "Procesando orden {{orderId}} para el usuario {{userId}}"
    */
   message: string;
-  /** Contexto adicional estático que se añade a todos los logs de este método */
+  /** Contexto adicional fijo que se adjunta a todos los logs de este metodo (ej: { modulo: "pagos" }) */
   context?: Record<string, any>;
   /**
-   * Capturar los argumentos del método en el log de entrada.
-   * - true: captura todos los argumentos
-   * - ["userId"]: captura solo argumentos específicos
+   * Si es true, captura todos los argumentos del metodo en el log de entrada.
+   * Si es un array, solo captura los argumentos listados.
    * Los objetos se serializan como "[object]" para evitar logs gigantes.
    */
   logInput?: boolean | string[];
-  /** Registrar un log adicional con el resultado al terminar exitosamente */
+  /** Si es true, registra un log adicional con el resultado al terminar exitosamente */
   logOutput?: boolean;
-  /** Registrar un log de error si el método lanza una excepción. Por defecto true */
+  /** Si es false, no se registra log cuando el metodo lanza una excepcion. Por defecto true. */
   logError?: boolean;
 }
 
 /**
- * @description Decorador para logging estructurado automático.
- * Registra un log al entrar al método, y opcionalmente al salir (con resultado)
- * o al fallar (con error). Interpola placeholders {{paramName}} con los
- * argumentos del método usando los nombres de parámetros del metadata de clase.
+ * @description Decorador que registra logs estructurados al entrar, salir y fallar un metodo.
  *
- * El contexto del log incluye automáticamente:
- * - class: nombre de la clase
- * - method: nombre del método
- * - durationMs: duración en ms (en logs de salida/error)
- * - input: argumentos capturados (si logInput está activado)
- * - output: valor de retorno (si logOutput está activado)
- * - error: mensaje, nombre y stack del error (si logError está activado)
+ * Al entrar se loguea el mensaje interpolado con los argumentos.
+ * Al salir exitosamente, opcionalmente se loguea el resultado con la duracion en ms.
+ * Al fallar, se loguea el error con mensaje, stack trace y duracion.
  *
- * @param options Configuración del log
- * @returns Un decorador de método que envuelve la función original con logs
+ * Utiliza el LoggerContract del contenedor DI. Si no hay logger disponible, el metodo
+ * se ejecuta normalmente sin logs.
+ *
+ * @param options Configuracion de los logs (nivel, mensaje, captura de entrada/salida/errores).
+ * @returns Un decorador de metodo que envuelve la ejecucion con logs estructurados.
  *
  * @example
- * // Log básico con interpolación de argumentos
+ * // Log simple con interpolacion de argumentos
  * class OrderService {
- *   @Log({ level: "info", message: "Creando orden para usuario {{userId}}" })
- *   async createOrder(@Body() dto: CreateOrderDto) {
- *     // Log automático: "Creando orden para usuario usr_456"
+ *   \@Log({ level: "info", message: "Creando orden para usuario {{userId}}" })
+ *   async createOrder(dto: CreateOrderDto) {
+ *     // Log automatico: "Creando orden para usuario usr_456"
  *     return this.repo.save(dto);
  *   }
  * }
  *
  * @example
- * // Log completo con entrada, salida y errores
- * class PaymentService {
- *   @Log({
+ * // Log completo con entrada, duracion y errores
+ * class PaymentGateway {
+ *   \@Log({
  *     level: "info",
  *     message: "Procesando pago {{paymentId}}",
  *     logInput: true,
  *     logOutput: true,
  *     logError: true
  *   })
- *   async processPayment(paymentId: string) {
- *     // Log entrada: "Procesando pago pay_123" + { input: { paymentId: "pay_123" } }
- *     // Log salida: "Procesando pago pay_123 - completado" + { durationMs: 245, output: ... }
- *     // Log error: "Procesando pago pay_123 - fallido" + { error: { message: "...", stack: "..." } }
+ *   async charge(paymentId: string) {
+ *     // Log entrada: "Procesando pago pay_123" + contexto con argumentos
+ *     // Log salida: "Procesando pago pay_123 - completado" + duracion en ms
+ *     // Log error: "Procesando pago pay_123 - fallido" + stack trace
  *   }
  * }
  */
@@ -115,7 +114,7 @@ export function Log(options: LogOptions) {
       (this: This, ...args: Args) => Return
     >,
   ) {
-    // Validamos que el decorador se aplique solo a métodos de clase
+    // Solo tiene sentido en metodos, no en clases ni propiedades
     if (context.kind !== "method") {
       throw new Error("@Log solo puede ser aplicado a métodos de clase");
     }
@@ -129,7 +128,7 @@ export function Log(options: LogOptions) {
     return function (this: This, ...args: Args): Return {
       let logger: LoggerContract;
 
-      // Resolvemos el logger del contenedor DI
+      // Resolucion lazy del logger desde DI: si no hay logger, el metodo corre igual
       try {
         logger = container.resolve<LoggerContract>(LOGGER_TOKEN);
       } catch {
@@ -138,21 +137,20 @@ export function Log(options: LogOptions) {
 
       const start = performance.now();
 
-      // Interpolamos los placeholders {{paramName}} con los valores reales
+      // Reemplazamos los placeholders {{paramName}} con los valores reales de los argumentos
       const interpolatedMessage = interpolateMessage(
         message,
         args,
         paramNames,
       );
 
-      // Construimos el contexto base con clase, método y contexto estático
       const baseContext: Record<string, any> = {
         class: className,
         method: methodName,
         ...staticContext,
       };
 
-      // Capturamos los argumentos de entrada si el usuario lo pide
+      // Si el usuario quiere ver los argumentos en el log de entrada, los capturamos
       if (logInput) {
         const inputKeys =
           logInput === true ? paramNames : logInput;
@@ -172,16 +170,16 @@ export function Log(options: LogOptions) {
         baseContext.input = inputContext;
       }
 
-      // Log de entrada
+      // Log de entrada: registramos que el metodo comenzo a ejecutarse
       logAtLevel(logger, level, interpolatedMessage, baseContext);
 
       try {
         const result = target.apply(this, args);
 
-        // Manejamos el resultado (síncrono o asíncrono)
         const handleResult = (res: Return): Return => {
           const duration = performance.now() - start;
 
+          // Log de salida exitosa con duracion y resultado (si el usuario lo pidio)
           if (logOutput) {
             let outputValue: any;
             try {
@@ -209,6 +207,7 @@ export function Log(options: LogOptions) {
         };
 
         const handleError = (err: Error): never => {
+          // Log de error con stack trace (recortado a las primeras 3 lineas para no saturar)
           if (logError) {
             logger.error(`${interpolatedMessage} - fallido`, {
               ...baseContext,
@@ -250,19 +249,23 @@ export function Log(options: LogOptions) {
 }
 
 /**
- * @description Interpola placeholders {{paramName}} en un mensaje de log
- * reemplazándolos con los valores reales de los argumentos del método.
+ * @description Reemplaza los placeholders {{paramName}} en una plantilla de log
+ * con los valores reales de los argumentos del metodo.
  *
- * @param template Plantilla del mensaje con placeholders (ej: "Creando orden para {{userId}}")
- * @param args Argumentos del método en orden
- * @param paramNames Nombres de los parámetros (del metadata de clase)
- * @returns Mensaje con los placeholders reemplazados por valores reales
+ * Busca en paramNames el indice del parametro y usa el valor correspondiente de args.
+ * Si el valor es un objeto, lo serializa a JSON truncado a 200 caracteres.
+ * Si no encuentra el parametro, deja el placeholder tal cual.
+ *
+ * @param template Plantilla con placeholders (ej: "Procesando orden {{orderId}}")
+ * @param args Argumentos del metodo en orden
+ * @param paramNames Nombres de los parametros (del metadata de la clase)
+ * @returns La plantilla con los placeholders reemplazados por valores reales
  *
  * @example
  * interpolateMessage(
  *   "Creando orden para {{userId}}",
- *   ["usr_456", { items: [...] }],
- *   ["userId", "orderDto"]
+ *   ["usr_456"],
+ *   ["userId"]
  * )
  * // => "Creando orden para usr_456"
  */

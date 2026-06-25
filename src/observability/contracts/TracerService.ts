@@ -110,7 +110,7 @@ export interface SpanOptions {
  * y gestión del ciclo de vida del SDK de OpenTelemetry.
  *
  * Se implementa en OtelTracerService usando @opentelemetry/sdk-node.
- * El usuario puede inyectarlo con @Inject(TRACER_SERVICE_TOKEN) o usar el decorador @Trace.
+ * El usuario puede inyectarlo con \@Inject(TRACER_SERVICE_TOKEN) o usar el decorador \@Trace.
  *
  * @example
  * class OrderService {

@@ -4,7 +4,7 @@
  *
  * @example
  * class ReportService {
- *   constructor(@Inject(METRICS_SERVICE_TOKEN) private metrics: MetricsService) {}
+ *   constructor(\@Inject(METRICS_SERVICE_TOKEN) private metrics: MetricsService) {}
  *   async generateReport() {
  *     this.metrics.increment("reports_generated_total", { type: "monthly" });
  *   }
@@ -30,7 +30,7 @@ export const METRICS_SERVICE_TOKEN = Symbol.for("METRICS_SERVICE_TOKEN");
  *
  * @example
  * class OrderService {
- *   constructor(@Inject(METRICS_SERVICE_TOKEN) private metrics: MetricsService) {}
+ *   constructor(\@Inject(METRICS_SERVICE_TOKEN) private metrics: MetricsService) {}
  *
  *   async createOrder(order: OrderDto) {
  *     const start = performance.now();
