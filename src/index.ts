@@ -150,6 +150,37 @@ export {
 } from "./database/context/transactionContext.js";
 
 // ----------------------------------------------
+// OpenAPI 3.1 Decorators & Docs (Scalar UI)
+// ----------------------------------------------
+export {
+  ApiTags,
+  ApiOperation,
+  ApiResponseDoc,
+  ApiBearerAuth,
+  ApiSecurity,
+  ApiParam,
+  ApiQuery,
+  ApiHeader,
+  ApiProperty,
+  OPENAPI_PROPERTY_METADATA,
+  ApiSchema,
+  ApiExample,
+  OPENAPI_EXAMPLES_METADATA,
+  ApiExcludeEndpoint,
+  ApiExcludeController,
+  ApiServer,
+} from "./http/decorators/openapi/index.js";
+export type {
+  ApiPropertyOptions,
+  ApiSchemaOptions,
+  ApiOperationOptions,
+  ApiResponseOptions,
+  ApiParamOptions,
+  ApiQueryOptions,
+  ApiHeaderOptions,
+} from "./http/decorators/types.js";
+
+// ----------------------------------------------
 // Observability & Logging
 // ----------------------------------------------
 export { Benchmark } from "./logger/benchmark.decorator.js";

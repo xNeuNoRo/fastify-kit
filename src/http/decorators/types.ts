@@ -118,6 +118,165 @@ export interface RateLimitOptions {
 /**
  * @description Interfaz que define la metadata compartida por todos los decoradores en FastifyKit. Esta metadata incluye información sobre los guardias a nivel de clase y de ruta, así como cualquier otra información común que pueda ser utilizada por diferentes tipos de decoradores (controladores, módulos, etc.). Esta interfaz se extiende en FastifyKitMetadata para incluir información específica de controladores, rutas, módulos, etc.
  */
+/**
+ * @description Tipos para la integración de OpenAPI en los decoradores de FastifyKit.
+ * Estos tipos siguen la especificación OpenAPI 3.1 y se utilizan para definir
+ * tags, operaciones, respuestas, seguridad, parámetros y propiedades de esquemas.
+ */
+
+/**
+ * @description Opciones para el decorador \@ApiProperty, que documenta una propiedad de un DTO/Modelo.
+ */
+export interface ApiPropertyOptions {
+  /** Ejemplo del valor para documentación. Se muestra en el modal de esquemas de Scalar. */
+  example?: unknown;
+  /** Descripción legible de la propiedad. */
+  description?: string;
+  /** Formato adicional (ej: "date-time", "email", "uuid", "uri", "int64"). */
+  format?: string;
+  /** Longitud mínima para strings. */
+  minLength?: number;
+  /** Longitud máxima para strings. */
+  maxLength?: number;
+  /** Valor mínimo para números. */
+  minimum?: number;
+  /** Valor máximo para números. */
+  maximum?: number;
+  /** Valores permitidos (enum). */
+  enum?: unknown[];
+  /** Valor por defecto. */
+  default?: unknown;
+  /** Si la propiedad es de solo lectura (no se envía en POST/PUT). */
+  readOnly?: boolean;
+  /** Si la propiedad es de solo escritura (no se devuelve en GET). */
+  writeOnly?: boolean;
+  /** Si la propiedad puede ser null. */
+  nullable?: boolean;
+  /** Si la propiedad está deprecada. */
+  deprecated?: boolean;
+  /** Título para documentación. */
+  title?: string;
+}
+
+/**
+ * @description Opciones para el decorador \@ApiSchema, que registra un DTO/Modelo como esquema reutilizable en OpenAPI.
+ */
+export interface ApiSchemaOptions {
+  /** Nombre único del esquema en components/schemas (ej: "User", "CreateUserDto"). */
+  name: string;
+  /** Descripción del esquema. */
+  description?: string;
+  /** Si el esquema está deprecado. */
+  deprecated?: boolean;
+  /** Referencia a constructores para composición oneOf (unión discriminada). */
+  oneOf?: Constructor[];
+  /** Referencia a constructores para composición anyOf. */
+  anyOf?: Constructor[];
+  /** Referencia a constructores para composición allOf (herencia). */
+  allOf?: Constructor[];
+  /** Configuración del discriminador para oneOf/anyOf. */
+  discriminator?: {
+    propertyName: string;
+    mapping?: Record<string, string>;
+  };
+}
+
+/**
+ * @description Opciones para el decorador \@ApiOperation, que documenta un endpoint completo.
+ */
+export interface ApiOperationOptions {
+  /** Resumen corto de la operación (aparece en la lista de endpoints). */
+  summary?: string;
+  /** Descripción larga de la operación (soporta Markdown). */
+  description?: string;
+  /** Si el endpoint está deprecado. */
+  deprecated?: boolean;
+  /** Documentación externa asociada. */
+  externalDocs?: {
+    description?: string;
+    url: string;
+  };
+  /** ID único para la operación (por defecto: ControllerName_methodName). */
+  operationId?: string;
+}
+
+/**
+ * @description Opciones para el decorador \@ApiResponse, que documenta una posible respuesta HTTP de un endpoint.
+ */
+export interface ApiResponseOptions {
+  /** Código HTTP de la respuesta (200, 201, 400, 401, 404, 500, etc.). */
+  status: number;
+  /** Descripción de la respuesta. */
+  description: string;
+  /** Clase DTO que define el esquema del cuerpo de la respuesta. */
+  type?: Constructor;
+  /** Tipo MIME de la respuesta. */
+  contentType?: string;
+  /** Headers que se devuelven en la respuesta. */
+  headers?: Record<string, {
+    description?: string;
+    schema?: Record<string, unknown>;
+  }>;
+  /** Links HATEOAS asociados a la respuesta. */
+  links?: Record<string, {
+    operationId?: string;
+    description?: string;
+    parameters?: Record<string, string>;
+  }>;
+}
+
+/**
+ * @description Opciones para el decorador \@ApiParam, que documenta un parámetro de ruta (path parameter).
+ */
+export interface ApiParamOptions {
+  /** Nombre del parámetro (debe coincidir con :name en la ruta). */
+  name: string;
+  /** Descripción del parámetro. */
+  description?: string;
+  /** Ejemplo del valor. */
+  example?: unknown;
+  /** Si el parámetro es requerido (default: true para path params). */
+  required?: boolean;
+  /** Si el parámetro está deprecado. */
+  deprecated?: boolean;
+}
+
+/**
+ * @description Opciones para el decorador \@ApiQuery, que documenta un query parameter.
+ */
+export interface ApiQueryOptions {
+  /** Nombre del query parameter. */
+  name: string;
+  /** Descripción del parámetro. */
+  description?: string;
+  /** Ejemplo del valor. */
+  example?: unknown;
+  /** Si el parámetro es requerido. */
+  required?: boolean;
+  /** Si el parámetro está deprecado. */
+  deprecated?: boolean;
+  /** Estilo de serialización (para arrays/objetos): "form", "spaceDelimited", "pipeDelimited", "deepObject". */
+  style?: "form" | "spaceDelimited" | "pipeDelimited" | "deepObject";
+  /** Si se debe usar explode para arrays/objetos. */
+  explode?: boolean;
+}
+
+/**
+ * @description Opciones para el decorador \@ApiHeader, que documenta un header de la request.
+ */
+export interface ApiHeaderOptions {
+  /** Nombre del header. */
+  name: string;
+  /** Descripción del header. */
+  description?: string;
+  /** Ejemplo del valor. */
+  example?: unknown;
+  /** Si el header es requerido. */
+  required?: boolean;
+  /** Si el header está deprecado. */
+  deprecated?: boolean;
+}
+
 export type FastifyKitMetadata = DecoratorMetadata & {
   injections?: {
     propertyName: string | symbol;
@@ -143,4 +302,28 @@ export type FastifyKitMetadata = DecoratorMetadata & {
   cqrsHandler?: boolean; // Indicador de que esta clase es un handler CQRS (Command, Query o Event Handler)
   scope?: ScopeType; // Ciclo de vida de la clase en el contenedor DI
   postConstructMethod?: string | symbol; // Nombre del método a ejecutar después de la inyección de dependencias
+
+  // OpenAPI 3.1 Metadata
+  /** Tags OpenAPI a nivel de clase (controlador). Se agrupan bajo estos tags en Scalar. */
+  openApiTags?: string[];
+  /** Configuración de seguridad a nivel de clase. */
+  openApiClassSecurity?: { name: string; scopes?: string[] }[];
+  /** Servidores alternativos a nivel de clase. */
+  openApiClassServers?: { url: string; description?: string }[];
+  /** Si el controlador completo debe excluirse de la documentación OpenAPI. */
+  openApiExcludeController?: boolean;
+  /** Operaciones OpenAPI a nivel de método (summary, description, deprecated, externalDocs, operationId). */
+  openApiOperation?: Record<string | symbol, ApiOperationOptions>;
+  /** Respuestas OpenAPI a nivel de método, mapeadas por nombre de método y código HTTP. */
+  openApiResponseMetas?: Record<string | symbol, Record<number, ApiResponseOptions>>;
+  /** Seguridad a nivel de método. */
+  openApiMethodSecurity?: Record<string | symbol, { name: string; scopes?: string[] }[]>;
+  /** Parámetros OpenAPI a nivel de método (path, query, header). */
+  openApiParameters?: Record<string | symbol, { in: "path" | "query" | "header"; name: string; description?: string; example?: unknown; required?: boolean; deprecated?: boolean; style?: string; explode?: boolean }[]>;
+  /** Si el endpoint debe excluirse de la documentación OpenAPI. */
+  openApiExcludeEndpoint?: Record<string | symbol, boolean>;
+  /** Propiedades del esquema del DTO (para clases decoradas con @ApiSchema). */
+  openApiProperties?: Record<string, ApiPropertyOptions>;
+  /** Opciones de @ApiSchema para registro en el OpenApiRegistry. */
+  openApiSchema?: ApiSchemaOptions;
 };

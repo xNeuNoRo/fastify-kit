@@ -96,6 +96,11 @@ export async function registerControllers(
       metadataSymbol
     ] as FastifyKitMetadata;
 
+    // Si el controlador esta marcado como excluido de OpenAPI, lo saltamos
+    if (metadata?.openApiExcludeController) {
+      continue;
+    }
+
     // Si no se encuentran rutas en el contexto de este controlador
     // Registramos una advertencia en los logs indicando que no se
     // encontraron rutas para este controlador
@@ -135,6 +140,11 @@ export async function registerControllers(
 
     // Iteramos sobre cada ruta definida en el controlador y la registramos en Fastify
     for (const route of routes) {
+      // Si el endpoint esta marcado como excluido de OpenAPI, lo saltamos
+      if (metadata?.openApiExcludeEndpoint?.[route.handlerName]) {
+        continue;
+      }
+
       // Obtenemos la metadata de los parámetros decorados para el método del controlador correspondiente a esta ruta.
       // Ordenamos los parámetros decorados por su índice para asegurarnos de que se pasen en el
       // orden correcto al método del controlador.
@@ -184,19 +194,83 @@ export async function registerControllers(
       // Obtenemos el esquema de respuesta para esta ruta desde el metadata
       const methodResponses = metadata.responsesSchema?.[route.handlerName];
 
+      // Construimos la metadata OpenAPI para esta ruta
+      const openApiEnhancement: Record<string, any> = {};
+
+      // Tags a nivel de clase
+      if (metadata.openApiTags?.length) {
+        openApiEnhancement.tags = metadata.openApiTags;
+      }
+
+      // Operacion a nivel de metodo
+      const operationMeta =
+        metadata.openApiOperation?.[route.handlerName];
+      if (operationMeta) {
+        if (operationMeta.summary) {
+          openApiEnhancement.summary = operationMeta.summary;
+        }
+        if (operationMeta.description) {
+          openApiEnhancement.description = operationMeta.description;
+        }
+        if (operationMeta.operationId) {
+          openApiEnhancement.operationId = operationMeta.operationId;
+        }
+        if (operationMeta.externalDocs) {
+          openApiEnhancement.externalDocs = operationMeta.externalDocs;
+        }
+        if (operationMeta.deprecated !== undefined) {
+          openApiEnhancement.deprecated = operationMeta.deprecated;
+        }
+      }
+
+      // Seguridad combinada: clase + metodo
+      const classSecurity = metadata.openApiClassSecurity || [];
+      const methodSecurity =
+        metadata.openApiMethodSecurity?.[route.handlerName] || [];
+      const allSecurity = [...classSecurity, ...methodSecurity];
+      if (allSecurity.length) {
+        openApiEnhancement.security = allSecurity.map((s) => ({
+          [s.name]: s.scopes?.length ? s.scopes : [],
+        }));
+      }
+
+      // Parametros OpenAPI (path, query, header)
+      const openApiParams =
+        metadata.openApiParameters?.[route.handlerName] || [];
+      if (openApiParams.length) {
+        openApiEnhancement.openapiParams = openApiParams;
+      }
+
+      // Construimos el schema de ruta base
+      let routeSchema: any = route.schema;
+      let enhanced = false;
+
+      // Mergeamos respuestas
+      if (methodResponses) {
+        routeSchema = {
+          ...(routeSchema || {}),
+          response: {
+            ...((route.schema?.response as any) || {}),
+            ...methodResponses,
+          },
+        };
+        enhanced = true;
+      }
+
+      // Mergeamos metadata OpenAPI en el schema
+      if (Object.keys(openApiEnhancement).length > 0) {
+        routeSchema = { ...(routeSchema || {}), ...openApiEnhancement };
+        enhanced = true;
+      }
+
+      // Solo pasamos schema si tiene contenido
+      const hasSchema = enhanced || (routeSchema && Object.keys(routeSchema).length > 0);
+
       // Registramos la ruta en Fastify utilizando el método HTTP especificado en el decorador de la ruta (route.method), la ruta completa construida con el prefijo y la ruta, el esquema de validación (si se proporcionó) y el preHandler para validar los guards antes de ejecutar el controlador.
       app[route.method](
         fullPath,
         {
-          schema: methodResponses
-            ? {
-                ...(route.schema || {}),
-                response: {
-                  ...((route.schema?.response as any) || {}),
-                  ...methodResponses,
-                },
-              }
-            : route.schema,
+          schema: hasSchema ? routeSchema : undefined,
           // Solo lo inyectamos si hay guards para evitar overhead
           preHandler: buildGuardHandler(allGuards),
           // Solo lo inyectamos si hay configuración de rate limit para evitar overhead
