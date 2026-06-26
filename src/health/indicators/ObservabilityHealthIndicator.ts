@@ -47,7 +47,7 @@ export class ObservabilityHealthIndicator extends HealthIndicator {
         try {
           const endpoint = this.metrics.getMetricsEndpoint();
           return endpoint
-            ? { status: "up", details: { disponible: true } }
+            ? { status: "up", details: { available: true } }
             : { status: "down", details: { error: "sin datos de métricas" } };
         } catch (err) {
           return { status: "down", details: { error: (err as Error).message } };
@@ -57,7 +57,7 @@ export class ObservabilityHealthIndicator extends HealthIndicator {
       tracer: async () => {
         try {
           return this.tracer.isEnabled()
-            ? { status: "up", details: { inicializado: true } }
+            ? { status: "up", details: { initialized: true } }
             : { status: "down", details: { error: "tracer desactivado" } };
         } catch (err) {
           return { status: "down", details: { error: (err as Error).message } };
