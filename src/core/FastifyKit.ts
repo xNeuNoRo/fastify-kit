@@ -23,6 +23,8 @@ import { CorePluginsStep } from "./bootstrap/steps/CorePluginsStep.js";
 import { LifecycleAndRoutesStep } from "./bootstrap/steps/LifecycleAndRoutesStep.js";
 import { BootstrapHooksStep } from "./bootstrap/steps/BootstrapHooksStep.js";
 import { GracefulShutdownStep } from "./bootstrap/steps/GracefulShutdownStep.js";
+import { ObservabilityBootstrapStep } from "../observability/bootstrap/ObservabilityBootstrapStep.js";
+import { ObservabilityInstrumentationStep } from "../observability/bootstrap/ObservabilityInstrumentationStep.js";
 import type { Constructor } from "../http/routing/scanner/index.js";
 
 export { FASTIFY_KIT_METADATA_SYMBOL } from "./constants/symbols.js";
@@ -37,6 +39,135 @@ export const defaultHelmetConfig = {
     },
   },
 };
+
+/**
+ * @description Configuración de un esquema de seguridad en OpenAPI.
+ */
+export interface OpenApiSecurityScheme {
+  type: "http" | "apiKey" | "oauth2" | "openIdConnect";
+  description?: string;
+  /** Para type: "http" */
+  scheme?: string;
+  bearerFormat?: string;
+  /** Para type: "apiKey" */
+  in?: "query" | "header" | "cookie";
+  name?: string;
+  /** Para type: "oauth2" */
+  flows?: {
+    implicit?: {
+      authorizationUrl: string;
+      scopes: Record<string, string>;
+    };
+    password?: {
+      tokenUrl: string;
+      scopes: Record<string, string>;
+    };
+    clientCredentials?: {
+      tokenUrl: string;
+      scopes: Record<string, string>;
+    };
+    authorizationCode?: {
+      authorizationUrl: string;
+      tokenUrl: string;
+      scopes: Record<string, string>;
+    };
+  };
+  /** Para type: "openIdConnect" */
+  openIdConnectUrl?: string;
+}
+
+/**
+ * @description Configuración de la UI de Scalar (Fastify API Reference).
+ */
+export interface ScalarConfig {
+  /** Tema visual de Scalar. */
+  theme?:
+    | "default"
+    | "purple"
+    | "blue"
+    | "green"
+    | "deepSpace"
+    | "saturn"
+    | "kepler"
+    | "mars"
+    | "none";
+  /** Layout de la UI: "modern" (sidebar) o "classic" (tres columnas). */
+  layout?: "modern" | "classic";
+  /** Oculta el botón de descarga de spec. */
+  hideDownloadButton?: boolean;
+  /** Oculta los modelos/schemas al final de cada endpoint. */
+  hideModels?: boolean;
+  /** Oculta el botón de generación de cliente. */
+  hideClientButton?: boolean;
+  /** Favicon personalizado. */
+  favicon?: string;
+  /** CSS personalizado inyectado en la UI. */
+  customCss?: string;
+  /** JavaScript personalizado inyectado en la UI. */
+  customJs?: string;
+  /** Cliente HTTP por defecto para ejemplos de código. */
+  defaultHttpClient?: "fetch" | "axios" | "node" | "curl";
+  /** Configuración de autenticación en Scalar. */
+  authentication?: {
+    /** Security scheme preferido para el botón "Authorize". */
+    preferredSecurityScheme?: string;
+  };
+  /** Atajo de teclado para abrir la búsqueda. */
+  searchHotKey?: string;
+  /** Servidores mostrados en Scalar (override de los de OpenAPI). */
+  servers?: { url: string; description?: string }[];
+  /** Metadata adicional para Scalar. */
+  metaData?: Record<string, string>;
+}
+
+/**
+ * @description Configuración completa de Swagger/OpenAPI 3.1 + Scalar UI.
+ */
+export interface SwaggerOptions {
+  /** Título de la API. */
+  title: string;
+  /** Descripción de la API (soporta Markdown). */
+  description: string;
+  /** Versión de la API. */
+  version: string;
+  /** Términos de servicio URL. */
+  termsOfService?: string;
+  /** Información de contacto. */
+  contact?: { name?: string; url?: string; email?: string };
+  /** Licencia. */
+  license?: { name: string; url?: string };
+  /** Documentación externa. */
+  externalDocs?: { description?: string; url: string };
+  /** Esquemas de seguridad (bearerAuth, apiKeyAuth, oauth2, openIdConnect). */
+  securitySchemes?: Record<string, OpenApiSecurityScheme>;
+  /** Requisitos de seguridad globales aplicados a todos los endpoints. */
+  security?: Record<string, string[]>[];
+  /** Servidores (URLs) de la API para desarrollo/producción. */
+  servers?: {
+    url: string;
+    description?: string;
+    variables?: Record<
+      string,
+      { default: string; description?: string; enum?: string[] }
+    >;
+  }[];
+  /** Tags globales con descripciones para agrupar endpoints en Scalar. */
+  tags?: {
+    name: string;
+    description?: string;
+    externalDocs?: { description?: string; url: string };
+  }[];
+  /** Configuración de la UI de Scalar. */
+  scalar?: ScalarConfig;
+  /** Estrategia de versionado para la API. */
+  versioning?: {
+    type: "path" | "header" | "servers";
+    headerName?: string;
+    defaultVersion?: string;
+    /** Versiones de la API a documentar en OpenAPI. Cada una genera un server. */
+    versions?: { version: string; description?: string }[];
+  };
+}
 
 export interface FastifyKitOptions {
   /**
@@ -59,13 +190,10 @@ export interface FastifyKitOptions {
   globalPrefix?: string;
   /**
    * Configuración para generar la documentación de la API utilizando Swagger/Scalar.
+   * Incluye especificación OpenAPI 3.1, security schemes, UI de Scalar personalizable,
+   * servers, tags globales y estrategia de versionado.
    */
-  swagger?: {
-    title: string;
-    description: string;
-    version: string;
-    [key: string]: any;
-  };
+  swagger?: SwaggerOptions;
   /**
    * Opciones para configurar los plugins de seguridad en Fastify,
    * incluyendo CORS, Helmet y rate limit.
@@ -166,10 +294,12 @@ export class FastifyKit {
     options: FastifyKitOptions,
   ): Promise<FastifyInstance<any, any, any, any, TypeBoxTypeProvider>> {
     return new BootstrapPipeline(options)
+      .add(new ObservabilityBootstrapStep())
       .add(new PreFlightStep())
       .add(new FastifyInstanceStep())
       .add(new ModuleDiscoveryStep())
       .add(new CorePluginsStep())
+      .add(new ObservabilityInstrumentationStep())
       .add(new LifecycleAndRoutesStep())
       .add(new BootstrapHooksStep())
       .add(new GracefulShutdownStep())

@@ -9,11 +9,6 @@ import { Controller } from "../../../src/http/decorators/controller.js";
 import { Get } from "../../../src/http/decorators/methods.js";
 import { LOGGER_TOKEN } from "../../../src/logger/LoggerContract.js";
 
-// Aseguramos que el símbolo para metadata esté definido
-if (!(Symbol as any).metadata) {
-  (Symbol as any).metadata = Symbol.for("Symbol.metadata");
-}
-
 // Logger falso para inyectar en el módulo de prueba
 class MockLogger {
   info() {

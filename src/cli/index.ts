@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { registerPrismaCommands } from "./commands/prisma/index.js";
+import { registerGenerateCommands } from "./commands/generate/index.js";
 import { createRequire } from "node:module";
 
 // Instanciamos "require" para poder leer archivos JSON de forma síncrona y segura en ESM
@@ -18,6 +19,9 @@ program
 
 // Registramos los comandos relacionados con Prisma
 registerPrismaCommands(program);
+
+// Registramos los comandos de generación (openapi, etc.)
+registerGenerateCommands(program);
 
 // Este método es el que atrapa los argumentos de la terminal (process.argv)
 // y ejecuta la lógica correspondiente.

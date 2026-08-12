@@ -3,7 +3,13 @@ import { fastifyKitRequestContext } from "../../http/plugins/requestContext.js";
 import { fastifyKitErrorHandler } from "../../http/plugins/errorHandler.js";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import type { FastifyJWTOptions } from "@fastify/jwt";
-import { defaultHelmetConfig, FastifyKitOptions } from "../FastifyKit.js";
+import {
+  defaultHelmetConfig,
+  FastifyKitOptions,
+  type OpenApiSecurityScheme,
+  type ScalarConfig,
+} from "../FastifyKit.js";
+import { openApiRegistry } from "../../openapi/OpenApiRegistry.js";
 
 /**
  * @description Método privado para registrar los plugins esenciales en la instancia de Fastify, incluyendo multipart para manejo de archivos, cookies para manejo de cookies, websockets para manejo de gateways de WebSocket, plugins personalizados para manejo de contexto de solicitud y manejo de errores, plugins de seguridad (CORS, Helmet, rate limit) según las opciones proporcionadas por el usuario, y el plugin de documentación (Swagger/Scalar) si se ha configurado la opción de Swagger.
@@ -150,19 +156,98 @@ export async function registerDocumentationPlugin(
 ) {
   // Si el usuario activa Swagger/Scalar, registramos el plugin de Scalar para generar una documentación interactiva y visualmente atractiva de la API en la ruta /docs
   if (options.swagger) {
+    // Recolectamos los schemas registrados via @ApiSchema y @ApiProperty
+    const componentsSchemas = openApiRegistry.getComponentsSchemas();
+
+    // Auto-detectar security schemes si no se definieron explicitamente
+    const securitySchemes: Record<string, OpenApiSecurityScheme> = {
+      ...(options.swagger.securitySchemes || {}),
+    };
+
+    // Si el usuario activo JWT y no definio bearerAuth, lo registramos automaticamente
+    if (options.jwt && !securitySchemes.bearerAuth) {
+      securitySchemes.bearerAuth = {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "JWT",
+        description: "Token JWT obtenido del endpoint de autenticacion",
+      };
+    }
+
+    // Generamos servers basados en versioning si esta configurado y no hay servers explicitos
+    let servers = options.swagger.servers || [];
+    if (
+      !servers.length &&
+      options.swagger.versioning?.type === "path" &&
+      options.swagger.versioning?.versions?.length
+    ) {
+      servers = options.swagger.versioning.versions.map((v) => ({
+        url: `/v${v.version}`,
+        description: v.description || `API v${v.version}`,
+      }));
+    }
+
     await app.register(import("@fastify/swagger"), {
       openapi: {
-        openapi: "3.0.0",
+        openapi: "3.1.0",
         info: options.swagger,
+        components: {
+          ...(Object.keys(securitySchemes).length
+            ? { securitySchemes }
+            : {}),
+          ...(Object.keys(componentsSchemas).length
+            ? { schemas: componentsSchemas }
+            : {}),
+        } as Record<string, unknown>,
+        ...(options.swagger.security
+          ? { security: options.swagger.security }
+          : {}),
+        ...(servers.length ? { servers } : {}),
+        ...(options.swagger.tags ? { tags: options.swagger.tags } : {}),
+        ...(options.swagger.externalDocs
+          ? { externalDocs: options.swagger.externalDocs }
+          : {}),
       },
     });
+    // Configuramos Scalar con las opciones del usuario (solo las definidas)
+    const scalarConfig: Record<string, unknown> = {
+      theme: options.swagger.scalar?.theme ?? "purple",
+      layout: options.swagger.scalar?.layout ?? "modern",
+      hideDownloadButton: options.swagger.scalar?.hideDownloadButton ?? false,
+      hideModels: options.swagger.scalar?.hideModels ?? false,
+      hideClientButton: options.swagger.scalar?.hideClientButton ?? false,
+      metaData: {
+        title: options.swagger.title,
+        ...(options.swagger.scalar?.metaData || {}),
+      },
+    };
+
+    // Solo agregamos propiedades opcionales si estan definidas
+    if (options.swagger.scalar?.favicon) {
+      scalarConfig.favicon = options.swagger.scalar.favicon;
+    }
+    if (options.swagger.scalar?.customCss) {
+      scalarConfig.customCss = options.swagger.scalar.customCss;
+    }
+    if (options.swagger.scalar?.customJs) {
+      scalarConfig.customJs = options.swagger.scalar.customJs;
+    }
+    if (options.swagger.scalar?.defaultHttpClient) {
+      scalarConfig.defaultHttpClient = options.swagger.scalar.defaultHttpClient;
+    }
+    if (options.swagger.scalar?.authentication) {
+      scalarConfig.authentication = options.swagger.scalar.authentication;
+    }
+    if (options.swagger.scalar?.searchHotKey) {
+      scalarConfig.searchHotKey = options.swagger.scalar.searchHotKey;
+    }
+    if (options.swagger.scalar?.servers?.length) {
+      scalarConfig.servers = options.swagger.scalar.servers;
+    }
+
     await app.register(import("@scalar/fastify-api-reference"), {
       routePrefix: "/docs",
-      configuration: {
-        theme: "purple",
-        layout: "modern",
-        metaData: { title: options.swagger.title },
-      },
+      configuration: scalarConfig,
     });
   }
 }

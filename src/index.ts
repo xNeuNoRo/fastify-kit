@@ -150,6 +150,46 @@ export {
 } from "./database/context/transactionContext.js";
 
 // ----------------------------------------------
+// OpenAPI 3.1 Decorators & Docs (Scalar UI)
+// ----------------------------------------------
+export {
+  ApiTags,
+  ApiOperation,
+  ApiResponseDoc,
+  ApiBearerAuth,
+  ApiSecurity,
+  ApiParam,
+  ApiQuery,
+  ApiHeader,
+  ApiProperty,
+  OPENAPI_PROPERTY_METADATA,
+  ApiSchema,
+  ApiExample,
+  OPENAPI_EXAMPLES_METADATA,
+  ApiExcludeEndpoint,
+  ApiExcludeController,
+  ApiServer,
+} from "./http/decorators/openapi/index.js";
+export type {
+  ApiPropertyOptions,
+  ApiSchemaOptions,
+  ApiOperationOptions,
+  ApiResponseOptions,
+  ApiParamOptions,
+  ApiQueryOptions,
+  ApiHeaderOptions,
+} from "./http/decorators/types.js";
+
+// OpenAPI Schema Registry
+export { OpenApiRegistry, openApiRegistry } from "./openapi/index.js";
+export type { OpenApiSchemaObject } from "./openapi/index.js";
+export type {
+  SwaggerOptions,
+  ScalarConfig,
+  OpenApiSecurityScheme,
+} from "./core/FastifyKit.js";
+
+// ----------------------------------------------
 // Observability & Logging
 // ----------------------------------------------
 export { Benchmark } from "./logger/benchmark.decorator.js";
@@ -159,6 +199,50 @@ export {
   DefaultConsoleLogger,
 } from "./logger/LoggerContract.js";
 export { getLogger } from "./logger/logger.factory.js";
+
+// Observabilidad Nativa (OpenTelemetry, Prometheus, Pino)
+export {
+  METRICS_SERVICE_TOKEN,
+  type MetricsService,
+} from "./observability/contracts/MetricsService.js";
+export {
+  TRACER_SERVICE_TOKEN,
+  type TracerService,
+  type Span,
+  type SpanContext,
+  type SpanOptions,
+  SpanKind,
+  SpanStatusCode,
+} from "./observability/contracts/TracerService.js";
+export {
+  OBSERVABILITY_CONFIG_KEY,
+  ObservabilityConfigSchema,
+  type ObservabilityConfig,
+  getDefaultObservabilityConfig,
+} from "./observability/contracts/ObservabilityConfig.js";
+export { PromMetricsService } from "./observability/implementations/PromMetricsService.js";
+export { OtelTracerService } from "./observability/implementations/OtelTracerService.js";
+export { PinoLoggerService } from "./observability/implementations/PinoLoggerService.js";
+export {
+  Trace,
+  type TraceOptions,
+} from "./observability/decorators/Trace.js";
+export {
+  Metrics,
+  validateMetricLabels,
+  type MetricsOptions,
+} from "./observability/decorators/Metrics.js";
+export {
+  Log,
+  type LogOptions,
+} from "./observability/decorators/Log.js";
+export {
+  injectTraceContext,
+  extractTraceContext,
+  injectBaggage,
+  parseBaggageHeader,
+} from "./observability/propagation/context-propagation.js";
+export * from "./observability/utils/semantic-conventions.js";
 
 // ----------------------------------------------
 // Resilience & Fault Tolerance
@@ -375,6 +459,7 @@ export { PingHealthIndicator } from "./health/indicators/PingHealthIndicator.js"
 export { DiskSpaceHealthIndicator } from "./health/indicators/DiskSpaceHealthIndicator.js";
 export { EventLoopHealthIndicator } from "./health/indicators/EventLoopHealthIndicator.js";
 export { WebRtcHealthIndicator } from "./health/indicators/WebRtcHealthIndicator.js";
+export { ObservabilityHealthIndicator } from "./health/indicators/ObservabilityHealthIndicator.js";
 
 // Tipos
 export type {

@@ -7,6 +7,36 @@ import { ScopeType, container } from "../container/DIContainer.js";
 import { CONFIG_SERVICE_TOKEN, type ConfigService } from "./ConfigService.js";
 import { INTERNAL_CONFIG_SERVICE_TOKEN } from "./InternalConfigService.js";
 import { DefaultConfigService } from "./DefaultConfigService.js";
+import type { ObservabilityConfig } from "../observability/contracts/ObservabilityConfig.js";
+import {
+  OBSERVABILITY_CONFIG_KEY,
+  getDefaultObservabilityConfig,
+} from "../observability/contracts/ObservabilityConfig.js";
+
+function deepMerge(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): Record<string, unknown> {
+  const output = { ...target };
+  for (const key of Object.keys(source)) {
+    if (
+      source[key] &&
+      typeof source[key] === "object" &&
+      !Array.isArray(source[key]) &&
+      target[key] &&
+      typeof target[key] === "object" &&
+      !Array.isArray(target[key])
+    ) {
+      output[key] = deepMerge(
+        target[key] as Record<string, unknown>,
+        source[key] as Record<string, unknown>,
+      );
+    } else {
+      output[key] = source[key];
+    }
+  }
+  return output;
+}
 
 /**
  * @description Opciones de configuración para ConfigModule.forRoot().
@@ -40,6 +70,11 @@ export interface ConfigModuleOptions {
    * @default "" (sin prefijo)
    */
   envPrefix?: string;
+  /**
+   * Configuracion de observabilidad nativa (logs, metricas, trazas).
+   * Se mergea con defaults inteligentes segun el entorno.
+   */
+  observability?: Partial<ObservabilityConfig>;
 }
 
 /**
@@ -78,7 +113,10 @@ export class ConfigModule {
 
     // Extraemos solo las variables de entorno relevantes según el prefijo
     const extractedEnv: Record<string, unknown> = {};
-    const schemaKeys = Object.keys((options.schema as any).properties || {});
+    const schemaKeys = Object.keys(
+      (options.schema as { properties?: Record<string, unknown> }).properties ||
+        {},
+    );
 
     for (const key of schemaKeys) {
       const envKey = envPrefix ? `${envPrefix}${key}` : key;
@@ -154,12 +192,24 @@ export class ConfigModule {
 
     // Registramos cada variable validada en el ConfigService
     const configService = new DefaultConfigService();
-    for (const [key, value] of Object.entries(coerced as Record<string, any>)) {
+    for (const [key, value] of Object.entries(
+      coerced as Record<string, string | number | boolean>,
+    )) {
       configService.setConfig(key, value);
     }
 
     // Registramos el servicio en el contenedor DI
     container.registerInstance(CONFIG_SERVICE_TOKEN, configService);
+
+    // Registramos la configuracion de observabilidad si fue proporcionada
+    if (options.observability) {
+      const defaults = getDefaultObservabilityConfig();
+      const merged = deepMerge(
+        defaults as unknown as Record<string, unknown>,
+        options.observability as unknown as Record<string, unknown>,
+      );
+      configService.setConfig(OBSERVABILITY_CONFIG_KEY, merged);
+    }
 
     // Aseguramos que INTERNAL_CONFIG_SERVICE_TOKEN resuelva la misma instancia
     // (DefaultConfigService implementa ambas interfaces)
@@ -201,7 +251,7 @@ export class ConfigModule {
             const validated = ConfigValidator.validate(compiler, newCoerced);
 
             for (const [key, value] of Object.entries(
-              validated as Record<string, any>,
+              validated as Record<string, string | number | boolean>,
             )) {
               configService.setConfig(key, value);
             }
