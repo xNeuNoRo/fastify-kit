@@ -21,6 +21,7 @@ pnpm-debug.log*
 
 .vscode/*
 !.vscode/extensions.json
+.opencode/*
 opencode.json
 .idea/
 *.suo
@@ -42,3 +43,4 @@ coverage/
 .cache/
 .tmp/
 
+*.md
