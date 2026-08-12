@@ -21,6 +21,7 @@ pnpm-debug.log*
 
 .vscode/*
 !.vscode/extensions.json
+opencode.json
 .idea/
 *.suo
 *.ntvs*
