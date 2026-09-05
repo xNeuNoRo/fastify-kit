@@ -217,8 +217,10 @@ export class CacheInvalidationSubscriber {
     if (
       this.pending.length >= CacheInvalidationSubscriber.MAX_PENDING_MESSAGES
     ) {
-      // Dropping a key-level message could leave stale L1 data. Collapse the
-      // Colapsamos la cola acotada en una invalidación global segura.
+      // Si la cola de pendientes se llena, se descartan todos los mensajes
+      // y se reemplazan por un mensaje de invalidación global con la versión
+      // más alta. Esto garantiza que no se pierdan invalidaciones, aunque se
+      // pierdan detalles de claves específicas.
       const namespaceVersion = Math.max(
         message.namespaceVersion,
         ...this.pending.map((pending) => pending.namespaceVersion),
@@ -241,10 +243,8 @@ export class CacheInvalidationSubscriber {
       target.namespaceVersion,
       incoming.namespaceVersion,
     );
-    // A namespace-wide invalidation is the safe merge when either message is
-    // already namespace-wide. Otherwise preserve the union of both key sets.
-    // Keeping only the intersection could lose a key when the later message
-    // contains more keys than the pending one.
+    // Si alguno de los mensajes no tiene claves, se descartan las claves del otro mensaje.
+    // Esto garantiza que no se pierdan invalidaciones, aunque se pierdan detalles de claves específicas.
     if (target.keys === undefined || incoming.keys === undefined) {
       delete target.keys;
       return;
