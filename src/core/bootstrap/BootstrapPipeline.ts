@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import type { Constructor } from "../../http/routing/scanner/index.js";
 import type { FastifyKitOptions } from "../FastifyKit.js";
+import { container } from "../../container/DIContainer.js";
+import { APPLICATION_CONTEXT_TOKEN } from "../application-context.js";
 
 /**
  * @description Contexto compartido entre todos los pasos del pipeline de bootstrap.
@@ -20,6 +22,10 @@ export interface BootstrapContext {
   lifecycleInstances: Set<object>;
   /** Señal de sistema recibida (SIGTERM/SIGINT) para propagar a los hooks de shutdown */
   receivedSignal?: string;
+  /** Contexto anterior restaurado si el bootstrap falla antes de tomar ownership. */
+  previousApplicationContext?: object;
+  /** Indica que este pipeline registró el contexto global de aplicación. */
+  applicationContextClaimed?: boolean;
 }
 
 /**
@@ -88,9 +94,42 @@ export class BootstrapPipeline {
   async run(): Promise<
     FastifyInstance<any, any, any, any, TypeBoxTypeProvider>
   > {
-    for (const step of this.steps) {
-      await step.execute(this.ctx);
+    try {
+      for (const step of this.steps) {
+        await step.execute(this.ctx);
+      }
+      return this.ctx.app;
+    } catch (error) {
+      await this.rollbackFailedBootstrap();
+      throw error;
     }
-    return this.ctx.app;
+  }
+
+  private async rollbackFailedBootstrap(): Promise<void> {
+    const app = this.ctx.app;
+    if (app) {
+      try {
+        await app.close();
+      } catch {
+        // Conservamos el error del bootstrap; la limpieza es de mejor esfuerzo aquí.
+      }
+    }
+
+    if (
+      !this.ctx.applicationContextClaimed ||
+      !container.has(APPLICATION_CONTEXT_TOKEN) ||
+      container.resolve(APPLICATION_CONTEXT_TOKEN) !== app
+    ) {
+      return;
+    }
+
+    if (this.ctx.previousApplicationContext) {
+      container.registerInstance(
+        APPLICATION_CONTEXT_TOKEN,
+        this.ctx.previousApplicationContext,
+      );
+    } else {
+      container.unregister(APPLICATION_CONTEXT_TOKEN);
+    }
   }
 }

@@ -17,6 +17,10 @@ async function bootstrap() {
     });
 
     const eventBus = getEventBus();
+    const waitUntilReady = (
+      eventBus as typeof eventBus & { waitUntilReady?: () => Promise<void> }
+    ).waitUntilReady;
+    if (waitUntilReady) await waitUntilReady.call(eventBus);
 
     // Escuchamos el evento distribuido usando la API directa para mayor estabilidad en el Worker Thread
     eventBus.on("distributed.sync.test", (payload: any) => {

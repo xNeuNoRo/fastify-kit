@@ -1,4 +1,4 @@
-import { Redis } from "ioredis";
+import type { Redis } from "ioredis";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, it, expect, beforeEach, vi, afterAll } from "vitest";
@@ -10,50 +10,54 @@ import { ScopeType, container } from "../../../src/container/DIContainer.js";
 import { FastifyKit } from "../../../src/core/FastifyKit.js";
 import { Module } from "../../../src/core/module.decorator.js";
 import { registerRedisConnection } from "../../../src/distributed/redis.factory.js";
+import { REDIS_CONNECTION_TOKEN } from "../../../src/distributed/redis.token.js";
 import { RedisEventBus } from "../../../src/events/RedisEventBus.js";
 import { QueueManager } from "../../../src/queues/QueueManager.js";
 import {
   QUEUE_REGISTRY_TOKEN,
   QueueRegistryService,
 } from "../../../src/queues/QueueRegistryService.js";
+import { openRedis, waitFor } from "../support/redis.js";
 
-// Herramienta de detección de Redis para saber si correr o no las pruebas de integración
-const isRedisAvailable = async () => {
-  const client = new Redis({
-    host: "127.0.0.1",
-    port: 6379,
-    lazyConnect: true,
-    maxRetriesPerRequest: 1,
-    enableOfflineQueue: false,
-    connectTimeout: 2000,
-    retryStrategy: () => null,
-  });
+const redisForTests = await openRedis();
+await redisForTests?.quit();
 
-  client.on("error", () => {
-    // Evita logs ruidosos de ioredis durante el healthcheck
-  });
-
-  try {
-    await client.connect();
-    const res = await client.ping();
-    await client.quit();
-    return res === "PONG";
-  } catch (e: any) {
-    // Evitamos logs de error innecesarios
-    const _err = e;
-    return false;
-  }
-};
-
-const hasRedis = await isRedisAvailable();
-
-if (!hasRedis) {
+if (!redisForTests) {
   console.warn(
     "[FastifyKit Redis Test] Saltando pruebas de integración distribuida (No se detectó un servidor local en 6379)",
   );
 }
 
-const redisIt = hasRedis ? it : it.skip;
+const redisIt = redisForTests ? it : it.skip;
+
+function waitForWorkerMessage(
+  worker: import("node:worker_threads").Worker,
+  predicate: (message: unknown) => boolean,
+): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    let timeout: ReturnType<typeof setTimeout>;
+    const onError = (error: Error) => {
+      clearTimeout(timeout);
+      worker.off("message", onMessage);
+      worker.off("error", onError);
+      reject(error);
+    };
+    const onMessage = (message: unknown) => {
+      if (!predicate(message)) return;
+      clearTimeout(timeout);
+      worker.off("message", onMessage);
+      worker.off("error", onError);
+      resolve(message);
+    };
+    timeout = setTimeout(() => {
+      worker.off("message", onMessage);
+      worker.off("error", onError);
+      reject(new Error("Worker message timed out."));
+    }, 10_000);
+    worker.on("message", onMessage);
+    worker.on("error", onError);
+  });
+}
 
 describe("Integración Sistema Distribuido (Redis)", () => {
   beforeEach(() => {
@@ -89,7 +93,7 @@ describe("Integración Sistema Distribuido (Redis)", () => {
       );
 
       // Registramos la conexión compartida
-      registerRedisConnection();
+      await registerRedisConnection();
 
       // Instancia 1
       const bus1 = container.resolve(RedisEventBus);
@@ -101,21 +105,25 @@ describe("Integración Sistema Distribuido (Redis)", () => {
         receivedPayloads.push(payload);
       });
 
-      // Esperar a que las suscripciones de Redis estén listas
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // No publicar trabajo hasta que ambos subscribers estén listos.
+      await Promise.all([bus1.waitUntilReady(), bus2.waitUntilReady()]);
 
-      bus1.emit("sync.test", { from: "bus1" }, { target: "global" });
+      try {
+        bus1.emit("sync.test", { from: "bus1" }, { target: "global" });
+        await waitFor(() => receivedPayloads.length === 1);
 
-      // Esperar el viaje por la red local
-      await new Promise((resolve) => setTimeout(resolve, 200));
-
-      expect(receivedPayloads).toHaveLength(1);
-      expect(receivedPayloads[0]).toEqual({ from: "bus1" });
-
-      await Promise.all([
-        bus1.beforeApplicationShutdown(),
-        bus2.beforeApplicationShutdown(),
-      ]);
+        expect(receivedPayloads[0]).toEqual({ from: "bus1" });
+      } finally {
+        await Promise.allSettled([
+          bus1.beforeApplicationShutdown(),
+          bus2.beforeApplicationShutdown(),
+        ]);
+        if (container.has(REDIS_CONNECTION_TOKEN)) {
+          const connection = container.resolve<Redis>(REDIS_CONNECTION_TOKEN);
+          connection.disconnect();
+          container.unregister(REDIS_CONNECTION_TOKEN);
+        }
+      }
     },
   );
 
@@ -163,21 +171,16 @@ describe("Integración Sistema Distribuido (Redis)", () => {
         finalResult = payload;
       });
 
-      // Despachamos el trabajo
-      await queueManager.dispatch("distributed-test-queue", { test: "data" });
+      try {
+        await queueManager.dispatch("distributed-test-queue", { test: "data" });
+        await waitFor(() => finalResult !== null, { timeoutMs: 10_000 });
 
-      // Esperamos a que el WorkerPool y el EventBus hagan su magia
-      let attempts = 0;
-      while (!finalResult && attempts < 40) {
-        await new Promise((r) => setTimeout(r, 100));
-        attempts++;
+        expect(finalResult).toBeDefined();
+        expect(finalResult.status).toBe("success");
+        expect(finalResult.result.processed).toBe(true);
+      } finally {
+        await app.close();
       }
-
-      expect(finalResult).toBeDefined();
-      expect(finalResult.status).toBe("success");
-      expect(finalResult.result.processed).toBe(true);
-
-      await app.close();
     },
   );
 
@@ -191,66 +194,71 @@ describe("Integración Sistema Distribuido (Redis)", () => {
       );
 
       // Iniciamos Instancia Secundaria en un hilo aparte (Aislamiento de Memoria/Container)
-      const secondaryNode = new Worker(workerPath) as any;
+      const secondaryNode = new Worker(workerPath);
+      let workerExited = false;
+      secondaryNode.once("exit", () => {
+        workerExited = true;
+      });
+      let app: Awaited<ReturnType<typeof FastifyKit.create>> | undefined;
 
-      // Esperamos a que el nodo secundario esté listo
-      await new Promise((resolve) => {
-        secondaryNode.on("message", (msg: any) => {
-          if (msg.type === "ready") resolve(true);
+      try {
+        await waitForWorkerMessage(
+          secondaryNode,
+          (message) => (message as { type?: string }).type === "ready",
+        );
+
+        // Iniciamos Instancia Primaria en este hilo
+        container.clearAll();
+        container.registerClass(QUEUE_REGISTRY_TOKEN, QueueRegistryService);
+        container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN).clear();
+
+        @Module({})
+        class PrimaryModule {}
+
+        app = await FastifyKit.create({
+          module: PrimaryModule,
+          distributed: {
+            redis: { host: "localhost", port: 6379 },
+            features: { eventBus: true },
+          },
         });
-      });
 
-      // Iniciamos Instancia Primaria en este hilo
-      container.clearAll();
-      container.registerClass(QUEUE_REGISTRY_TOKEN, QueueRegistryService);
-      container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN).clear();
+        const eventBus = container.resolve(RedisEventBus);
+        await eventBus.waitUntilReady();
 
-      @Module({})
-      class PrimaryModule {}
+        const eventReceived = waitForWorkerMessage(
+          secondaryNode,
+          (message) => (message as { type?: string }).type === "event_received",
+        );
 
-      const app = await FastifyKit.create({
-        module: PrimaryModule,
-        distributed: {
-          redis: { host: "localhost", port: 6379 },
-          features: { eventBus: true },
-        },
-      });
+        eventBus.emit(
+          "distributed.sync.test",
+          { data: "from-primary" },
+          { target: "global" },
+        );
 
-      const eventBus = container.resolve(RedisEventBus);
-
-      // Emitimos evento desde Primaria hacia Global
-      let eventReceivedBySecondary = false;
-      let receivedPayload: any = null;
-
-      secondaryNode.on("message", (msg: any) => {
-        if (msg.type === "event_received") {
-          eventReceivedBySecondary = true;
-          receivedPayload = msg.payload;
+        const receivedMessage = (await eventReceived) as {
+          type: string;
+          payload: unknown;
+        };
+        expect(receivedMessage.type).toBe("event_received");
+        expect(receivedMessage.payload).toEqual({ data: "from-primary" });
+      } finally {
+        await app?.close();
+        secondaryNode.postMessage("shutdown");
+        await Promise.race([
+          new Promise<void>((resolve) =>
+            secondaryNode.once("exit", () => resolve()),
+          ),
+          new Promise<void>((resolve) => setTimeout(resolve, 2_000)),
+        ]);
+        if (!workerExited) {
+          await Promise.race([
+            secondaryNode.terminate(),
+            new Promise<void>((resolve) => setTimeout(resolve, 2_000)),
+          ]);
         }
-      });
-
-      // Esperar un poco para que el bus de la instancia primaria se conecte
-      await new Promise((r) => setTimeout(r, 300));
-
-      eventBus.emit(
-        "distributed.sync.test",
-        { data: "from-primary" },
-        { target: "global" },
-      );
-
-      // Verificamos recepción en la otra instancia
-      let attempts = 0;
-      while (!eventReceivedBySecondary && attempts < 30) {
-        await new Promise((r) => setTimeout(r, 100));
-        attempts++;
       }
-
-      expect(eventReceivedBySecondary).toBe(true);
-      expect(receivedPayload).toEqual({ data: "from-primary" });
-
-      // Cleanup
-      secondaryNode.postMessage("shutdown");
-      await app.close();
     },
   );
 });
