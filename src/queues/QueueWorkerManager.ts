@@ -1,5 +1,6 @@
+import type { Redis } from "ioredis";
 import { ConnectionOptions, Worker } from "bullmq";
-import { Redis } from "ioredis";
+
 import {
   INTERNAL_CONFIG_SERVICE_TOKEN,
   type InternalConfigService,
@@ -17,7 +18,7 @@ import {
 } from "../core/interfaces/lifecycle.interface.js";
 import { container } from "../container/DIContainer.js";
 import { getEventBus } from "../events/eventbus.factory.js";
-import { REDIS_CONNECTION_TOKEN } from "../distributed/redis.factory.js";
+import { REDIS_CONNECTION_TOKEN } from "../distributed/redis.token.js";
 
 /**
  * @description Gestor de Workers distribuidos para BullMQ.
@@ -30,19 +31,32 @@ export class QueueWorkerManager
 {
   private readonly workers: Worker[] = [];
   private readonly logger = getLogger();
+  private closing?: Promise<void>;
+  private started = false;
 
   public async onApplicationBootstrap(): Promise<void> {
-    const internalConfig = container.resolve<InternalConfigService>(INTERNAL_CONFIG_SERVICE_TOKEN);
+    const internalConfig = container.resolve<InternalConfigService>(
+      INTERNAL_CONFIG_SERVICE_TOKEN,
+    );
     const config = internalConfig.get("queue") || {};
 
     if (config.strategy !== "redis") return;
+    if (this.started) return;
+
+    const eventBus = getEventBus();
+    const waitUntilReady = (
+      eventBus as typeof eventBus & { waitUntilReady?: () => Promise<void> }
+    ).waitUntilReady;
+    if (waitUntilReady) await waitUntilReady.call(eventBus);
+    this.started = true;
 
     // Obtenemos la conexión compartida centralizada
     const redisInstance = container.resolve<Redis>(REDIS_CONNECTION_TOKEN);
     const workerPool = container.resolve(WorkerPool);
 
     // Obtenemos todas las colas registradas por el scanner
-    const queueRegistry = container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN);
+    const queueRegistry =
+      container.resolve<QueueRegistryService>(QUEUE_REGISTRY_TOKEN);
     const registeredQueues = queueRegistry.getRegisteredQueues();
 
     for (const queueName of registeredQueues) {
@@ -63,7 +77,6 @@ export class QueueWorkerManager
           const result = await workerPool.execute(queueName, payload);
 
           // Emitimos un evento dirigido al servidor de origen (o global si no se conoce)
-          const eventBus = getEventBus();
           eventBus.emit(
             `queue.${queueName}.done.${job.id}`,
             {
@@ -102,7 +115,6 @@ export class QueueWorkerManager
           : "global";
 
         // Emitimos evento de error dirigido
-        const eventBus = getEventBus();
         eventBus.emit(
           `queue.${queueName}.failed.${job?.id}`,
           {
@@ -124,6 +136,11 @@ export class QueueWorkerManager
    * @description Cierra los workers al detener la app.
    */
   public async beforeApplicationShutdown(): Promise<void> {
-    await Promise.all(this.workers.map((w) => w.close()));
+    if (this.closing) return this.closing;
+    this.closing = (async () => {
+      const workers = this.workers.splice(0);
+      await Promise.allSettled(workers.map((worker) => worker.close()));
+    })();
+    return this.closing;
   }
 }
