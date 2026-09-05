@@ -371,6 +371,26 @@ describe("CacheService (orquestador multi-capa)", () => {
     expect(loader).not.toHaveBeenCalled();
   });
 
+  it("Debería respetar una entrada negativa encontrada durante el double-check", async () => {
+    const negative = createCacheEnvelope({
+      value: null,
+      namespaceVersion: 0,
+      freshTtlMs: 5_000,
+      staleTtlMs: null,
+      isNegative: true,
+    });
+    mock.adapter.get = vi
+      .fn()
+      .mockResolvedValueOnce(null) // readThrough
+      .mockResolvedValueOnce(negative); // double-check
+    const loader = vi.fn(() => Promise.resolve("should-not-load"));
+
+    await expect(service.getOrLoad("users:negative", loader)).resolves.toBe(
+      null,
+    );
+    expect(loader).not.toHaveBeenCalled();
+  });
+
   it("Debería cachear negativamente los valores null/undefined del loader (con L2)", async () => {
     const loader = vi.fn(() => Promise.resolve(null));
 
@@ -378,6 +398,25 @@ describe("CacheService (orquestador multi-capa)", () => {
     expect(await service.getOrLoad("users:1", loader)).toBeNull();
     expect(loader).toHaveBeenCalledTimes(1);
     expect(mock.store.get("users:1")?.isNegative).toBe(true);
+  });
+
+  it("no debería extender el TTL negativo al repoblar L1 desde L2", async () => {
+    const negative = createCacheEnvelope({
+      value: null,
+      namespaceVersion: 0,
+      storedAt: Date.now() - 4_000,
+      freshTtlMs: 5_000,
+      staleTtlMs: null,
+      isNegative: true,
+    });
+    mock.store.set("users:negative", negative);
+
+    await expect(
+      service.getOrLoad("users:negative", () => Promise.resolve("loaded")),
+    ).resolves.toBeNull();
+
+    const local = await l1.get("users:negative");
+    expect(local?.freshUntil).toBeLessThanOrEqual(negative.freshUntil!);
   });
 
   it("Debería NO cachear negativamente en modo l1-only", async () => {
@@ -699,6 +738,30 @@ describe("CacheService (orquestador multi-capa)", () => {
 
     expect(envelope?.value).toBe("from-l2");
     expect(await l1.get("users:1")).not.toBeNull(); // populate
+  });
+
+  it("no debería repoblar L1 con una lectura L2 que quedó invalidada", async () => {
+    let releaseRead!: (envelope: CacheEnvelope) => void;
+    let readStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      readStarted = resolve;
+    });
+    const pendingRead = new Promise<CacheEnvelope>((resolve) => {
+      releaseRead = resolve;
+    });
+    mock.adapter.get = vi.fn(async () => {
+      readStarted();
+      return pendingRead;
+    }) as typeof mock.adapter.get;
+    const l1Set = vi.spyOn(l1, "set");
+    const read = service.get("users:race");
+
+    await started;
+    await service.clearNamespace("users");
+    releaseRead(makeFreshEnvelope("stale-read"));
+    await expect(read).resolves.toMatchObject({ value: "stale-read" });
+
+    expect(l1Set).not.toHaveBeenCalled();
   });
 
   it("Debería limpiar todo con clearAll sin publicar", async () => {

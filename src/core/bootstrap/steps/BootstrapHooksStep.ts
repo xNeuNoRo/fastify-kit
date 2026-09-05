@@ -60,5 +60,6 @@ export class BootstrapHooksStep implements BootstrapStep {
 
       if (failure) throw failure;
     });
+    ctx.applicationShutdownHookRegistered = true;
   }
 }

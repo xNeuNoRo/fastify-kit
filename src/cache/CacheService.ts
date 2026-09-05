@@ -704,7 +704,7 @@ export class CacheService implements CacheAdapter, BeforeApplicationShutdown {
         const existing = await this.redisCall("get", () =>
           this.l2!.get<T>(key),
         );
-        if (this.isServableFresh(existing)) {
+        if (this.isServable(existing)) {
           await this.populateL1(key, existing, policy);
           return existing.value;
         }
@@ -732,7 +732,7 @@ export class CacheService implements CacheAdapter, BeforeApplicationShutdown {
     ) {
       await this.sleep(this.jitteredDelay(attempt));
       const retry = await this.redisCall("get", () => this.l2!.get<T>(key));
-      if (this.isServableFresh(retry)) {
+      if (this.isServable(retry)) {
         await this.populateL1(key, retry, policy);
         return retry.value;
       }
@@ -954,8 +954,13 @@ export class CacheService implements CacheAdapter, BeforeApplicationShutdown {
   ): Promise<void> {
     if (!this.l1 || policy.mode === "l2-only") return;
     const now = Date.now();
+    const namespace = extractCacheNamespace(key);
+    const currentVersion = await this.l1.getVersion(namespace);
+    if (source.namespaceVersion < currentVersion) return;
     const localFreshUntil = source.isNegative
-      ? now + this.config.l2.negativeTtlMs
+      ? source.freshUntil === null
+        ? now + this.config.l2.negativeTtlMs
+        : Math.min(source.freshUntil, now + this.config.l2.negativeTtlMs)
       : source.freshUntil === null
         ? now + policy.l1TtlMs
         : Math.min(source.freshUntil, now + policy.l1TtlMs);
@@ -1073,6 +1078,16 @@ export class CacheService implements CacheAdapter, BeforeApplicationShutdown {
       !envelope.isNegative &&
       !isEnvelopeExpired(envelope) &&
       getEnvelopeFreshness(envelope) === "fresh"
+    );
+  }
+
+  private isServable<T>(
+    envelope: CacheEnvelope<T> | null,
+  ): envelope is CacheEnvelope<T> {
+    return (
+      envelope !== null &&
+      !isEnvelopeExpired(envelope) &&
+      (envelope.isNegative || getEnvelopeFreshness(envelope) === "fresh")
     );
   }
 

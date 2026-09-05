@@ -4,6 +4,7 @@ import type { Constructor } from "../../http/routing/scanner/index.js";
 import type { FastifyKitOptions } from "../FastifyKit.js";
 import { container } from "../../container/DIContainer.js";
 import { APPLICATION_CONTEXT_TOKEN } from "../application-context.js";
+import { executeLifecycleHook } from "./lifecycle.bootstrap.js";
 
 /**
  * @description Contexto compartido entre todos los pasos del pipeline de bootstrap.
@@ -26,6 +27,8 @@ export interface BootstrapContext {
   previousApplicationContext?: object;
   /** Indica que este pipeline registró el contexto global de aplicación. */
   applicationContextClaimed?: boolean;
+  /** Indica que el hook Fastify que ejecuta el shutdown ya está registrado. */
+  applicationShutdownHookRegistered?: boolean;
 }
 
 /**
@@ -107,6 +110,11 @@ export class BootstrapPipeline {
 
   private async rollbackFailedBootstrap(): Promise<void> {
     const app = this.ctx.app;
+    if (!this.ctx.applicationShutdownHookRegistered) {
+      await this.runRollbackHook("beforeApplicationShutdown");
+      await this.runRollbackHook("onApplicationShutdown");
+    }
+
     if (app) {
       try {
         await app.close();
@@ -130,6 +138,16 @@ export class BootstrapPipeline {
       );
     } else {
       container.unregister(APPLICATION_CONTEXT_TOKEN);
+    }
+  }
+
+  private async runRollbackHook(
+    hook: "beforeApplicationShutdown" | "onApplicationShutdown",
+  ): Promise<void> {
+    try {
+      await executeLifecycleHook(this.ctx.lifecycleInstances, hook);
+    } catch {
+      // Conservamos el error original del bootstrap y continuamos limpiando.
     }
   }
 }

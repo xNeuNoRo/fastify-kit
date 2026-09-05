@@ -198,4 +198,34 @@ describe("Ganchos de Ciclo de Vida (Lifecycle Hooks)", () => {
     // Verificamos que FastifyKit registró el log de la falla
     expect(consoleErrorSpy).toHaveBeenCalled();
   });
+
+  it("debería ejecutar cleanup de lifecycle si falla antes de registrar onClose", async () => {
+    let beforeShutdown = 0;
+    let shutdown = 0;
+
+    class FailingProvider {
+      onModuleInit() {
+        throw new Error("bootstrap failed");
+      }
+
+      beforeApplicationShutdown() {
+        beforeShutdown++;
+      }
+
+      onApplicationShutdown() {
+        shutdown++;
+      }
+    }
+
+    @Module({ providers: [FailingProvider] })
+    class FailingModule {}
+
+    await expect(FastifyKit.create({ module: FailingModule })).rejects.toThrow(
+      "bootstrap failed",
+    );
+
+    expect(beforeShutdown).toBe(1);
+    expect(shutdown).toBe(1);
+    expect(container.has(APPLICATION_CONTEXT_TOKEN)).toBe(false);
+  });
 });

@@ -15,6 +15,10 @@ import {
   FASTIFY_KIT_METADATA_SYMBOL,
   FastifyKitOptions,
 } from "../FastifyKit.js";
+import {
+  buildResolvedCacheConfig,
+  getCacheLayerRequirements,
+} from "../../cache/interfaces/CacheConfig.js";
 
 /**
  * @description Método privado para inicializar el motor de CQRS (Mediator).
@@ -165,7 +169,14 @@ export async function initializeDistributedModule(
   allProviders: { token: any; implementation: Constructor }[],
 ) {
   const distributed = options.distributed;
-  if (!distributed?.redis) return;
+  const cacheRequirements = getCacheLayerRequirements(
+    buildResolvedCacheConfig(distributed?.features?.cache),
+  );
+  const usesRedis =
+    distributed?.features?.eventBus === true ||
+    options.queue?.strategy === "redis" ||
+    cacheRequirements.needsL2;
+  if (!usesRedis) return;
 
   // Registramos la conexión centralizada de Redis
   const { registerRedisConnection, RedisConnectionManager } =
@@ -175,7 +186,7 @@ export async function initializeDistributedModule(
   // Registramos el gestor de cierre de conexión para el ciclo de vida
   registerProvider(RedisConnectionManager, allProviders);
 
-  if (distributed.features?.eventBus) {
+  if (distributed?.features?.eventBus) {
     try {
       await registerRedisEventBus(allProviders);
     } catch (error) {

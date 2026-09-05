@@ -10,7 +10,11 @@ import {
   type InternalConfigService,
 } from "../../../src/config/InternalConfigService.js";
 import { container } from "../../../src/container/DIContainer.js";
-import { initializeCacheModule } from "../../../src/core/bootstrap/modules.bootstrap.js";
+import {
+  initializeCacheModule,
+  initializeDistributedModule,
+} from "../../../src/core/bootstrap/modules.bootstrap.js";
+import { REDIS_CONNECTION_TOKEN } from "../../../src/distributed/redis.token.js";
 import type { Constructor } from "../../../src/http/routing/scanner/index.js";
 
 type CacheProvider = { token: any; implementation: Constructor };
@@ -60,5 +64,18 @@ describe("Inicialización del módulo de caché (initializeCacheModule)", () => 
     await expect(initializeCacheModule([])).rejects.toThrow(
       /distributed\.redis/,
     );
+  });
+
+  it("no debería abrir Redis solo porque exista configuración Redis", async () => {
+    const internalConfig = container.resolve<InternalConfigService>(
+      INTERNAL_CONFIG_SERVICE_TOKEN,
+    );
+    internalConfig.set("distributed", {
+      redis: { host: "redis.internal" },
+    });
+
+    await initializeDistributedModule({ module: class EmptyModule {} }, []);
+
+    expect(container.has(REDIS_CONNECTION_TOKEN)).toBe(false);
   });
 });
