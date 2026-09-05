@@ -52,7 +52,11 @@ export interface MetricsService {
    * @param labels Labels dimensionales (ej: { method: "POST", status: "200" })
    * @param value Valor a incrementar (por defecto 1)
    */
-  increment(name: string, labels?: Record<string, string>, value?: number): void;
+  increment(
+    name: string,
+    labels?: Record<string, string>,
+    value?: number,
+  ): void;
 
   /**
    * Decrementa un contador (solo aplicable a Gauges).
@@ -60,7 +64,11 @@ export interface MetricsService {
    * @param labels Labels dimensionales
    * @param value Valor a decrementar (por defecto 1)
    */
-  decrement(name: string, labels?: Record<string, string>, value?: number): void;
+  decrement(
+    name: string,
+    labels?: Record<string, string>,
+    value?: number,
+  ): void;
 
   /**
    * Establece un valor de gauge (medición instantánea).
@@ -98,7 +106,7 @@ export interface MetricsService {
    * Obtiene el contenido del endpoint /metrics en formato Prometheus.
    * @returns Texto en formato de exposición de Prometheus.
    */
-  getMetricsEndpoint(): string;
+  getMetricsEndpoint(): string | Promise<string>;
 
   /**
    * Obtiene el Content-Type correcto para el endpoint de métricas.

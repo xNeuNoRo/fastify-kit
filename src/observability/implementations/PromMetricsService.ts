@@ -61,9 +61,14 @@ export class PromMetricsService implements MetricsService {
   private register: any;
   private initialMetricsRegistered = false;
   private activeGauges = new Map<string, number>();
+  readonly ready: Promise<void>;
 
   constructor(
-    config: { enabled: boolean; endpoint: string; defaultLabels: Record<string, string> },
+    private readonly config: {
+      enabled: boolean;
+      endpoint: string;
+      defaultLabels?: Record<string, string>;
+    },
     private tracer?: TracerService,
   ) {
     this.register = new (Registry || class {})();
@@ -73,7 +78,7 @@ export class PromMetricsService implements MetricsService {
         service: "fastify-kit",
       });
     }
-    this.init().catch(() => {});
+    this.ready = this.init();
   }
 
   /**
@@ -84,6 +89,10 @@ export class PromMetricsService implements MetricsService {
     try {
       await loadPromClient();
       this.register = new Registry();
+      this.register.setDefaultLabels({
+        ...this.config.defaultLabels,
+        service: "fastify-kit",
+      });
       this.registerDefaultMetrics();
     } catch (err) {
       console.warn(
@@ -107,6 +116,56 @@ export class PromMetricsService implements MetricsService {
         collectDefaultMetrics({ register: this.register, prefix: "process_" });
       }
       if (!Counter || !Histogram || !Gauge) return;
+
+      new Counter({
+        name: "cache_read_total",
+        help: "Resultados de lecturas de caché",
+        labelNames: ["result"],
+        registers: [this.register],
+      });
+      new Histogram({
+        name: "cache_loader_duration_seconds",
+        help: "Duración de loaders de caché",
+        registers: [this.register],
+      });
+      new Counter({
+        name: "cache_lock_contention_total",
+        help: "Contención de locks de caché",
+        registers: [this.register],
+      });
+      new Counter({
+        name: "cache_loader_error_total",
+        help: "Errores de loaders de caché",
+        registers: [this.register],
+      });
+      new Counter({
+        name: "cache_invalidation_received_total",
+        help: "Invalidaciones de caché recibidas",
+        registers: [this.register],
+      });
+      new Counter({
+        name: "cache_redis_operations_total",
+        help: "Operaciones Redis de caché",
+        labelNames: ["operation", "result"],
+        registers: [this.register],
+      });
+      new Counter({
+        name: "cache_fallback_total",
+        help: "Fallbacks por degradación Redis",
+        labelNames: ["policy"],
+        registers: [this.register],
+      });
+      new Counter({
+        name: "cache_load_shed_total",
+        help: "Loaders rechazados por saturación",
+        registers: [this.register],
+      });
+      new Gauge({
+        name: "cache_redis_state",
+        help: "Estado de disponibilidad Redis de caché",
+        labelNames: ["state"],
+        registers: [this.register],
+      });
 
       // ===== Métricas HTTP (RED: Rate, Errors, Duration) =====
 
@@ -231,7 +290,11 @@ export class PromMetricsService implements MetricsService {
     }
   }
 
-  gauge(name: string, value: number, labels: Record<string, string> = {}): void {
+  gauge(
+    name: string,
+    value: number,
+    labels: Record<string, string> = {},
+  ): void {
     try {
       const metric = this.register?.getSingleMetric(name);
       if (metric && typeof metric.set === "function") {
@@ -281,16 +344,23 @@ export class PromMetricsService implements MetricsService {
     try {
       if (this.register && typeof this.register.metrics === "function") {
         const result = this.register.metrics();
-        // prom-client v15+ devuelve Promise<string>, v14 devuelve string
-        if (result && typeof result.then === "function") {
-          return "# Métricas cargando (Promise pendiente)\n";
-        }
-        return result as string;
+        return typeof result === "string"
+          ? result
+          : "# Métricas cargando (registry listo en breve)\n";
       }
     } catch {
       // Registry no disponible
     }
     return "# Métricas no disponibles temporalmente\n";
+  }
+
+  async getMetricsEndpointAsync(): Promise<string> {
+    await this.ready;
+    if (!this.register || typeof this.register.metrics !== "function") {
+      return "# Métricas no disponibles temporalmente\n";
+    }
+    const result = this.register.metrics();
+    return await result;
   }
 
   getContentType(): string {

@@ -1,4 +1,7 @@
-import type { BootstrapContext, BootstrapStep } from "../../core/bootstrap/BootstrapPipeline.js";
+import type {
+  BootstrapContext,
+  BootstrapStep,
+} from "../../core/bootstrap/BootstrapPipeline.js";
 import { container } from "../../container/DIContainer.js";
 import { METRICS_SERVICE_TOKEN } from "../contracts/MetricsService.js";
 import { TRACER_SERVICE_TOKEN } from "../contracts/TracerService.js";
@@ -32,30 +35,26 @@ export class ObservabilityInstrumentationStep implements BootstrapStep {
   readonly name = "ObservabilityInstrumentationStep";
 
   async execute(ctx: BootstrapContext): Promise<void> {
-    let tracer: TracerService;
-    let metrics: MetricsService;
-
-    try {
-      tracer = container.resolve<TracerService>(TRACER_SERVICE_TOKEN);
-      metrics = container.resolve<MetricsService>(METRICS_SERVICE_TOKEN);
-    } catch {
-      return;
-    }
-
-    if (!tracer?.isEnabled?.()) {
-      return;
-    }
+    const tracer = container.has(TRACER_SERVICE_TOKEN)
+      ? container.resolve<TracerService>(TRACER_SERVICE_TOKEN)
+      : undefined;
+    const metrics = container.has(METRICS_SERVICE_TOKEN)
+      ? container.resolve<MetricsService>(METRICS_SERVICE_TOKEN)
+      : undefined;
+    if (!tracer && !metrics) return;
 
     // 1. Instrumentación HTTP: hooks onRequest/onResponse/onError en Fastify
     if (ctx.app) {
-      instrumentHttpServer(ctx.app, tracer, metrics);
+      if (tracer?.isEnabled?.() && metrics) {
+        instrumentHttpServer(ctx.app, tracer, metrics);
+      }
     }
 
     // 2. Registrar endpoint /metrics en Fastify (Prometheus scrape target)
     if (ctx.app && container.has(METRICS_ENDPOINT_TOKEN)) {
       const endpointInfo = container.resolve<{
         endpoint: string;
-        getContent: () => string;
+        getContent: () => string | Promise<string>;
         getContentType: () => string;
       }>(METRICS_ENDPOINT_TOKEN);
       if (endpointInfo?.endpoint) {
@@ -79,19 +78,25 @@ export class ObservabilityInstrumentationStep implements BootstrapStep {
           async (_request, reply) => {
             reply
               .header("Content-Type", endpointInfo.getContentType())
-              .send(endpointInfo.getContent());
+              .send(await endpointInfo.getContent());
           },
         );
       }
     }
 
     // 3. Instrumentación Redis: comandos ioredis con spans y métricas
-    instrumentRedisConnection(container, tracer, metrics);
+    if (tracer?.isEnabled?.() && metrics) {
+      instrumentRedisConnection(container, tracer, metrics);
+    }
 
     // 4. Instrumentación Colas: QueueManager.dispatch con spans
-    instrumentQueueManager(container, tracer, metrics);
+    if (tracer?.isEnabled?.() && metrics) {
+      instrumentQueueManager(container, tracer, metrics);
+    }
 
     // 5. Instrumentación WebSockets: WsMessageRouter con spans
-    instrumentWsGatewayRegistry(container, tracer, metrics);
+    if (tracer?.isEnabled?.() && metrics) {
+      instrumentWsGatewayRegistry(container, tracer, metrics);
+    }
   }
 }

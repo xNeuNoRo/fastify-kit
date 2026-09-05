@@ -1,7 +1,13 @@
-import type { BootstrapContext, BootstrapStep } from "../../core/bootstrap/BootstrapPipeline.js";
+import type {
+  BootstrapContext,
+  BootstrapStep,
+} from "../../core/bootstrap/BootstrapPipeline.js";
 import { container } from "../../container/DIContainer.js";
 import { CONFIG_SERVICE_TOKEN } from "../../config/ConfigService.js";
-import { LOGGER_TOKEN, type LoggerContract } from "../../logger/LoggerContract.js";
+import {
+  LOGGER_TOKEN,
+  type LoggerContract,
+} from "../../logger/LoggerContract.js";
 import { METRICS_SERVICE_TOKEN } from "../contracts/MetricsService.js";
 import { TRACER_SERVICE_TOKEN } from "../contracts/TracerService.js";
 import {
@@ -86,13 +92,12 @@ export class ObservabilityBootstrapStep implements BootstrapStep {
     let hasObservabilityConfig = false;
 
     if (container.has(CONFIG_SERVICE_TOKEN)) {
-      const configService =
-        container.resolve<{ getConfig: (key: string) => unknown }>(
-          CONFIG_SERVICE_TOKEN,
-        );
-      const userConfig = configService.getConfig?.(
-        OBSERVABILITY_CONFIG_KEY,
-      ) as Record<string, unknown> | undefined;
+      const configService = container.resolve<{
+        getConfig: (key: string) => unknown;
+      }>(CONFIG_SERVICE_TOKEN);
+      const userConfig = configService.getConfig?.(OBSERVABILITY_CONFIG_KEY) as
+        | Record<string, unknown>
+        | undefined;
       if (userConfig) {
         obsConfig = deepMerge(
           defaults as unknown as Record<string, unknown>,
@@ -103,8 +108,7 @@ export class ObservabilityBootstrapStep implements BootstrapStep {
     }
 
     // El nombre del servicio se toma del título de Swagger o del default
-    obsConfig.serviceName =
-      ctx.options?.swagger?.title || defaults.serviceName;
+    obsConfig.serviceName = ctx.options?.swagger?.title || defaults.serviceName;
 
     // Logger: siempre registramos Pino (si esta configurado o por defecto)
     // Si Pino falla, hace fallback a console automaticamente
@@ -118,34 +122,43 @@ export class ObservabilityBootstrapStep implements BootstrapStep {
       container.registerInstance(LOGGER_TOKEN, logger);
     }
 
-    // Tracer: solo si el usuario lo activo explicitamente
+    // Tracer y metrics son opt-in independientes.
     const tracingConfig = obsConfig.tracing as
-      | { enabled: boolean; sampler: string; ratio: number; exporter: string; otlpEndpoint?: string; otlpHeaders?: Record<string, string> }
+      | {
+          enabled: boolean;
+          sampler: string;
+          ratio: number;
+          exporter: string;
+          otlpEndpoint?: string;
+          otlpHeaders?: Record<string, string>;
+        }
       | undefined;
 
+    let tracer: OtelTracerService | undefined;
     if (hasObservabilityConfig && tracingConfig?.enabled) {
       const tracerLogger = container.has(LOGGER_TOKEN)
         ? container.resolve<LoggerContract>(LOGGER_TOKEN)
         : undefined;
-      const tracer = new OtelTracerService(tracingConfig, tracerLogger);
+      tracer = new OtelTracerService(tracingConfig, tracerLogger);
       container.registerInstance(TRACER_SERVICE_TOKEN, tracer);
+    }
 
-      // Metrics va despues del tracer porque necesita exemplars (traceId)
-      const metricsConfig = (obsConfig.metrics as
-        | { enabled: boolean; endpoint: string; defaultLabels: Record<string, string> }
-        | undefined);
-
-      if (metricsConfig?.enabled) {
-        const metrics = new PromMetricsService(metricsConfig, tracer);
-        container.registerInstance(METRICS_SERVICE_TOKEN, metrics);
-
-        // Guardamos la info del endpoint para montarlo luego en Fastify
-        container.registerInstance(METRICS_ENDPOINT_TOKEN, {
-          endpoint: metricsConfig.endpoint,
-          getContent: () => metrics.getMetricsEndpoint(),
-          getContentType: () => metrics.getContentType(),
-        });
-      }
+    const metricsConfig = obsConfig.metrics as
+      | {
+          enabled: boolean;
+          endpoint: string;
+          defaultLabels: Record<string, string>;
+        }
+      | undefined;
+    if (hasObservabilityConfig && metricsConfig?.enabled) {
+      const metrics = new PromMetricsService(metricsConfig, tracer);
+      await metrics.ready;
+      container.registerInstance(METRICS_SERVICE_TOKEN, metrics);
+      container.registerInstance(METRICS_ENDPOINT_TOKEN, {
+        endpoint: metricsConfig.endpoint,
+        getContent: () => metrics.getMetricsEndpointAsync(),
+        getContentType: () => metrics.getContentType(),
+      });
     }
   }
 }

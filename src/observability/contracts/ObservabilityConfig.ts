@@ -38,7 +38,7 @@ export const ObservabilityConfigSchema = Type.Object(
         { default: "info" },
       ),
       /** Activar pretty-print para desarrollo (colores, formato legible). En producción: false */
-      prettyPrint: Type.Boolean({ default: false }),
+      prettyPrint: Type.Optional(Type.Boolean({ default: false })),
       /** Configuración opcional para enviar logs a Loki (Grafana) */
       loki: Type.Optional(
         Type.Object({
@@ -107,13 +107,15 @@ export const ObservabilityConfigSchema = Type.Object(
       /** Ruta del endpoint de métricas (por defecto /metrics para scrape de Prometheus) */
       endpoint: Type.String({ default: "/metrics" }),
       /** Labels por defecto que se añaden a todas las métricas (ej: { team: "backend", region: "eu-west" }) */
-      defaultLabels: Type.Record(Type.String(), Type.String(), {
-        default: {},
-      }),
+      defaultLabels: Type.Optional(
+        Type.Record(Type.String(), Type.String(), {
+          default: {},
+        }),
+      ),
       /** URL del Pushgateway de Prometheus (para jobs batch) */
       pushGateway: Type.Optional(Type.String()),
       /** Intervalo en ms entre push al gateway (por defecto 30000) */
-      pushInterval: Type.Number({ default: 30000 }),
+      pushInterval: Type.Optional(Type.Number({ default: 30000 })),
     }),
 
     /** Qué subsistemas instrumentar automáticamente */
