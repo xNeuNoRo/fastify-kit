@@ -86,14 +86,15 @@ describe("OpenAPI + Observability (E2E)", () => {
     expect(spec.paths).toBeDefined();
 
     // Endpoints de negocio siempre presentes
-    const productsPath = Object.keys(spec.paths).find((p) =>
+    const paths = spec.paths ?? {};
+    const productsPath = Object.keys(paths).find((p) =>
       p.startsWith("/api/products"),
     );
     expect(productsPath).toBeDefined();
 
     // Endpoint de salud definido por el usuario (sin filtrar)
-    expect(spec.paths["/health/live"]).toBeDefined();
-    expect(spec.paths["/health/ready"]).toBeDefined();
+    expect(paths["/health/live"]).toBeDefined();
+    expect(paths["/health/ready"]).toBeDefined();
   });
 
   it("Deberia eliminar solo las claves exactas de endpoints internos", () => {
@@ -110,7 +111,7 @@ describe("OpenAPI + Observability (E2E)", () => {
     // endpoints de salud definidos por el usuario accidentalmente
 
     // /api/products NO debe ser eliminado (no es clave interna)
-    const productsPath = Object.keys(filtered.paths).find((p: string) =>
+    const productsPath = Object.keys(filtered.paths ?? {}).find((p: string) =>
       p.startsWith("/api/products"),
     );
     expect(productsPath).toBeDefined();
@@ -126,8 +127,8 @@ describe("OpenAPI + Observability (E2E)", () => {
 
     // Al incluir endpoints internos, NO se elimina nada
     // /health/live y /health/ready permanecen
-    expect(filtered.paths["/health/live"]).toBeDefined();
-    expect(filtered.paths["/health/ready"]).toBeDefined();
+    expect(filtered.paths?.["/health/live"]).toBeDefined();
+    expect(filtered.paths?.["/health/ready"]).toBeDefined();
   });
 
   it("Deberia documentar correctamente las tags de salud y negocio", () => {
@@ -136,17 +137,19 @@ describe("OpenAPI + Observability (E2E)", () => {
     ).swagger();
 
     // /health/live debe tener tag "System"
-    const liveOp = spec.paths["/health/live"]?.get;
+    const liveOp = spec.paths?.["/health/live"]?.get;
     expect(liveOp).toBeDefined();
+    if (!liveOp) return;
     expect(liveOp.tags).toContain("System");
 
     // /api/products debe tener tag "Business"
-    const productsPath = Object.keys(spec.paths).find((p) =>
+    const productsPath = Object.keys(spec.paths ?? {}).find((p) =>
       p.startsWith("/api/products"),
     );
     expect(productsPath).toBeDefined();
-    const productsOp = spec.paths[productsPath!]?.get;
+    const productsOp = spec.paths?.[productsPath!]?.get;
     expect(productsOp).toBeDefined();
+    if (!productsOp) return;
     expect(productsOp.tags).toContain("Business");
   });
 });

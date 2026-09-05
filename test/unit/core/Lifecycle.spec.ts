@@ -9,6 +9,7 @@ import {
 } from "vitest";
 
 import { container } from "../../../src/container/DIContainer.js";
+import { APPLICATION_CONTEXT_TOKEN } from "../../../src/core/application-context.js";
 import { FastifyKit } from "../../../src/core/FastifyKit.js";
 import type {
   OnModuleInit,
@@ -163,6 +164,17 @@ describe("Ganchos de Ciclo de Vida (Lifecycle Hooks)", () => {
     expect(processExitSpy).toHaveBeenCalledWith(0);
   });
 
+  it("debería rechazar dos aplicaciones activas en el mismo proceso", async () => {
+    const first = await FastifyKit.create({ module: LifecycleModule });
+    try {
+      await expect(
+        FastifyKit.create({ module: LifecycleModule }),
+      ).rejects.toThrow("Solo se admite una aplicación FastifyKit activa");
+    } finally {
+      await first.close();
+    }
+  });
+
   it("Debería propagar el error y fallar ruidosamente (Fail-Fast) si un hook de arranque falla", async () => {
     @Controller("/error")
     class ErrorController implements OnModuleInit {
@@ -181,7 +193,39 @@ describe("Ganchos de Ciclo de Vida (Lifecycle Hooks)", () => {
       }),
     ).rejects.toThrow("Base de datos inalcanzable");
 
+    expect(container.has(APPLICATION_CONTEXT_TOKEN)).toBe(false);
+
     // Verificamos que FastifyKit registró el log de la falla
     expect(consoleErrorSpy).toHaveBeenCalled();
+  });
+
+  it("debería ejecutar cleanup de lifecycle si falla antes de registrar onClose", async () => {
+    let beforeShutdown = 0;
+    let shutdown = 0;
+
+    class FailingProvider {
+      onModuleInit() {
+        throw new Error("bootstrap failed");
+      }
+
+      beforeApplicationShutdown() {
+        beforeShutdown++;
+      }
+
+      onApplicationShutdown() {
+        shutdown++;
+      }
+    }
+
+    @Module({ providers: [FailingProvider] })
+    class FailingModule {}
+
+    await expect(FastifyKit.create({ module: FailingModule })).rejects.toThrow(
+      "bootstrap failed",
+    );
+
+    expect(beforeShutdown).toBe(1);
+    expect(shutdown).toBe(1);
+    expect(container.has(APPLICATION_CONTEXT_TOKEN)).toBe(false);
   });
 });

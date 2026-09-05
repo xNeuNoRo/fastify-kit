@@ -2,7 +2,7 @@ import * as bullmq from "bullmq";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { container } from "../../../src/container/DIContainer.js";
-import { REDIS_CONNECTION_TOKEN } from "../../../src/distributed/redis.factory.js";
+import { REDIS_CONNECTION_TOKEN } from "../../../src/distributed/redis.token.js";
 import { EVENT_BUS_TOKEN } from "../../../src/events/EventBus.js";
 import { BullMQAdapter } from "../../../src/queues/adapters/BullMQAdapter.js";
 

@@ -1,21 +1,49 @@
-import { CacheManager } from "../cache/CacheManager.js";
+import { CacheManager } from "./CacheManager.js";
+import { CacheKeySerializationError } from "./errors.js";
+import { validateCacheNamespace } from "./namespace.js";
+
+const MAX_CACHE_KEY_LENGTH = 4096;
 
 /**
  * @description Decorador para cachear el resultado de un método de clase.
- * El resultado se almacena en memoria durante un tiempo determinado (TTL)
- * y se recupera automáticamente en llamadas posteriores con los mismos argumentos.
- * @param namespace Un espacio de nombres para organizar las entradas de caché.
- * Esto es útil para evitar colisiones de claves y para permitir la invalidación selectiva de caché.
- * @param ttlSeconds El tiempo en segundos que el resultado del método debe permanecer en caché antes de ser considerado expirado.
+ *
+ * Desde la migración a la API asíncrona, el wrapper SIEMPRE retorna
+ * una `Promise`. Por coherencia de tipos, el método decorado debe devolver
+ * una `Promise` (declarado `async` o retornando `Promise` explícitamente);
+ * los callers deben usar `await` sobre el método decorado. Un método declarado
+ * síncrono devuelve igualmente una `Promise` en runtime.
+ *
+ * Semántica (delegada en `CacheManager.getOrLoad`):
+ * - La clave se construye como `namespace:metodo:JSON(args)`.
+ * - El resultado solo se almacena si el método resuelve correctamente;
+ *   los errores se propagan sin cachearse.
+ * - Los valores falsy (0, false, "") se cachean y devuelven correctamente.
+ * - Llamadas concurrentes del mismo key con miss comparten una única ejecución.
+ * - Con caché distribuida (modos con Redis): stale-while-revalidate si está
+ *   permitido, y caché negativa (TTL corto) para métodos que devuelven
+ *   `null`/`undefined`.
+ *
+ * @param namespace Espacio de nombres para organizar las entradas y permitir
+ * invalidación selectiva.
+ * @param ttlSeconds TTL en segundos. Si no se provee o es <= 0, la entrada es permanente.
+ * @returns Un decorador de método que devuelve siempre una `Promise` en runtime.
+ * @throws {Error} Si el namespace o `ttlSeconds` son inválidos.
+ * @throws {CacheKeySerializationError} Si los argumentos no pueden formar una clave determinista.
  * @example
- * \@Cache("users", 60) // Cachea el resultado durante 60 segundos bajo el namespace "users"
- * getUserById(id: string) {
- *   // Lógica para obtener un usuario por ID, por ejemplo, una consulta a la base de datos
+ * class UserService {
+ *   \@Cache("users", 60)
+ *   async getUserById(id: string) {
+ *     return userRepository.findById(id);
+ *   }
  * }
- * @returns Una función que envuelve el método original,
- * implementando la lógica de caché para almacenar y recuperar resultados según el namespace y TTL especificados.
  */
 export function Cache(namespace: string, ttlSeconds?: number) {
+  validateCacheNamespace(namespace);
+  if (ttlSeconds !== undefined && !Number.isFinite(ttlSeconds)) {
+    throw new Error(
+      "[FastifyKit Cache] 'ttlSeconds' debe ser un número finito.",
+    );
+  }
   return function <This, Args extends any[], Return>(
     target: (this: This, ...args: Args) => Return,
     context: ClassMethodDecoratorContext<
@@ -27,49 +55,95 @@ export function Cache(namespace: string, ttlSeconds?: number) {
       throw new Error("@Cache solamente puede ser aplicado a métodos de clase");
     }
 
-    // Se inicializa una sola vez cuando se carga la clase.
-    // Inicia en 'true' si el desarrollador usó la palabra clave 'async'.
-    let isPromiseMethod = target.constructor.name === "AsyncFunction";
-
     return function (this: This, ...args: Args): Return {
-      const argsString = args.length ? JSON.stringify(args) : "[]";
+      const argsString = serializeCacheArguments(args);
       const key = `${namespace}:${String(context.name)}:${argsString}`;
-
-      const cachedData = CacheManager.get<Return>(key);
-
-      if (cachedData !== null) {
-        // Si el método es una promesa, devolvemos una promesa resuelta con los datos en caché
-        if (isPromiseMethod) {
-          return Promise.resolve(cachedData) as Return;
-        }
-        return cachedData as Return;
+      if (key.length > MAX_CACHE_KEY_LENGTH) {
+        throw new CacheKeySerializationError(
+          `La clave de caché supera el límite de ${MAX_CACHE_KEY_LENGTH} caracteres.`,
+        );
       }
 
-      const result = target.apply(this, args);
-
-      if (result instanceof Promise) {
-        isPromiseMethod = true;
-        return result.then((data) => {
-          CacheManager.set<Return>(key, data, ttlSeconds);
-          return data;
-        }) as Return;
-      }
-
-      CacheManager.set<Return>(key, result, ttlSeconds);
-      return result;
+      return CacheManager.getOrLoad<Awaited<Return>>(
+        key,
+        () =>
+          Promise.resolve(target.apply(this, args)) as Promise<Awaited<Return>>,
+        { ttlSeconds },
+      ) as Return;
     };
   };
 }
 
+function serializeCacheArguments(args: unknown[]): string {
+  const stack = new WeakSet<object>();
+  try {
+    return JSON.stringify(encodeCacheKeyValue(args, stack));
+  } catch (error) {
+    if (error instanceof CacheKeySerializationError) throw error;
+    throw new CacheKeySerializationError(
+      "Los argumentos del método no pueden serializarse para la clave de caché.",
+      { cause: error },
+    );
+  }
+}
+
+function encodeCacheKeyValue(value: unknown, stack: WeakSet<object>): unknown {
+  if (value === undefined) return { $type: "undefined" };
+  if (value === null) return null;
+  if (typeof value === "number") {
+    if (Number.isNaN(value)) return { $type: "number", value: "NaN" };
+    if (value === Infinity) return { $type: "number", value: "Infinity" };
+    if (value === -Infinity) return { $type: "number", value: "-Infinity" };
+    if (Object.is(value, -0)) return { $type: "number", value: "-0" };
+    return value;
+  }
+  if (typeof value === "bigint")
+    return { $type: "bigint", value: String(value) };
+  if (typeof value === "symbol")
+    return { $type: "symbol", value: String(value) };
+  if (typeof value === "function")
+    return { $type: "function", value: value.name };
+  if (value instanceof Date)
+    return { $type: "date", value: value.toISOString() };
+  if (typeof value !== "object") return value;
+  if (stack.has(value)) {
+    throw new CacheKeySerializationError(
+      "Los argumentos del método contienen una referencia circular.",
+    );
+  }
+  stack.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item) => encodeCacheKeyValue(item, stack));
+    }
+    const record = value as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.keys(record)
+        .sort()
+        .map((key) => [key, encodeCacheKeyValue(record[key], stack)]),
+    );
+  } finally {
+    stack.delete(value);
+  }
+}
+
 /**
- * @description Decorador para limpiar la caché de un namespace específico.
- * @param namespace El espacio de nombres cuya caché se desea limpiar. Esto permite invalidar selectivamente los datos almacenados en caché relacionados con ese namespace.
+ * @description Decorador para limpiar la caché de un namespace específico
+ * DESPUÉS de que el método original resuelva correctamente.
+ *
+ * Si el método falla, la invalidación NO se ejecuta (los datos siguen servibles)
+ * y el error se propaga.
+ *
+ * @param namespace El namespace cuya caché se desea invalidar.
+ * @returns Un decorador de método que limpia el namespace después de una resolución correcta.
+ * @throws {Error} Si la operación original o la invalidación fallan.
  * @example
- * \@ClearCache("users") // Limpia toda la caché bajo el namespace "users"
- * updateUser(id: string, data: UpdateUserRequest) {
- *   // Lógica para actualizar un usuario, por ejemplo, una consulta a la base de datos
+ * class UserService {
+ *   \@ClearCache("users")
+ *   async updateUser(id: string, data: UpdateUserRequest) {
+ *     return userRepository.update(id, data);
+ *   }
  * }
- * @returns Una función que envuelve el método original, ejecutando la lógica de limpieza de caché después de la ejecución del método.
  */
 export function ClearCache(namespace: string) {
   return function <This, Args extends any[], Return>(
@@ -86,17 +160,11 @@ export function ClearCache(namespace: string) {
     }
 
     return function (this: This, ...args: Args): Return {
-      const result = target.apply(this, args);
-
-      if (result instanceof Promise) {
-        return result.then((data) => {
-          CacheManager.clearNamespace(namespace);
-          return data;
-        }) as Return;
-      }
-
-      CacheManager.clearNamespace(namespace);
-      return result;
+      return (async () => {
+        const result = await target.apply(this, args);
+        await CacheManager.clearNamespace(namespace);
+        return result;
+      })() as Return;
     };
   };
 }

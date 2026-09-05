@@ -18,7 +18,7 @@ export class FastifyInstanceStep implements BootstrapStep {
     const userAjv = ctx.options.fastifyOptions?.ajv;
     const isAjvObject = typeof userAjv === "object" && userAjv !== null;
 
-    const app = fastify({
+    const options = {
       ...ctx.options.fastifyOptions,
       ajv: {
         // Preservamos las opciones ajv del usuario (si existen)
@@ -32,7 +32,13 @@ export class FastifyInstanceStep implements BootstrapStep {
           [(ajvFormats as any).default ?? ajvFormats, { mode: "fast" }],
         ] as unknown as any[],
       } as FastifyServerOptions["ajv"],
-    }).withTypeProvider<TypeBoxTypeProvider>();
+    };
+
+    // Fastify 5.12 narrows the default overload to `http2?: false`, while the
+    // public FastifyKit option intentionally supports both HTTP/1 and HTTP/2.
+    const app = fastify(
+      options as unknown as Parameters<typeof fastify>[0],
+    ).withTypeProvider<TypeBoxTypeProvider>();
 
     ctx.app = app;
   }

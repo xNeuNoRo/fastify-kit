@@ -134,6 +134,41 @@ export type { PipeTransform } from "./http/pipes/PipeTransform.js"; // El contra
 // ----------------------------------------------
 export { Cache, ClearCache } from "./cache/cache.decorator.js";
 export { CacheManager } from "./cache/CacheManager.js";
+export {
+  CacheDependencyUnavailableError,
+  CacheKeySerializationError,
+  CacheLoadShedError,
+  CacheMutationUnavailableError,
+} from "./cache/errors.js";
+export { CACHE_ADAPTER_TOKEN } from "./cache/interfaces/CacheAdapter.js";
+export type {
+  CacheAdapter,
+  CacheEnvelope,
+} from "./cache/interfaces/CacheAdapter.js";
+export type {
+  CacheInvalidationMessage,
+  CacheLock,
+  DistributedCacheAdapter,
+} from "./cache/interfaces/DistributedCacheAdapter.js";
+export type {
+  CacheEnvelopeFreshness,
+  CacheLookup,
+  CacheLookupStatus,
+} from "./cache/interfaces/CacheResult.js";
+export type { CacheServiceGetOrLoadOptions } from "./cache/CacheService.js";
+export type {
+  CacheMetrics,
+  CacheReadEvent,
+} from "./cache/interfaces/CacheMetrics.js";
+export type {
+  CacheMode,
+  CacheRedisFailurePolicy,
+  DistributedCacheL1Options,
+  DistributedCacheL2Options,
+  DistributedCacheLoadOptions,
+  DistributedCacheNamespaceOptions,
+  DistributedCacheOptions,
+} from "./core/interfaces/cache.interface.js";
 
 // ----------------------------------------------
 // Database & Transactions (Agnostic)
@@ -223,19 +258,13 @@ export {
 export { PromMetricsService } from "./observability/implementations/PromMetricsService.js";
 export { OtelTracerService } from "./observability/implementations/OtelTracerService.js";
 export { PinoLoggerService } from "./observability/implementations/PinoLoggerService.js";
-export {
-  Trace,
-  type TraceOptions,
-} from "./observability/decorators/Trace.js";
+export { Trace, type TraceOptions } from "./observability/decorators/Trace.js";
 export {
   Metrics,
   validateMetricLabels,
   type MetricsOptions,
 } from "./observability/decorators/Metrics.js";
-export {
-  Log,
-  type LogOptions,
-} from "./observability/decorators/Log.js";
+export { Log, type LogOptions } from "./observability/decorators/Log.js";
 export {
   injectTraceContext,
   extractTraceContext,
@@ -298,9 +327,10 @@ export {
 export type { JobHandler } from "./queues/interfaces/JobHandler.js";
 export type { QueueOptions } from "./core/interfaces/queue.interface.js";
 export type { DistributedOptions } from "./core/interfaces/distributed.interface.js";
+export type { RedisConnectionOptions } from "./core/interfaces/distributed.interface.js";
 export type { QueueType } from "./queues/interfaces/queue-options.js";
 
-export { REDIS_CONNECTION_TOKEN } from "./distributed/redis.factory.js";
+export { REDIS_CONNECTION_TOKEN } from "./distributed/redis.token.js";
 export { QUEUE_ADAPTER_TOKEN } from "./queues/interfaces/QueueAdapter.js";
 export type { QueueAdapter } from "./queues/interfaces/QueueAdapter.js";
 
@@ -322,7 +352,7 @@ export {
   type ConfigService,
 } from "./config/ConfigService.js";
 
-// Internal Framework Config API (queue, distributed, webrtc)
+// API interna de configuración del framework (queue, distributed, webrtc)
 // Solo para subsistemas internos. Usuarios: usar ConfigService con setConfig/getConfig.
 export {
   INTERNAL_CONFIG_SERVICE_TOKEN,

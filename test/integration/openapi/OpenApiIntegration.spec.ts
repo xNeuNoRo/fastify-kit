@@ -86,24 +86,29 @@ describe("Integracion OpenAPI (E2E)", () => {
 
     // Servers
     expect(spec.servers).toBeDefined();
-    expect(spec.servers[0].url).toBe("https://api.test.com");
+    if (!spec.servers) return;
+    expect(spec.servers[0]?.url).toBe("https://api.test.com");
 
     // Paths
     expect(spec.paths).toBeDefined();
+    if (!spec.paths) return;
     const pathItem = spec.paths["/users/{id}"];
     expect(pathItem).toBeDefined();
+    if (!pathItem) return;
 
     const getOp = pathItem.get;
     expect(getOp).toBeDefined();
+    if (!getOp) return;
     expect(getOp.summary).toBe("Obtener usuario por ID");
     expect(getOp.tags).toContain("Users");
 
     // Parameters
     expect(getOp.parameters).toBeDefined();
-    const param = getOp.parameters.find(
-      (p: OpenAPIV3_1.ParameterObject) => p.name === "id",
+    const param = getOp.parameters?.find(
+      (p): p is OpenAPIV3_1.ParameterObject => "name" in p && p.name === "id",
     );
     expect(param).toBeDefined();
+    if (!param) return;
     expect(param.in).toBe("path");
 
     // Security
@@ -111,8 +116,22 @@ describe("Integracion OpenAPI (E2E)", () => {
     expect(getOp.security).toContainEqual({ bearerAuth: [] });
 
     // Security schemes
-    expect(spec.components.securitySchemes.bearerAuth).toBeDefined();
-    expect(spec.components.securitySchemes.bearerAuth.type).toBe("http");
-    expect(spec.components.securitySchemes.apiKeyAuth.type).toBe("apiKey");
+    const securitySchemes = spec.components?.securitySchemes;
+    expect(securitySchemes).toBeDefined();
+    if (!securitySchemes) return;
+    const bearerAuth = securitySchemes.bearerAuth;
+    const apiKeyAuth = securitySchemes.apiKeyAuth;
+    expect(bearerAuth).toBeDefined();
+    expect(apiKeyAuth).toBeDefined();
+    if (
+      !bearerAuth ||
+      "$ref" in bearerAuth ||
+      !apiKeyAuth ||
+      "$ref" in apiKeyAuth
+    ) {
+      return;
+    }
+    expect(bearerAuth.type).toBe("http");
+    expect(apiKeyAuth.type).toBe("apiKey");
   });
 });

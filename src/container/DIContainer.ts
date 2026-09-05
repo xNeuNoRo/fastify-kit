@@ -102,6 +102,15 @@ export class DIContainer {
   }
 
   /**
+   * @description Elimina un contrato del contenedor, incluyendo su instancia y factory si existen.
+   */
+  unregister<T>(contract: Contract<T>): void {
+    this.registry.delete(contract);
+    this.instances.delete(contract);
+    this.factories.delete(contract);
+  }
+
+  /**
    * @description Limpia todas las registraciones e instancias.
    */
   clearAll(): void {

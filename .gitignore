@@ -44,3 +44,8 @@ coverage/
 .tmp/
 
 *.md
+!docs/
+!docs/**/*.md
+docs/cache.md
+docs/decisions/ADR-cache-consistency-and-failure-policy.md
+docs/testing-redis.md

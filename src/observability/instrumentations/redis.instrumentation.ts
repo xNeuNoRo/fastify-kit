@@ -6,11 +6,9 @@ import {
   SEMATTR_DB_REDIS_COMMAND,
   SEMATTR_DB_REDIS_KEY,
 } from "../utils/semantic-conventions.js";
-import {
-  SEMVAL_DB_SYSTEM_REDIS,
-} from "../utils/semantic-conventions.js";
+import { SEMVAL_DB_SYSTEM_REDIS } from "../utils/semantic-conventions.js";
 import { SpanKind, SpanStatusCode } from "../contracts/TracerService.js";
-import { REDIS_CONNECTION_TOKEN } from "../../distributed/redis.factory.js";
+import { REDIS_CONNECTION_TOKEN } from "../../distributed/redis.token.js";
 
 /**
  * @description Instrumenta automáticamente los comandos de Redis (ioredis)
@@ -66,8 +64,7 @@ export function instrumentRedisConnection(
 
       return originalCommand(command, ...args)
         .then((result: any) => {
-          const duration =
-            Number(process.hrtime.bigint() - start) / 1e9;
+          const duration = Number(process.hrtime.bigint() - start) / 1e9;
           metrics.histogram("redis_command_duration_seconds", duration, {
             command: command.toLowerCase(),
             status: "ok",
@@ -77,8 +74,7 @@ export function instrumentRedisConnection(
           return result;
         })
         .catch((err: any) => {
-          const duration =
-            Number(process.hrtime.bigint() - start) / 1e9;
+          const duration = Number(process.hrtime.bigint() - start) / 1e9;
           metrics.histogram("redis_command_duration_seconds", duration, {
             command: command.toLowerCase(),
             status: "error",

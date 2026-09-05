@@ -1,8 +1,7 @@
-import * as ioredis from "ioredis";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import { container } from "../../../src/container/DIContainer.js";
-import { REDIS_CONNECTION_TOKEN } from "../../../src/distributed/redis.factory.js";
+import { REDIS_CONNECTION_TOKEN } from "../../../src/distributed/redis.token.js";
 import { RedisEventBus } from "../../../src/events/RedisEventBus.js";
 
 describe("RedisEventBus - Eventos Distribuidos (Unit Test)", () => {
@@ -13,23 +12,21 @@ describe("RedisEventBus - Eventos Distribuidos (Unit Test)", () => {
   beforeEach(() => {
     container.clearAll();
 
-    // Mock del cliente PUB
-    mockPub = {
-      publish: vi.fn().mockResolvedValue(1),
-      on: vi.fn(),
-      quit: vi.fn().mockResolvedValue("OK"),
-    };
-    container.registerInstance(REDIS_CONNECTION_TOKEN, mockPub);
-
-    // Mock del cliente SUB
+    // Mock del cliente SUB (conexión dedicada creada por duplicate())
     mockSub = {
       subscribe: vi.fn().mockResolvedValue(undefined),
       on: vi.fn(),
       quit: vi.fn().mockResolvedValue("OK"),
     };
 
-    // Usamos vi.spyOn para interceptar el constructor de Redis sin mockear el módulo globalmente.
-    vi.spyOn(ioredis, "Redis").mockImplementation(() => mockSub);
+    // Mock del cliente PUB (conexión compartida)
+    mockPub = {
+      publish: vi.fn().mockResolvedValue(1),
+      duplicate: vi.fn().mockReturnValue(mockSub),
+      on: vi.fn(),
+      quit: vi.fn().mockResolvedValue("OK"),
+    };
+    container.registerInstance(REDIS_CONNECTION_TOKEN, mockPub);
 
     bus = new RedisEventBus();
   });
@@ -96,5 +93,14 @@ describe("RedisEventBus - Eventos Distribuidos (Unit Test)", () => {
     onMessageCallback("fastify-kit:events:global", message);
 
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("debería exponer readiness y fallar bootstrap si el subscriber no inicia", async () => {
+    mockSub.subscribe.mockRejectedValueOnce(new Error("redis unavailable"));
+    const unavailable = new RedisEventBus();
+
+    await expect(unavailable.onApplicationBootstrap()).rejects.toThrow(
+      "redis unavailable",
+    );
   });
 });

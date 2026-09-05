@@ -45,6 +45,8 @@ export class WorkerLifecycleManager {
 
   private readonly protocolHandler: WorkerProtocolHandler;
   private readonly eventHandler: WorkerEventHandler;
+  private closed = false;
+  private retryTimer?: ReturnType<typeof setTimeout>;
 
   /** Callback para procesar tareas pendientes (inyectado por el facade) */
   public onProcessNext: () => void = () => {};
@@ -55,8 +57,9 @@ export class WorkerLifecycleManager {
     public readonly activeTasks: Map<string, JobTask>,
   ) {
     // Cargamos configuración global para el pool de workers
-    const configService =
-      container.resolve<InternalConfigService>(INTERNAL_CONFIG_SERVICE_TOKEN);
+    const configService = container.resolve<InternalConfigService>(
+      INTERNAL_CONFIG_SERVICE_TOKEN,
+    );
     const config = configService.get("queue") || {};
 
     // Aplicamos valores por defecto si no se proporcionan en la configuración
@@ -96,6 +99,7 @@ export class WorkerLifecycleManager {
    * configura sus listeners para manejar mensajes y errores, y la agrega al pool.
    */
   createWorker(): void {
+    if (this.closed) return;
     // Creamos una nueva instancia de Worker y le configuramos el nodo del worker para el pool
     const worker = new Worker(this.workerScript);
     const workerNode: WorkerNode = {
@@ -210,7 +214,10 @@ export class WorkerLifecycleManager {
         this.logger.warn(
           `[FastifyKit Background Jobs] Reintentando creación en 5s (Intento ${this.consecutiveInitFailures}/${this.maxInitRetries})`,
         );
-        setTimeout(() => this.createWorker(), 5000);
+        this.retryTimer = setTimeout(() => {
+          this.retryTimer = undefined;
+          this.createWorker();
+        }, 5000);
       }
     }
   }
@@ -238,6 +245,12 @@ export class WorkerLifecycleManager {
    * las instancias de Worker y limpiando el estado del pool.
    */
   async close(): Promise<void> {
+    if (this.closed) return;
+    this.closed = true;
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = undefined;
+    }
     this.logger.info(
       "[FastifyKit Background Jobs] Cerrando pool de workers...",
     );

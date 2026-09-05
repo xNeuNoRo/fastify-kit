@@ -32,10 +32,13 @@ export class WorkerPool implements BeforeApplicationShutdown {
 
   private readonly lifecycle: WorkerLifecycleManager;
   private readonly scheduler: TaskScheduler;
+  private closing?: Promise<void>;
 
   constructor() {
     // Cargamos configuración global para el pool de workers
-    const internalConfig = container.resolve<InternalConfigService>(INTERNAL_CONFIG_SERVICE_TOKEN);
+    const internalConfig = container.resolve<InternalConfigService>(
+      INTERNAL_CONFIG_SERVICE_TOKEN,
+    );
     const config = internalConfig.get("queue") || {};
 
     this.lifecycle = new WorkerLifecycleManager(
@@ -80,6 +83,8 @@ export class WorkerPool implements BeforeApplicationShutdown {
    * utilizado para cerrar el pool de workers de forma segura y evitar que queden procesos huérfanos.
    */
   public async beforeApplicationShutdown(_signal?: string): Promise<void> {
-    await this.lifecycle.close();
+    if (this.closing) return this.closing;
+    this.closing = this.lifecycle.close();
+    return this.closing;
   }
 }

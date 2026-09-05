@@ -1,5 +1,7 @@
 import type { BootstrapContext, BootstrapStep } from "../BootstrapPipeline.js";
 import { executeLifecycleHook } from "../lifecycle.bootstrap.js";
+import { container } from "../../../container/DIContainer.js";
+import { APPLICATION_CONTEXT_TOKEN } from "../../application-context.js";
 
 /**
  * @description Paso 6 del pipeline: Hooks de ciclo de vida posteriores al registro de rutas.
@@ -28,19 +30,36 @@ export class BootstrapHooksStep implements BootstrapStep {
     // pasando la señal recibida para que las instancias puedan realizar tareas de limpieza
     // o sacar el nodo de un Load Balancer antes de que deje de aceptar nuevas peticiones.
     ctx.app.addHook("onClose", async () => {
-      // Primero ejecutamos el hook "before" para limpieza de infraestructura
-      await executeLifecycleHook(
-        ctx.lifecycleInstances,
-        "beforeApplicationShutdown",
-        ctx.receivedSignal,
-      );
+      let failure: unknown;
+      try {
+        await executeLifecycleHook(
+          ctx.lifecycleInstances,
+          "beforeApplicationShutdown",
+          ctx.receivedSignal,
+        );
+      } catch (error) {
+        failure = error;
+      }
 
-      // Luego el hook final de apagado
-      await executeLifecycleHook(
-        ctx.lifecycleInstances,
-        "onApplicationShutdown",
-        ctx.receivedSignal,
-      );
+      try {
+        await executeLifecycleHook(
+          ctx.lifecycleInstances,
+          "onApplicationShutdown",
+          ctx.receivedSignal,
+        );
+      } catch (error) {
+        failure ??= error;
+      } finally {
+        if (
+          container.has(APPLICATION_CONTEXT_TOKEN) &&
+          container.resolve(APPLICATION_CONTEXT_TOKEN) === ctx.app
+        ) {
+          container.unregister(APPLICATION_CONTEXT_TOKEN);
+        }
+      }
+
+      if (failure) throw failure;
     });
+    ctx.applicationShutdownHookRegistered = true;
   }
 }

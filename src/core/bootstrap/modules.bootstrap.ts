@@ -15,6 +15,10 @@ import {
   FASTIFY_KIT_METADATA_SYMBOL,
   FastifyKitOptions,
 } from "../FastifyKit.js";
+import {
+  buildResolvedCacheConfig,
+  getCacheLayerRequirements,
+} from "../../cache/interfaces/CacheConfig.js";
 
 /**
  * @description Método privado para inicializar el motor de CQRS (Mediator).
@@ -57,7 +61,9 @@ export async function initializeWebRtcModule(
       typeof options.webrtc === "object" ? options.webrtc : {};
 
     // Guardamos la configuración de WebRTC en el InternalConfigService inyectable
-    const internalConfig = container.resolve<InternalConfigService>(INTERNAL_CONFIG_SERVICE_TOKEN);
+    const internalConfig = container.resolve<InternalConfigService>(
+      INTERNAL_CONFIG_SERVICE_TOKEN,
+    );
     internalConfig.set("webrtc", webrtcConfig);
 
     const { SFU_ROOM_MANAGER_TOKEN } =
@@ -123,7 +129,9 @@ export async function initializeQueueModule(
   };
 
   // Guardamos la configuración de colas en el InternalConfigService
-  const internalConfig = container.resolve<InternalConfigService>(INTERNAL_CONFIG_SERVICE_TOKEN);
+  const internalConfig = container.resolve<InternalConfigService>(
+    INTERNAL_CONFIG_SERVICE_TOKEN,
+  );
   internalConfig.set("queue", queueConfig);
 
   if (!options.queue) return;
@@ -161,17 +169,24 @@ export async function initializeDistributedModule(
   allProviders: { token: any; implementation: Constructor }[],
 ) {
   const distributed = options.distributed;
-  if (!distributed?.redis) return;
+  const cacheRequirements = getCacheLayerRequirements(
+    buildResolvedCacheConfig(distributed?.features?.cache),
+  );
+  const usesRedis =
+    distributed?.features?.eventBus === true ||
+    options.queue?.strategy === "redis" ||
+    cacheRequirements.needsL2;
+  if (!usesRedis) return;
 
   // Registramos la conexión centralizada de Redis
   const { registerRedisConnection, RedisConnectionManager } =
     await import("../../distributed/redis.factory.js");
-  registerRedisConnection();
+  await registerRedisConnection();
 
   // Registramos el gestor de cierre de conexión para el ciclo de vida
   registerProvider(RedisConnectionManager, allProviders);
 
-  if (distributed.features?.eventBus) {
+  if (distributed?.features?.eventBus) {
     try {
       await registerRedisEventBus(allProviders);
     } catch (error) {
@@ -237,7 +252,7 @@ export async function registerQueueStrategySpecificServices(
   } else if (queueConfig.strategy === "redis") {
     const { registerRedisConnection, RedisConnectionManager } =
       await import("../../distributed/redis.factory.js");
-    registerRedisConnection();
+    await registerRedisConnection();
     registerProvider(RedisConnectionManager, allProviders);
     await registerRedisStrategy(options, allProviders);
   }
@@ -290,6 +305,36 @@ export async function registerRedisStrategy(
     );
     console.error("\nnpm install bullmq ioredis\n");
     process.exit(1);
+  }
+}
+
+/**
+ * @description Inicializa el módulo de caché (CacheService) en el bootstrap.
+ *
+ * Se ejecuta SIEMPRE (patrón del módulo de colas):
+ * - Sin configuración de caché → se construye el modo "l1-only" por defecto.
+ * - Con modos que requieren Redis ("l2-only"/"multi") → valida `distributed.redis`
+ *   con un error accionable, registra la conexión compartida si hace falta y
+ *   suscribe la invalidación distribuida.
+ *
+ * El runtime se registra como provider con su token para que el ciclo de vida
+ * cierre el suscriptor de invalidaciones en el shutdown (BeforeApplicationShutdown).
+ * El `CACHE_ADAPTER_TOKEN` custom registrado por el usuario se respeta tal cual.
+ */
+export async function initializeCacheModule(
+  allProviders: { token: any; implementation: Constructor }[],
+): Promise<void> {
+  const { getCacheAdapter } = await import("../../cache/cache.factory.js");
+  const { CACHE_ADAPTER_TOKEN } =
+    await import("../../cache/interfaces/CacheAdapter.js");
+
+  const adapter = await getCacheAdapter();
+
+  if (!allProviders.some((p) => p.token === CACHE_ADAPTER_TOKEN)) {
+    allProviders.push({
+      token: CACHE_ADAPTER_TOKEN,
+      implementation: adapter.constructor as Constructor,
+    });
   }
 }
 

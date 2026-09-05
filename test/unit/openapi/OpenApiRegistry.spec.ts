@@ -166,13 +166,14 @@ describe("OpenApiRegistry (Schema Registry)", () => {
           },
         },
       })
-      abstract class AnimalDto {}
+      class AnimalDto {}
 
       registry.registerSchema(CatDto);
       registry.registerSchema(DogDto);
       const schema = registry.registerSchema(AnimalDto);
 
       expect(schema.oneOf).toBeDefined();
+      if (!schema.oneOf) return;
       expect(schema.oneOf).toHaveLength(2);
       expect(schema.oneOf[0]).toEqual({
         $ref: "#/components/schemas/Cat",

@@ -1,23 +1,27 @@
-import { Redis } from "ioredis";
-import { DefaultEventBus, EventBusContract, EmitOptions } from "./EventBus.js";
-import { getLogger } from "../logger/logger.factory.js";
+import type { Redis } from "ioredis";
+
+import { container } from "../container/DIContainer.js";
 import {
-  INTERNAL_CONFIG_SERVICE_TOKEN,
-  type InternalConfigService,
-} from "../config/InternalConfigService.js";
-import { DefaultConfigService } from "../config/DefaultConfigService.js";
-import { CONFIG_SERVICE_TOKEN } from "../config/ConfigService.js";
-import { BeforeApplicationShutdown } from "../core/interfaces/lifecycle.interface.js";
-import { ScopeType, container } from "../container/DIContainer.js";
-import { REDIS_CONNECTION_TOKEN } from "../distributed/redis.factory.js";
+  BeforeApplicationShutdown,
+  OnApplicationBootstrap,
+} from "../core/interfaces/lifecycle.interface.js";
+import { getLogger } from "../logger/logger.factory.js";
+import { REDIS_CONNECTION_TOKEN } from "../distributed/redis.token.js";
+import { closeRedisConnection } from "../distributed/redis.lifecycle.js";
+import { DefaultEventBus, EventBusContract, EmitOptions } from "./EventBus.js";
 
 /**
  * @description Implementación híbrida del EventBus que sincroniza eventos entre instancias usando Redis Pub/Sub.
  * Soporta emisiones locales, globales y dirigidas a instancias específicas.
+ *
+ * Ownership de conexiones:
+ * - `pub`: la conexión compartida central (`REDIS_CONNECTION_TOKEN`), propiedad de RedisConnectionManager.
+ * - `sub`: conexión dedicada creada con `duplicate()` (una conexión en modo suscripción
+ *   no puede ejecutar comandos normales como PUBLISH). Se cierra en beforeApplicationShutdown.
  */
 export class RedisEventBus
   extends DefaultEventBus
-  implements EventBusContract, BeforeApplicationShutdown
+  implements EventBusContract, OnApplicationBootstrap, BeforeApplicationShutdown
 {
   // ID unico de la instancia
   private readonly _instanceId = Math.random().toString(36).substring(7);
@@ -31,6 +35,9 @@ export class RedisEventBus
 
   // Logger para monitoreo de eventos y errores relacionados con Redis
   private readonly logger = getLogger();
+  private readonly initialization: Promise<void>;
+  private ready = false;
+  private closing?: Promise<void>;
 
   // Canales de Redis para eventos globales y dirigidos
   private readonly globalChannel = "fastify-kit:events:global";
@@ -41,43 +48,33 @@ export class RedisEventBus
     super();
 
     // Obtenemos la conexión compartida para publicar
-    this.pub = container.resolve<any>(REDIS_CONNECTION_TOKEN);
+    this.pub = container.resolve<Redis>(REDIS_CONNECTION_TOKEN);
 
-    // Para suscribir (SUB) necesitamos una conexión dedicada que no sea compartida
-    // ya que una conexión en modo suscripción no puede ejecutar comandos normales (como PUBLISH)
-    // Aseguramos que el InternalConfigService esté registrado (tests pueden limpiar el contenedor)
-    if (!container.has(CONFIG_SERVICE_TOKEN)) {
-      container.registerClass(CONFIG_SERVICE_TOKEN, DefaultConfigService);
-    }
-    if (!container.has(INTERNAL_CONFIG_SERVICE_TOKEN)) {
-      container.registerFactory(INTERNAL_CONFIG_SERVICE_TOKEN, (c) => c.resolve(CONFIG_SERVICE_TOKEN), ScopeType.Singleton);
-    }
-    const internalConfig = container.resolve<InternalConfigService>(INTERNAL_CONFIG_SERVICE_TOKEN);
-    const distributedConfig = internalConfig.get("distributed") || {};
-    const redisConfig = distributedConfig.redis || {};
-    this.sub = new Redis({
-      host: redisConfig.host || "localhost",
-      port: redisConfig.port || 6379,
-      password: redisConfig.password,
-      db: redisConfig.db || 0,
+    // El suscriptor es una conexión dedicada con las mismas opciones que la compartida.
+    // duplicate() evita duplicar la construcción de opciones de conexión.
+    this.sub = this.pub.duplicate({
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+    });
+    this.sub.on("error", (err) => {
+      this.logger.error(
+        `[FastifyKit RedisEventBus] Error en la conexión de suscripción: ${err.message}`,
+      );
+    });
+    this.sub.on("ready", () => {
+      if (!this.closing) this.ready = true;
     });
 
-    this.initSubscriber();
+    this.initialization = this.initSubscriber();
+    // El hook de ciclo de vida informa del fallo. Evitamos que una promesa
+    // rechazada creada por el constructor quede sin controlar para usuarios directos.
+    void this.initialization.catch(() => {});
     this.logger.info(
       `[FastifyKit RedisEventBus] Inicializado con ID de instancia: ${this.instanceId}`,
     );
   }
 
-  private initSubscriber() {
-    // Nos suscribimos al canal global y al canal personal de esta instancia
-    this.sub.subscribe(this.globalChannel, this.personalChannel, (err) => {
-      if (err) {
-        this.logger.error(
-          `[FastifyKit RedisEventBus] Error al suscribirse: ${err.message}`,
-        );
-      }
-    });
-
+  private async initSubscriber(): Promise<void> {
     this.sub.on("message", (channel, message) => {
       try {
         // Extraemos el mensaje restaurando automáticamente los Buffers binarios si existiesen
@@ -105,16 +102,51 @@ export class RedisEventBus
         );
       }
     });
+
+    // Registramos el handler antes de suscribirnos para que ningún mensaje pueda
+    // llegar durante el intervalo entre el reconocimiento de Redis y la configuración
+    // del listener.
+    await this.waitForSubscriberReady();
+    await this.sub.subscribe(this.globalChannel, this.personalChannel);
+    this.ready = true;
+  }
+
+  private async waitForSubscriberReady(): Promise<void> {
+    const status = (this.sub as Redis & { status?: string }).status;
+    if (status === undefined || status === "ready") return;
+
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.sub.removeListener("ready", onReady);
+        reject(new Error("Redis EventBus subscriber readiness timed out."));
+      }, 1_000);
+      const onReady = () => {
+        clearTimeout(timeout);
+        this.sub.removeListener("ready", onReady);
+        resolve();
+      };
+      this.sub.once("ready", onReady);
+    });
+  }
+
+  async onApplicationBootstrap(): Promise<void> {
+    await this.initialization;
+  }
+
+  async waitUntilReady(): Promise<void> {
+    await this.initialization;
   }
 
   /**
    * @description Emite un evento, pudiendo directo localmente (por defecto), globalmente o a una instancia específica.
    */
-  emit(eventName: string, payload?: any, options?: EmitOptions): void {
+  emit(eventName: string, payload?: unknown, options?: EmitOptions): void {
+    if (this.closing) return;
     const target = options?.target || "local";
 
     // Siempre disparamos localmente si el destino es "local", "global" o explícitamente nuestra propia instancia.
-    // Esto asegura que la instancia emisora reaccione inmediatamente sin esperar el roundtrip a Redis.
+    // Esto asegura que la instancia emisora reaccione inmediatamente sin esperar el
+    // viaje de ida y vuelta a Redis.
     if (
       target === "local" ||
       target === "global" ||
@@ -161,10 +193,15 @@ export class RedisEventBus
    * @description Cierra las conexiones de Redis al detener la app
    */
   public async beforeApplicationShutdown(): Promise<void> {
-    this.logger.info(
-      "[FastifyKit RedisEventBus] Cerrando suscripción Redis...",
-    );
-    await this.sub.quit();
-    // No cerramos 'this.pub' aquí porque es la conexión compartida central
+    if (this.closing) return this.closing;
+    this.closing = (async () => {
+      this.ready = false;
+      this.logger.info(
+        "[FastifyKit RedisEventBus] Cerrando suscripción Redis...",
+      );
+      await closeRedisConnection(this.sub).catch(() => {});
+      // No cerramos 'this.pub' aquí porque es la conexión compartida central.
+    })();
+    return this.closing;
   }
 }
