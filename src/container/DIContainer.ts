@@ -101,7 +101,9 @@ export class DIContainer {
     );
   }
 
-  /** Removes a registration owned by a closed application resource. */
+  /**
+   * @description Elimina un contrato del contenedor, incluyendo su instancia y factory si existen.
+   */
   unregister<T>(contract: Contract<T>): void {
     this.registry.delete(contract);
     this.instances.delete(contract);
