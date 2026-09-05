@@ -1,10 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import fastifyStatic, {
-  SetHeadersResponse,
-  type FastifyStaticOptions,
-} from "@fastify/static";
+import fastifyStatic, { type FastifyStaticOptions } from "@fastify/static";
 import { ForbiddenException } from "../../../exceptions/SecurityExceptions.js";
 import { StaticFile } from "../../../responses/StaticFile.js";
 import type { StaticAssetsOptions } from "../../../interfaces/static.interface.js";
@@ -155,19 +152,19 @@ export async function registerStaticAssetsPlugin(
     staticOptions.cache === "none"
   ) {
     fastifyNativeOptions.setHeaders = (
-      res: SetHeadersResponse,
+      res: FastifyReply,
       _path: string,
       _stat: fs.Stats,
     ) => {
       if (staticOptions.cache === "none") {
-        res.setHeader("Cache-Control", "no-store");
+        res.raw.setHeader("Cache-Control", "no-store");
       }
       if (staticOptions.forceDownload) {
-        res.setHeader("Content-Disposition", "attachment");
+        res.raw.setHeader("Content-Disposition", "attachment");
       }
       if (staticOptions.headers) {
         Object.entries(staticOptions.headers).forEach(([key, value]) => {
-          res.setHeader(key, value);
+          res.raw.setHeader(key, value);
         });
       }
     };

@@ -13,7 +13,7 @@ describe("Generador de Plantillas HTML Estaticas", () => {
           lastModified: new Date("2026-04-28T12:00:00Z").getTime(),
         },
       },
-    ];
+    ] as Parameters<typeof renderDirectoryHtml>[0];
     const files = [
       {
         name: "logo.png",
@@ -23,7 +23,7 @@ describe("Generador de Plantillas HTML Estaticas", () => {
           mtime: new Date("2026-04-28T12:00:00Z").getTime(),
         },
       },
-    ];
+    ] as unknown as Parameters<typeof renderDirectoryHtml>[1];
 
     const html = renderDirectoryHtml(dirs, files);
 
