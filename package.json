@@ -21,14 +21,15 @@
   },
   "files": [
     "dist/**/*.js",
-    "dist/**/*.d.ts"
+    "dist/**/*.d.ts",
+    "dist/**/*.lua"
   ],
   "publishConfig": {
     "access": "public"
   },
   "scripts": {
-    "build:clean": "rm -rf dist",
-    "build": "npm run build:clean && tsc",
+    "build:clean": "rm -rf dist .tsbuildinfo",
+    "build": "npm run build:clean && tsc && node scripts/copy-cache-scripts.mjs",
     "build:watch": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
@@ -37,6 +38,8 @@
     "format": "prettier --check \"src/**/*.{ts,js,json,md}\"",
     "format:fix": "prettier --write \"src/**/*.{ts,js,json,md}\"",
     "test": "bun test",
+    "test:redis": "bun run test/run-redis-integration.ts",
+    "test:clean-consumer": "node scripts/clean-consumer-smoke.mjs",
     "test:watch": "bun test --watch",
     "test:coverage": "bun test --coverage",
     "prepare": "husky install"

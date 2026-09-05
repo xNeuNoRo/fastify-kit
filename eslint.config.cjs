@@ -15,6 +15,7 @@ module.exports = [
       "coverage/**",
       "*.cjs",
       "*.mjs",
+      "scripts/**/*.mjs",
       "*.js",
       "bin/fk.js",
     ],

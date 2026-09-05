@@ -44,3 +44,5 @@ coverage/
 .tmp/
 
 *.md
+!docs/
+!docs/**/*.md
